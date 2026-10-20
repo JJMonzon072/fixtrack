@@ -12,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace FixTrack.Tests.Web;
 
 /// <summary>
-/// Reglas de la administración de cuentas: cambios atómicos, quien actúa debe seguir siendo administrador,
+/// Reglas de la administración de cuentas: cambios atómicos, quien actúa debe seguir siendo administrador, desbloqueo,
 /// restablecimiento de contraseñas y formularios desactualizados. La concurrencia real se prueba en SQL Server.
 /// </summary>
 public sealed class AccountAdministrationTests(FixTrackWebApplicationFactory factory)
@@ -132,6 +132,69 @@ public sealed class AccountAdministrationTests(FixTrackWebApplicationFactory fac
     }
 
     [Fact]
+    public async Task Administrators_unlock_a_temporarily_locked_account()
+    {
+        var email = NewEmail("bloqueada");
+        string id, password;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var accounts = scope.ServiceProvider.GetRequiredService<IUserAccountService>();
+            var input = NewAccount(email);
+            password = input.Password!;
+            id = (await accounts.CreateAsync(input, await IdAsync(accounts, TestAccounts.Administrator.Email), Token)).Value!;
+        }
+
+        using (var attacker = factory.CreateClient())
+        {
+            for (var attempt = 0; attempt < IdentitySettings.MaxFailedAttempts; attempt++)
+            {
+                await AuthenticatedClients.LogInAsync(attacker, email, "Incorrecta12345");
+            }
+        }
+
+        using var admin = await factory.CreateAuthenticatedClientAsync();
+        var editor = await admin.GetStringAsync($"/usuarios/{id}/editar", Token);
+        var unlocked = await (await FormPost.SendAsync(admin, $"/usuarios/{id}/desbloquear", [])).Content.ReadAsStringAsync(Token);
+        var again = await (await FormPost.SendAsync(admin, $"/usuarios/{id}/desbloquear", [])).Content.ReadAsStringAsync(Token);
+        using var user = factory.CreateClient();
+        using var login = await AuthenticatedClients.LogInAsync(user, email, password);
+
+        Assert.Contains("Bloqueada temporalmente", editor);
+        Assert.Contains("Desbloquear", editor);
+        Assert.Contains("Cuenta desbloqueada.", unlocked);
+        Assert.Contains("La cuenta no está bloqueada.", again);
+        Assert.Equal("/", login.RequestMessage!.RequestUri!.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task Resetting_a_password_also_removes_a_temporary_lockout()
+    {
+        var email = NewEmail("restablecer");
+        string id;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var accounts = scope.ServiceProvider.GetRequiredService<IUserAccountService>();
+            id = (await accounts.CreateAsync(NewAccount(email), await IdAsync(accounts, TestAccounts.Administrator.Email), Token)).Value!;
+        }
+
+        using (var attacker = factory.CreateClient())
+        {
+            for (var attempt = 0; attempt < IdentitySettings.MaxFailedAttempts; attempt++)
+            {
+                await AuthenticatedClients.LogInAsync(attacker, email, "Incorrecta12345");
+            }
+        }
+
+        using var admin = await factory.CreateAuthenticatedClientAsync();
+        var newPassword = TestAccounts.RandomPassword();
+        await FormPost.SendAsync(admin, $"/usuarios/{id}/contrasena", new() { ["Password"] = newPassword, ["ConfirmPassword"] = newPassword });
+        using var user = factory.CreateClient();
+        using var login = await AuthenticatedClients.LogInAsync(user, email, newPassword);
+
+        Assert.Equal("/", login.RequestMessage!.RequestUri!.AbsolutePath);
+    }
+
+    [Fact]
     public async Task Administrators_change_their_own_password_only_with_the_current_one()
     {
         using var admin = await factory.CreateAuthenticatedClientAsync();
@@ -191,7 +254,7 @@ public sealed class AccountAdministrationTests(FixTrackWebApplicationFactory fac
     }
 
     [Fact]
-    public async Task An_operator_cannot_reset_accounts_with_manual_requests()
+    public async Task An_operator_cannot_unlock_or_reset_accounts_with_manual_requests()
     {
         using var operatorClient = await factory.CreateAuthenticatedClientAsync(TestAccounts.Operator);
         string id;
@@ -200,12 +263,14 @@ public sealed class AccountAdministrationTests(FixTrackWebApplicationFactory fac
             id = await IdAsync(scope.ServiceProvider.GetRequiredService<IUserAccountService>(), TestAccounts.Administrator.Email);
         }
 
+        using var unlock = await FormPost.SendAsync(operatorClient, $"/usuarios/{id}/desbloquear", []);
         using var reset = await FormPost.SendAsync(operatorClient, $"/usuarios/{id}/contrasena", new()
         {
             ["Password"] = "Nueva123456789",
             ["ConfirmPassword"] = "Nueva123456789",
         });
 
+        Assert.Equal(System.Net.HttpStatusCode.Forbidden, unlock.StatusCode);
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, reset.StatusCode);
     }
 

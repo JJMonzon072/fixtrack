@@ -182,6 +182,34 @@ internal sealed class UserAccountService(
             CommandResult.Conflict,
             cancellationToken);
 
+    public Task<CommandResult> UnlockAsync(string id, string actingUserId, CancellationToken cancellationToken) =>
+        AsAdministratorAsync(
+            actingUserId,
+            async token =>
+            {
+                var user = await users.FindByIdAsync(id);
+                if (user is null)
+                {
+                    return CommandResult.NotFound();
+                }
+
+                if (!IsEnabled(user))
+                {
+                    return CommandResult.Conflict("La cuenta está deshabilitada: habilítala en lugar de desbloquearla.");
+                }
+
+                if (!IsLockedOut(user))
+                {
+                    return CommandResult.Conflict("La cuenta no está bloqueada.");
+                }
+
+                user.LockoutEnd = null;
+                user.AccessFailedCount = 0;
+                return Check(await users.UpdateAsync(user));
+            },
+            CommandResult.Conflict,
+            cancellationToken);
+
     public Task<CommandResult> ResetPasswordAsync(
         string id,
         string? password,
@@ -211,8 +239,8 @@ internal sealed class UserAccountService(
                     return CommandResult.Invalid(errors);
                 }
 
-                // El token de restablecimiento valida la contraseña nueva antes de reemplazar la anterior; el sello
-                // nuevo cierra las sesiones abiertas.
+                // El token de restablecimiento valida la contraseña nueva antes de reemplazar la anterior. Restablecer
+                // también quita un bloqueo temporal; el sello nuevo cierra las sesiones abiertas.
                 var resetToken = await users.GeneratePasswordResetTokenAsync(user);
                 var reset = await users.ResetPasswordAsync(user, resetToken, password!);
                 if (!reset.Succeeded)
@@ -220,7 +248,13 @@ internal sealed class UserAccountService(
                     return CommandResult.Invalid(ToErrors(reset, PasswordField));
                 }
 
-                return Check(await users.ResetAccessFailedCountAsync(user));
+                if (IsEnabled(user))
+                {
+                    user.LockoutEnd = null;
+                }
+
+                user.AccessFailedCount = 0;
+                return Check(await users.UpdateAsync(user));
             },
             CommandResult.Conflict,
             cancellationToken);
@@ -409,6 +443,8 @@ internal sealed class UserAccountService(
         select user.Id;
 
     private static bool IsEnabled(FixTrackUser user) => user.LockoutEnd != DateTimeOffset.MaxValue;
+
+    private bool IsLockedOut(FixTrackUser user) => IsEnabled(user) && user.LockoutEnd is { } until && until > clock.GetUtcNow();
 
     /// <summary>
     /// Compara con el Id guardado en la base, no con el de la ruta: SQL Server encuentra la cuenta aunque el GUID de la

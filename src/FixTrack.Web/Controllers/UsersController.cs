@@ -89,6 +89,13 @@ public sealed class UsersController(IUserAccountService accounts) : Controller
     public Task<IActionResult> Enable(string id, CancellationToken cancellationToken) =>
         SetEnabledAsync(id, enabled: true, "Cuenta habilitada.", cancellationToken);
 
+    [HttpPost("{id:guid}/desbloquear")]
+    public async Task<IActionResult> Unlock(string id, CancellationToken cancellationToken)
+    {
+        var result = await accounts.UnlockAsync(id, CurrentUserId, cancellationToken);
+        return Report(result, id, "Cuenta desbloqueada. Ya puede iniciar sesión con su contraseña.");
+    }
+
     [HttpGet("{id:guid}/contrasena")]
     public async Task<IActionResult> ResetPassword(string id, CancellationToken cancellationToken)
     {

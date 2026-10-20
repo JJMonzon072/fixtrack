@@ -26,9 +26,12 @@ public interface IUserAccountService
     /// <summary>Habilita o deshabilita la cuenta. Deshabilitarla cierra sus sesiones abiertas.</summary>
     Task<CommandResult> SetEnabledAsync(string id, bool enabled, string actingUserId, CancellationToken cancellationToken);
 
+    /// <summary>Quita el bloqueo temporal por intentos fallidos de una cuenta habilitada.</summary>
+    Task<CommandResult> UnlockAsync(string id, string actingUserId, CancellationToken cancellationToken);
+
     /// <summary>
-    /// El administrador define una contraseña nueva para otra cuenta. Cierra las sesiones abiertas de la cuenta. La
-    /// propia contraseña se cambia con <see cref="ChangeOwnPasswordAsync"/>.
+    /// El administrador define una contraseña nueva para otra cuenta y quita su bloqueo temporal. Cierra las sesiones
+    /// abiertas de la cuenta. La propia contraseña se cambia con <see cref="ChangeOwnPasswordAsync"/>.
     /// </summary>
     Task<CommandResult> ResetPasswordAsync(
         string id,

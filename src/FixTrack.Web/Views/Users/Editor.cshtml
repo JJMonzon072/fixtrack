@@ -123,6 +123,15 @@
                         Restablecer contraseña
                     </a>
                 }
+                @if (account.IsLockedOut && !Model.IsCurrentUser)
+                {
+                    <form method="post" asp-action="Unlock" asp-route-id="@account.Id" asp-antiforgery="true">
+                        <button class="button button--secondary button--small" type="submit">
+                            <icon name="lock-open" />
+                            Desbloquear
+                        </button>
+                    </form>
+                }
                 @if (!Model.IsCurrentUser)
                 {
                     <form method="post" asp-action="@(account.IsEnabled ? "Disable" : "Enable")" asp-route-id="@account.Id" asp-antiforgery="true">
