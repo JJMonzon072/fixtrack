@@ -23,6 +23,14 @@ public sealed class CustomersController(ICustomerService customers) : Controller
         return View(new CustomerIndexViewModel(search?.Trim(), filter, result));
     }
 
+    /// <summary>Sugerencias de clientes activos para el selector de propietario del formulario de equipos.</summary>
+    [HttpGet("opciones")]
+    public async Task<IActionResult> Options([FromQuery(Name = "buscar")] string? search, CancellationToken cancellationToken)
+    {
+        var options = await customers.SuggestActiveAsync(search, cancellationToken);
+        return Json(options.Select(option => new { option.Id, option.FullName, option.Phone, option.Email }));
+    }
+
     [HttpGet("nuevo")]
     public IActionResult Create() => View("Editor", new CustomerEditorViewModel(null, null, new CustomerFormModel()));
 
