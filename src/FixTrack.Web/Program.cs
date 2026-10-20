@@ -21,7 +21,8 @@ try
         .AddPresentation()
         .AddSecurity(builder.Configuration, builder.Environment)
         .AddReverseProxySupport(builder.Configuration, builder.Environment)
-        .AddHealthEndpoints();
+        .AddHealthEndpoints()
+        .AddRequestResilience();
 
     var app = builder.Build();
 
@@ -55,6 +56,7 @@ try
     app.UseSecurityHeaders();
     app.UseRequestLocalization();
     app.UseRouting();
+    app.UseRequestTimeouts();
     app.UseRateLimiter();
     app.UseAuthentication();
     app.UseAuthorization();

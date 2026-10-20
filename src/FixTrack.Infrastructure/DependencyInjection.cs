@@ -9,6 +9,7 @@ using FixTrack.Application.Technicians;
 using FixTrack.Infrastructure.Identity;
 using FixTrack.Infrastructure.Persistence;
 using FixTrack.Infrastructure.Persistence.Repositories;
+using FixTrack.Infrastructure.Persistence.Resilience;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -21,6 +22,12 @@ public static class DependencyInjection
 {
     /// <summary>Nombre de la cadena de conexión: <c>ConnectionStrings:FixTrack</c>.</summary>
     public const string ConnectionStringName = "FixTrack";
+
+    /// <summary>Tiempo máximo para abrir una conexión (la cadena puede indicar uno menor).</summary>
+    public const int ConnectTimeoutSeconds = 15;
+
+    /// <summary>Tiempo máximo de una consulta.</summary>
+    public const int CommandTimeoutSeconds = 15;
 
     /// <summary>Tiempo máximo de conexión y de consulta del anillo de claves de Data Protection.</summary>
     public const int DataProtectionKeysTimeoutSeconds = 5;
@@ -41,18 +48,30 @@ public static class DependencyInjection
                 $"ConnectionStrings__{ConnectionStringName}. Consulta el README.");
         }
 
-        services.AddDbContext<FixTrackDbContext>(options => options.UseSqlServer(
-            connectionString,
-            sql => sql.EnableRetryOnFailure(maxRetryCount: 3)));
+        // Fallos temporales de Somee: tiempos acotados, pocos reintentos y un disyuntor que evita insistir contra una base
+        // caída (ver DatabaseAvailability). Una solicitud además se corta a los 30 s (UseRequestTimeouts).
+        services.AddSingleton<DatabaseAvailability>();
+        services.AddSingleton<DatabaseCircuitInterceptor>();
+        var mainConnection = new SqlConnectionStringBuilder(connectionString);
+        mainConnection.ConnectTimeout = Math.Min(mainConnection.ConnectTimeout, ConnectTimeoutSeconds);
+        services.AddDbContext<FixTrackDbContext>((provider, options) => options
+            .UseSqlServer(
+                mainConnection.ConnectionString,
+                sql => sql
+                    .CommandTimeout(CommandTimeoutSeconds)
+                    .EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorNumbersToAdd: null))
+            .AddInterceptors(provider.GetRequiredService<DatabaseCircuitInterceptor>()));
 
         // Claves de Data Protection: falla rápido si la base no responde (ver DataProtectionKeysDbContext).
         var keysConnection = new SqlConnectionStringBuilder(connectionString);
         keysConnection.ConnectTimeout = Math.Min(keysConnection.ConnectTimeout, DataProtectionKeysTimeoutSeconds);
-        services.AddDbContext<DataProtectionKeysDbContext>(options => options.UseSqlServer(
-            keysConnection.ConnectionString,
-            sql => sql
-                .CommandTimeout(DataProtectionKeysTimeoutSeconds)
-                .EnableRetryOnFailure(maxRetryCount: 1, maxRetryDelay: TimeSpan.FromSeconds(1), errorNumbersToAdd: null)));
+        services.AddDbContext<DataProtectionKeysDbContext>((provider, options) => options
+            .UseSqlServer(
+                keysConnection.ConnectionString,
+                sql => sql
+                    .CommandTimeout(DataProtectionKeysTimeoutSeconds)
+                    .EnableRetryOnFailure(maxRetryCount: 1, maxRetryDelay: TimeSpan.FromSeconds(1), errorNumbersToAdd: null))
+            .AddInterceptors(provider.GetRequiredService<DatabaseCircuitInterceptor>()));
 
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IAuditLog, EfAuditLog>();

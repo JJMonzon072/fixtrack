@@ -1192,6 +1192,12 @@ button {
     text-align: center;
 }
 
+.error-page--standalone {
+    justify-content: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
 .error-page__code {
     font-size: var(--text-xs);
     color: var(--color-text-tertiary);
