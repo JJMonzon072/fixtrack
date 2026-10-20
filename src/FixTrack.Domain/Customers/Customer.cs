@@ -1,0 +1,94 @@
+using FixTrack.Domain.Common;
+using FixTrack.Domain.Devices;
+
+namespace FixTrack.Domain.Customers;
+
+/// <summary>
+/// Cliente del taller. No se elimina: se desactiva para conservar su historial de equipos y órdenes.
+/// </summary>
+public sealed class Customer : Entity
+{
+    private readonly List<Device> _devices = [];
+
+    public Customer(string fullName, string phone, string? email, string? notes, DateTime createdAtUtc)
+    {
+        SetDetails(fullName, phone, email, notes);
+        IsActive = true;
+        CreatedAtUtc = UtcClock.Ensure(createdAtUtc, nameof(createdAtUtc));
+    }
+
+    // Constructor para Entity Framework Core.
+    private Customer()
+    {
+    }
+
+    /// <summary>Nombre completo de la persona o razón social de la empresa.</summary>
+    public string FullName { get; private set; } = string.Empty;
+
+    public string Phone { get; private set; } = string.Empty;
+
+    /// <summary>Correo electrónico en minúsculas. Es único entre los clientes cuando existe.</summary>
+    public string? Email { get; private set; }
+
+    public string? Notes { get; private set; }
+
+    public bool IsActive { get; private set; }
+
+    public DateTime CreatedAtUtc { get; private set; }
+
+    public DateTime? UpdatedAtUtc { get; private set; }
+
+    /// <summary>Momento de la última desactivación. Es <c>null</c> mientras el cliente está activo.</summary>
+    public DateTime? DeactivatedAtUtc { get; private set; }
+
+    public IReadOnlyCollection<Device> Devices => _devices;
+
+    public void UpdateDetails(string fullName, string phone, string? email, string? notes, DateTime updatedAtUtc)
+    {
+        SetDetails(fullName, phone, email, notes);
+        UpdatedAtUtc = UtcClock.Ensure(updatedAtUtc, nameof(updatedAtUtc));
+    }
+
+    public void Deactivate(DateTime deactivatedAtUtc)
+    {
+        if (!IsActive)
+        {
+            throw new DomainException("El cliente ya está inactivo.");
+        }
+
+        IsActive = false;
+        DeactivatedAtUtc = UtcClock.Ensure(deactivatedAtUtc, nameof(deactivatedAtUtc));
+        UpdatedAtUtc = DeactivatedAtUtc;
+    }
+
+    public void Reactivate(DateTime reactivatedAtUtc)
+    {
+        if (IsActive)
+        {
+            throw new DomainException("El cliente ya está activo.");
+        }
+
+        IsActive = true;
+        DeactivatedAtUtc = null;
+        UpdatedAtUtc = UtcClock.Ensure(reactivatedAtUtc, nameof(reactivatedAtUtc));
+    }
+
+    private void SetDetails(string fullName, string phone, string? email, string? notes)
+    {
+        var cleanName = Text.Clean(fullName);
+        var cleanPhone = Text.Clean(phone);
+        var cleanEmail = ContactRules.NormalizeEmail(email);
+        var cleanNotes = Text.CleanMultilineOrNull(notes);
+
+        var errors = CustomerRules.Validate(cleanName, cleanPhone, cleanEmail, cleanNotes);
+        if (errors.Count > 0)
+        {
+            throw new DomainException(errors.Values.First());
+        }
+
+        FullName = cleanName;
+        Phone = cleanPhone;
+        Email = cleanEmail;
+        Notes = cleanNotes;
+    }
+}

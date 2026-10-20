@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 namespace FixTrack.Tests.Web;
 
 /// <summary>Pruebas de integración: levantan la aplicación en memoria y solicitan sus páginas.</summary>
-public sealed partial class PageTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
+    : IClassFixture<FixTrackWebApplicationFactory>
 {
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
@@ -48,7 +48,6 @@ public sealed partial class PageTests(WebApplicationFactory<Program> factory)
 
     [Theory]
     [InlineData("/ordenes", "Nueva orden")]
-    [InlineData("/clientes", "Nuevo cliente")]
     [InlineData("/equipos", "Registrar equipo")]
     [InlineData("/tecnicos", "Nuevo técnico")]
     public async Task Pending_modules_show_an_empty_state_with_a_disabled_action(string url, string actionLabel)

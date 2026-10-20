@@ -88,4 +88,40 @@
 
     systemPrefersDark.addEventListener("change", updateThemeToggle);
     updateThemeToggle();
+
+    // --- Diálogos de confirmación (<dialog> nativo) ---------------------------
+
+    document.querySelectorAll("[data-dialog-open]").forEach((button) => {
+        const dialog = document.getElementById(button.dataset.dialogOpen);
+        if (!(dialog instanceof HTMLDialogElement)) return;
+
+        button.addEventListener("click", () => dialog.showModal());
+        dialog.querySelectorAll("[data-dialog-close]").forEach((close) =>
+            close.addEventListener("click", () => dialog.close()));
+
+        // Un clic en el fondo (fuera del contenido) cierra el diálogo.
+        dialog.addEventListener("click", (event) => {
+            if (event.target === dialog) dialog.close();
+        });
+    });
+
+    // --- Avisos que se pueden cerrar ------------------------------------------
+
+    document.querySelectorAll("[data-alert-close]").forEach((button) =>
+        button.addEventListener("click", () => button.closest("[data-alert]")?.remove()));
+
+    // --- Contador de caracteres de los campos de texto largos -----------------
+
+    document.querySelectorAll("[data-char-counter-for]").forEach((counter) => {
+        const field = document.getElementById(counter.dataset.charCounterFor);
+        if (!field || !field.maxLength || field.maxLength < 0) return;
+
+        const update = () => { counter.textContent = `${field.value.length}/${field.maxLength}`; };
+        field.addEventListener("input", update);
+        update();
+    });
+
+    // --- Resumen de errores: recibe el foco para que se anuncie y se vea ------
+
+    document.querySelector("[data-error-summary]")?.focus();
 })();

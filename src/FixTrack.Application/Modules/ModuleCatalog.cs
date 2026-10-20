@@ -31,13 +31,9 @@ internal sealed class ModuleCatalog : IModuleCatalog
             new ModuleInfo(
                 ModuleKey.Customers,
                 "Clientes",
-                "Datos de contacto de cada cliente y su historial de servicios.",
-                ModuleStatus.Planned,
-                [
-                    "Registro y edición de clientes",
-                    "Consulta de los equipos de cada cliente",
-                    "Historial de servicios por cliente",
-                ]),
+                "Registro, búsqueda y datos de contacto de los clientes del taller.",
+                ModuleStatus.Available,
+                []),
             new ModuleInfo(
                 ModuleKey.Devices,
                 "Equipos",

@@ -1,0 +1,204 @@
+using System.Net;
+using System.Text.RegularExpressions;
+using FixTrack.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace FixTrack.Tests.Web;
+
+/// <summary>Módulo Clientes de punta a punta (HTTP, MVC, servicio y EF Core sobre SQLite en memoria).</summary>
+public sealed partial class CustomersPageTests(FixTrackWebApplicationFactory factory)
+    : IClassFixture<FixTrackWebApplicationFactory>
+{
+    private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task Registers_a_customer_and_shows_its_details()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await PostFormAsync(client, "/clientes/nuevo", new()
+        {
+            ["FullName"] = "  Ana   Registro ",
+            ["Phone"] = "+502 5555 1001",
+            ["Email"] = "Ana.Registro@Example.com",
+            ["Notes"] = "Prefiere WhatsApp",
+        });
+        var html = await response.Content.ReadAsStringAsync(Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Matches(@"/clientes/\d+$", response.RequestMessage!.RequestUri!.AbsolutePath);
+        Assert.Contains("Cliente registrado correctamente.", html);
+        Assert.Contains(">Ana Registro</h1>", html);
+        Assert.Contains("ana.registro@example.com", html);
+        Assert.Contains("Prefiere WhatsApp", html);
+    }
+
+    [Fact]
+    public async Task Rejects_posts_without_an_antiforgery_token()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsync(
+            "/clientes/nuevo",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["FullName"] = "Sin Token", ["Phone"] = "5555-0000" }),
+            Token);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.False(await CustomerExistsAsync("Sin Token"));
+    }
+
+    [Fact]
+    public async Task Shows_server_side_validation_errors_and_keeps_the_input()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await PostFormAsync(client, "/clientes/nuevo", new()
+        {
+            ["FullName"] = "A",
+            ["Phone"] = "12",
+            ["Email"] = "no-es-correo",
+        });
+        var html = await response.Content.ReadAsStringAsync(Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.EndsWith("/clientes/nuevo", response.RequestMessage!.RequestUri!.AbsolutePath);
+        Assert.Contains("Revisa los siguientes 3 campos", html);
+        Assert.Contains("El nombre debe tener entre 3 y 150 caracteres.", html);
+        Assert.Contains("El teléfono debe tener entre 7 y 15 dígitos.", html);
+        Assert.Contains("Ingresa un correo electrónico válido", html);
+        Assert.Contains("value=\"no-es-correo\"", html);
+        Assert.Equal(3, Regex.Count(html, "aria-invalid=\"true\""));
+    }
+
+    [Fact]
+    public async Task Rejects_a_duplicate_email()
+    {
+        using var client = factory.CreateClient();
+        await CreateCustomerAsync(client, "Carla Duplicado", "5555-1002", "carla.dup@example.com");
+
+        var response = await PostFormAsync(client, "/clientes/nuevo", new()
+        {
+            ["FullName"] = "Otra Carla",
+            ["Phone"] = "5555-1003",
+            ["Email"] = "CARLA.DUP@example.com",
+        });
+        var html = await response.Content.ReadAsStringAsync(Token);
+
+        Assert.Contains("Ya existe un cliente registrado con este correo electrónico.", html);
+        Assert.False(await CustomerExistsAsync("Otra Carla"));
+    }
+
+    [Fact]
+    public async Task Edits_a_customer()
+    {
+        using var client = factory.CreateClient();
+        var id = await CreateCustomerAsync(client, "Luis Edición", "5555-1004", null);
+
+        var response = await PostFormAsync(client, $"/clientes/{id}/editar", new()
+        {
+            ["FullName"] = "Luis Alberto Edición",
+            ["Phone"] = "5555-1005",
+            ["Email"] = "luis.edicion@example.com",
+        });
+        var html = await response.Content.ReadAsStringAsync(Token);
+
+        Assert.Contains("Los cambios se guardaron correctamente.", html);
+        Assert.Contains(">Luis Alberto Edición</h1>", html);
+        Assert.Contains("5555-1005", html);
+    }
+
+    [Fact]
+    public async Task Deactivates_and_reactivates_a_customer_without_deleting_it()
+    {
+        using var client = factory.CreateClient();
+        var id = await CreateCustomerAsync(client, "Marta Estado", "5555-1006", null);
+
+        var deactivated = await (await PostFormAsync(client, $"/clientes/{id}/desactivar", [])).Content.ReadAsStringAsync(Token);
+        Assert.Contains("Cliente desactivado.", deactivated);
+        Assert.Contains("Este cliente está inactivo desde", deactivated);
+
+        var activeList = await client.GetStringAsync("/clientes?buscar=Marta%20Estado", Token);
+        var inactiveList = await client.GetStringAsync("/clientes?buscar=Marta%20Estado&estado=inactivos", Token);
+        Assert.DoesNotContain(">Marta Estado</a>", activeList);
+        Assert.Contains(">Marta Estado</a>", inactiveList);
+
+        var reactivated = await (await PostFormAsync(client, $"/clientes/{id}/reactivar", [])).Content.ReadAsStringAsync(Token);
+        Assert.Contains("Cliente reactivado.", reactivated);
+        Assert.True(await CustomerExistsAsync("Marta Estado"));
+    }
+
+    [Fact]
+    public async Task Searches_customers_and_explains_empty_results()
+    {
+        using var client = factory.CreateClient();
+        await CreateCustomerAsync(client, "Sofía Búsqueda", "5555-1007", "sofia.busqueda@example.com");
+
+        var found = await client.GetStringAsync("/clientes?buscar=sofia.busqueda", Token);
+        var missing = await client.GetStringAsync("/clientes?buscar=no-existe-nadie", Token);
+
+        Assert.Contains(">Sofía Búsqueda</a>", found);
+        Assert.Contains("No hay resultados para «no-existe-nadie»", missing);
+        Assert.Contains("Limpiar búsqueda", missing);
+    }
+
+    [Fact]
+    public async Task User_input_is_html_encoded()
+    {
+        using var client = factory.CreateClient();
+        var id = await CreateCustomerAsync(client, "Pedro Seguro", "5555-1008", null, notes: "<script>alert(1)</script>");
+
+        var html = await client.GetStringAsync($"/clientes/{id}", Token);
+
+        Assert.DoesNotContain("<script>alert(1)</script>", html);
+        Assert.Contains("&lt;script&gt;alert(1)&lt;/script&gt;", html);
+    }
+
+    [Theory]
+    [InlineData("/clientes/999999")]
+    [InlineData("/clientes/999999/editar")]
+    public async Task Unknown_customers_return_not_found(string url)
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(url, Token);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    private async Task<int> CreateCustomerAsync(HttpClient client, string name, string phone, string? email, string? notes = null)
+    {
+        var response = await PostFormAsync(client, "/clientes/nuevo", new()
+        {
+            ["FullName"] = name,
+            ["Phone"] = phone,
+            ["Email"] = email ?? string.Empty,
+            ["Notes"] = notes ?? string.Empty,
+        });
+
+        var path = response.RequestMessage!.RequestUri!.AbsolutePath;
+        return int.Parse(DetailsPath().Match(path).Groups["id"].Value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Obtiene el token antifalsificación del formulario de registro y envía el POST con él.</summary>
+    private static async Task<HttpResponseMessage> PostFormAsync(HttpClient client, string url, Dictionary<string, string> fields)
+    {
+        var form = await client.GetStringAsync("/clientes/nuevo", Token);
+        fields["__RequestVerificationToken"] = AntiforgeryToken().Match(form).Groups["token"].Value;
+        return await client.PostAsync(url, new FormUrlEncodedContent(fields), Token);
+    }
+
+    private async Task<bool> CustomerExistsAsync(string fullName)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FixTrackDbContext>();
+        return await db.Customers.AnyAsync(c => c.FullName == fullName, Token);
+    }
+
+    [GeneratedRegex("name=\"__RequestVerificationToken\" type=\"hidden\" value=\"(?<token>[^\"]+)\"")]
+    private static partial Regex AntiforgeryToken();
+
+    [GeneratedRegex(@"/clientes/(?<id>\d+)$")]
+    private static partial Regex DetailsPath();
+}

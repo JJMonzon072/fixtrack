@@ -1,3 +1,4 @@
+using FixTrack.Application.Customers;
 using FixTrack.Application.Modules;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,6 +10,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddSingleton<IModuleCatalog, ModuleCatalog>();
+        services.AddScoped<ICustomerService, CustomerService>();
 
         return services;
     }

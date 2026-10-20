@@ -8,7 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Raíz de composición: cada capa registra sus propios servicios.
 builder.Services
     .AddApplication()
-    .AddInfrastructure()
+    .AddInfrastructure(builder.Configuration)
     .AddPresentation();
 
 var app = builder.Build();

@@ -1,6 +1,8 @@
 @inject FixTrack.Web.Services.ApplicationInfo Application
 @{
     var title = ViewData["Title"] as string ?? "FixTrack";
+    var parentTitle = ViewData["ParentTitle"] as string;
+    var parentUrl = ViewData["ParentUrl"] as string;
 }
 <!DOCTYPE html>
 <html lang="es">
@@ -40,6 +42,10 @@
                 <nav class="breadcrumb" aria-label="Ruta de navegación">
                     <ol>
                         <li><a asp-controller="Dashboard" asp-action="Index">FixTrack</a></li>
+                        @if (parentTitle is not null && parentUrl is not null)
+                        {
+                            <li><a href="@parentUrl">@parentTitle</a></li>
+                        }
                         <li aria-current="page">@title</li>
                     </ol>
                 </nav>
@@ -57,6 +63,7 @@
             </header>
 
             <main id="main" class="content" tabindex="-1">
+                <partial name="_StatusMessage" />
                 @RenderBody()
             </main>
         </div>

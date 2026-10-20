@@ -1,3 +1,9 @@
+using FixTrack.Application.Common;
+using FixTrack.Application.Customers;
+using FixTrack.Infrastructure.Persistence;
+using FixTrack.Infrastructure.Persistence.Repositories;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -5,15 +11,31 @@ namespace FixTrack.Infrastructure;
 
 public static class DependencyInjection
 {
-    /// <summary>
-    /// Registra los servicios de infraestructura. La persistencia con SQL Server
-    /// se incorporará aquí en una fase posterior.
-    /// </summary>
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services)
+    /// <summary>Nombre de la cadena de conexión: <c>ConnectionStrings:FixTrack</c>.</summary>
+    public const string ConnectionStringName = "FixTrack";
+
+    /// <summary>Registra los servicios de infraestructura: reloj del sistema y persistencia con SQL Server.</summary>
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         // Reloj del sistema. Las demás capas dependen de TimeProvider y no de DateTime.Now,
         // para poder sustituirlo por un reloj fijo en las pruebas.
         services.TryAddSingleton(TimeProvider.System);
+
+        var connectionString = configuration.GetConnectionString(ConnectionStringName);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                $"Falta la cadena de conexión 'ConnectionStrings:{ConnectionStringName}'. " +
+                "En desarrollo se configura con dotnet user-secrets; en un servidor, con la variable de entorno " +
+                $"ConnectionStrings__{ConnectionStringName}. Consulta el README.");
+        }
+
+        services.AddDbContext<FixTrackDbContext>(options => options.UseSqlServer(
+            connectionString,
+            sql => sql.EnableRetryOnFailure(maxRetryCount: 3)));
+
+        services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+        services.AddScoped<ICustomerRepository, CustomerRepository>();
 
         return services;
     }

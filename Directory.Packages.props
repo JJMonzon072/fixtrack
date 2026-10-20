@@ -3,14 +3,28 @@
   <!-- Gestión centralizada de versiones de paquetes NuGet. -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Permite fijar versiones de dependencias transitivas (por ejemplo, correcciones de seguridad). -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <ItemGroup Label="Aplicación">
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
+  </ItemGroup>
+
+  <ItemGroup Label="Persistencia">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.13" />
+  </ItemGroup>
+
+  <ItemGroup Label="Correcciones de seguridad (dependencias transitivas)">
+    <!-- Microsoft.Data.SqlClient 6.1.7 trae la 9.0.11, afectada por CVE-2026-84008 y CVE-2026-70162. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup Label="Pruebas">
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />

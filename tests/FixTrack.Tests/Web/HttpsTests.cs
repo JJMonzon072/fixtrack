@@ -9,8 +9,8 @@ using Microsoft.Extensions.Logging;
 namespace FixTrack.Tests.Web;
 
 /// <summary>Configuración de HTTPS según el entorno y los endpoints configurados.</summary>
-public sealed class HttpsTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public sealed class HttpsTests(FixTrackWebApplicationFactory factory)
+    : IClassFixture<FixTrackWebApplicationFactory>
 {
     private const string HttpsRedirectionCategory = "Microsoft.AspNetCore.HttpsPolicy.HttpsRedirectionMiddleware";
 
