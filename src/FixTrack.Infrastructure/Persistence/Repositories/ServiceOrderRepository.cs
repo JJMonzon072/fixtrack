@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
+using FixTrack.Application.Devices;
 using FixTrack.Application.ServiceOrders;
 using FixTrack.Domain.ServiceOrders;
 using Microsoft.EntityFrameworkCore;
@@ -31,12 +32,8 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
 
         var inView = search.View switch
         {
-            ServiceOrderView.Open => matching.Where(order =>
-                order.Status != ServiceOrderStatus.Delivered && order.Status != ServiceOrderStatus.Cancelled),
-            ServiceOrderView.Overdue => matching.Where(order =>
-                order.Status != ServiceOrderStatus.Delivered
-                && order.Status != ServiceOrderStatus.Cancelled
-                && order.PromisedAtUtc < nowUtc),
+            ServiceOrderView.Open => matching.WhereOpen(),
+            ServiceOrderView.Overdue => matching.WhereOpen().Where(order => order.PromisedAtUtc < nowUtc),
             ServiceOrderView.Closed => matching.Where(order =>
                 order.Status == ServiceOrderStatus.Delivered || order.Status == ServiceOrderStatus.Cancelled),
             _ => matching,
@@ -137,6 +134,31 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
                     .ToList()))
             .SingleOrDefaultAsync(cancellationToken);
 
+    public async Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, int take, CancellationToken cancellationToken)
+    {
+        var orders = db.ServiceOrders.AsNoTracking().Where(order => order.Device!.CustomerId == customerId);
+        var counts = await orders
+            .GroupBy(order => 1)
+            .Select(group => new
+            {
+                Total = group.Count(),
+                Open = group.Count(order => order.Status != ServiceOrderStatus.Delivered && order.Status != ServiceOrderStatus.Cancelled),
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (counts is null)
+        {
+            return new CustomerServiceOrders(0, 0, []);
+        }
+
+        var recent = await orders
+            .OrderByDescending(order => order.ReceivedAtUtc)
+            .ThenByDescending(order => order.Id)
+            .Take(take)
+            .Select(ServiceOrderQueries.Summary)
+            .ToListAsync(cancellationToken);
+        return new CustomerServiceOrders(counts.Total, counts.Open, recent);
+    }
+
     public Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken) =>
         db.ServiceOrders.SingleOrDefaultAsync(order => order.Id == id, cancellationToken);
 
@@ -147,6 +169,16 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
         if (search.Priority is { } priority)
         {
             orders = orders.Where(order => order.Priority == priority);
+        }
+
+        if (search.CustomerId is { } customerId)
+        {
+            orders = orders.Where(order => order.Device!.CustomerId == customerId);
+        }
+
+        if (search.DeviceId is { } deviceId)
+        {
+            orders = orders.Where(order => order.DeviceId == deviceId);
         }
 
         if (search.UnassignedOnly)

@@ -255,6 +255,9 @@ public sealed class FakeServiceOrderRepository(InMemoryStore store) : IServiceOr
 
     public Task<ServiceOrderDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken) => Task.FromResult<ServiceOrderDetails?>(null);
 
+    public Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, int take, CancellationToken cancellationToken) =>
+        Task.FromResult(new CustomerServiceOrders(0, 0, []));
+
     public Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken) =>
         Task.FromResult(store.ServiceOrders.SingleOrDefault(order => order.Id == id));
 

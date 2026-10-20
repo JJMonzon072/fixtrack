@@ -206,6 +206,35 @@ public sealed class ServiceOrderRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task Filters_by_customer_and_device()
+    {
+        await SeedAsync();
+
+        var mario = await SearchAsync(new ServiceOrderSearch(null, ServiceOrderView.All, CustomerId: 2));
+        var lenovo = await SearchAsync(new ServiceOrderSearch(null, ServiceOrderView.All, DeviceId: 2));
+
+        Assert.Equal([4, 2], Ids(mario));
+        Assert.Equal([5], Ids(lenovo));
+    }
+
+    [Fact]
+    public async Task Customer_orders_are_counted_and_listed_from_the_newest()
+    {
+        await SeedAsync();
+        await using var context = _database.CreateContext();
+        var repository = new ServiceOrderRepository(context);
+
+        var ana = await repository.ListByCustomerAsync(1, take: 2, Token);
+        var nobody = await repository.ListByCustomerAsync(99, take: 2, Token);
+
+        Assert.Equal((3, 2), (ana.TotalCount, ana.OpenCount));
+        Assert.Equal([5, 1], ana.Recent.Select(order => order.Id));
+        Assert.Equal(("Lenovo", "ThinkCentre", "Ana Morales", "Luis Pérez"), (ana.Recent[0].DeviceBrand, ana.Recent[0].DeviceModel, ana.Recent[0].CustomerName, ana.Recent[0].TechnicianName));
+        Assert.Equal((0, 0), (nobody.TotalCount, nobody.OpenCount));
+        Assert.Empty(nobody.Recent);
+    }
+
+    [Fact]
     public async Task Workload_counts_only_open_orders_per_technician()
     {
         await SeedAsync();

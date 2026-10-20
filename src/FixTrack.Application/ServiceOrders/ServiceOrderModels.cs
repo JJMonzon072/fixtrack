@@ -1,5 +1,6 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
+using FixTrack.Application.Devices;
 using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
 
@@ -44,6 +45,8 @@ public enum ServiceOrderView
 /// <param name="Status">Estado exacto dentro de la vista; se ignora si no corresponde a ella.</param>
 /// <param name="TechnicianId">Técnico asignado. Se ignora si <paramref name="UnassignedOnly"/> es verdadero.</param>
 /// <param name="UnassignedOnly">Solo órdenes sin técnico.</param>
+/// <param name="CustomerId">Solo las órdenes de los equipos de un cliente.</param>
+/// <param name="DeviceId">Solo las órdenes de un equipo.</param>
 public sealed record ServiceOrderSearch(
     string? Text,
     ServiceOrderView View = ServiceOrderView.Open,
@@ -51,7 +54,9 @@ public sealed record ServiceOrderSearch(
     ServiceOrderPriority? Priority = null,
     int? TechnicianId = null,
     bool UnassignedOnly = false,
-    int Page = 1)
+    int Page = 1,
+    int? CustomerId = null,
+    int? DeviceId = null)
 {
     public const int PageSize = 20;
     public const int TextMaxLength = 100;
@@ -85,6 +90,9 @@ public sealed record ServiceOrderViewCounts(int Open, int Overdue, int Closed)
 }
 
 public sealed record ServiceOrderSearchResult(PagedResult<ServiceOrderListItem> Page, ServiceOrderViewCounts Counts);
+
+/// <summary>Órdenes de los equipos de un cliente: cantidades y las más recientes.</summary>
+public sealed record CustomerServiceOrders(int TotalCount, int OpenCount, IReadOnlyList<ServiceOrderSummary> Recent);
 
 public sealed record ServiceOrderDeviceInfo(int Id, DeviceType Type, string Brand, string? Model, string? SerialNumber);
 

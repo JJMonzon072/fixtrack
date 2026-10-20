@@ -22,6 +22,7 @@ internal sealed class ServiceOrderService(
         "Otra persona modificó esta orden mientras la revisabas. Revisa los datos actuales y vuelve a intentarlo.";
 
     internal const string ClosedMessage = "La orden está cerrada (entregada o cancelada) y ya no admite cambios.";
+    internal const int RecentCustomerOrders = 10;
 
     private DateTime UtcNow => clock.GetUtcNow().UtcDateTime;
 
@@ -37,6 +38,8 @@ internal sealed class ServiceOrderService(
             Priority = search.Priority is { } priority && Enum.IsDefined(priority) ? priority : null,
             TechnicianId = search.UnassignedOnly || search.TechnicianId is not > 0 ? null : search.TechnicianId,
             Page = Math.Max(1, search.Page),
+            CustomerId = search.CustomerId is > 0 ? search.CustomerId : null,
+            DeviceId = search.DeviceId is > 0 ? search.DeviceId : null,
         };
 
         return orders.SearchAsync(normalized, UtcNow, cancellationToken);
@@ -44,6 +47,9 @@ internal sealed class ServiceOrderService(
 
     public Task<ServiceOrderDetails?> GetAsync(int id, CancellationToken cancellationToken) =>
         id > 0 ? orders.GetDetailsAsync(id, cancellationToken) : Task.FromResult<ServiceOrderDetails?>(null);
+
+    public Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, CancellationToken cancellationToken) =>
+        orders.ListByCustomerAsync(customerId, RecentCustomerOrders, cancellationToken);
 
     public Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken)
     {

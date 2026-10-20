@@ -66,8 +66,9 @@ internal sealed class TechnicianRepository(FixTrackDbContext db) : ITechnicianRe
             inactiveCount);
     }
 
-    public Task<TechnicianDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken) =>
-        db.Technicians
+    public async Task<TechnicianDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken)
+    {
+        var details = await db.Technicians
             .AsNoTracking()
             .Where(technician => technician.Id == id)
             .Select(technician => new TechnicianDetails(
@@ -80,20 +81,28 @@ internal sealed class TechnicianRepository(FixTrackDbContext db) : ITechnicianRe
                 technician.CreatedAtUtc,
                 technician.UpdatedAtUtc,
                 technician.DeactivatedAtUtc,
-                db.ServiceOrders.Count(order => order.TechnicianId == technician.Id
-                    && order.Status != ServiceOrderStatus.Delivered
-                    && order.Status != ServiceOrderStatus.Cancelled),
+                db.ServiceOrders.WhereOpen().Count(order => order.TechnicianId == technician.Id),
                 db.ServiceOrders.Count(order => order.TechnicianId == technician.Id),
-                db.ServiceOrders
-                    .Where(order => order.TechnicianId == technician.Id
-                        && order.Status != ServiceOrderStatus.Delivered
-                        && order.Status != ServiceOrderStatus.Cancelled)
-                    .OrderBy(order => order.PromisedAtUtc == null)
-                    .ThenBy(order => order.PromisedAtUtc)
-                    .Take(OpenOrdersShown)
-                    .Select(order => new ServiceOrderSummary(order.Id, order.Status, order.Priority, order.ReceivedAtUtc, order.PromisedAtUtc))
-                    .ToList()))
+                Array.Empty<ServiceOrderSummary>()))
             .SingleOrDefaultAsync(cancellationToken);
+        if (details is null)
+        {
+            return null;
+        }
+
+        // Las órdenes abiertas que vencen antes aparecen primero; las que no tienen fecha, al final.
+        var openOrders = await db.ServiceOrders
+            .AsNoTracking()
+            .WhereOpen()
+            .Where(order => order.TechnicianId == id)
+            .OrderBy(order => order.PromisedAtUtc == null)
+            .ThenBy(order => order.PromisedAtUtc)
+            .ThenBy(order => order.Id)
+            .Take(OpenOrdersShown)
+            .Select(ServiceOrderQueries.Summary)
+            .ToListAsync(cancellationToken);
+        return details with { OpenOrders = openOrders };
+    }
 
     public Task<Technician?> FindAsync(int id, CancellationToken cancellationToken) =>
         db.Technicians.SingleOrDefaultAsync(technician => technician.Id == id, cancellationToken);

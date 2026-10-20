@@ -12,6 +12,9 @@ public interface IServiceOrderService
 
     Task<ServiceOrderDetails?> GetAsync(int id, CancellationToken cancellationToken);
 
+    /// <summary>Órdenes de los equipos de un cliente: cantidades y las 10 más recientes.</summary>
+    Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, CancellationToken cancellationToken);
+
     /// <summary>Registra la recepción de un equipo. Si tiene éxito, devuelve el Id de la orden.</summary>
     Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken);
 

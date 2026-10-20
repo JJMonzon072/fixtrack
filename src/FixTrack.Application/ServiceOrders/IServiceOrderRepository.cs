@@ -10,6 +10,9 @@ public interface IServiceOrderRepository
 
     Task<ServiceOrderDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken);
 
+    /// <summary>Cantidad total y abierta de órdenes de los equipos de un cliente y las <paramref name="take"/> más recientes.</summary>
+    Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, int take, CancellationToken cancellationToken);
+
     /// <summary>
     /// Obtiene la orden para modificarla. Su historial no se carga: los cambios de estado solo agregan registros.
     /// </summary>

@@ -53,8 +53,9 @@ internal sealed class DeviceRepository(FixTrackDbContext db) : IDeviceRepository
         return new PagedResult<DeviceListItem>(items, page, DeviceSearch.PageSize, total);
     }
 
-    public Task<DeviceDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken) =>
-        db.Devices
+    public async Task<DeviceDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken)
+    {
+        var details = await db.Devices
             .AsNoTracking()
             .Where(device => device.Id == id)
             .Select(device => new DeviceDetails(
@@ -72,12 +73,22 @@ internal sealed class DeviceRepository(FixTrackDbContext db) : IDeviceRepository
                     device.Customer.Phone,
                     device.Customer.Email,
                     device.Customer.IsActive),
-                db.ServiceOrders
-                    .Where(order => order.DeviceId == device.Id)
-                    .OrderByDescending(order => order.ReceivedAtUtc)
-                    .Select(order => new ServiceOrderSummary(order.Id, order.Status, order.Priority, order.ReceivedAtUtc, order.PromisedAtUtc))
-                    .ToList()))
+                Array.Empty<ServiceOrderSummary>()))
             .SingleOrDefaultAsync(cancellationToken);
+        if (details is null)
+        {
+            return null;
+        }
+
+        var orders = await db.ServiceOrders
+            .AsNoTracking()
+            .Where(order => order.DeviceId == id)
+            .OrderByDescending(order => order.ReceivedAtUtc)
+            .ThenByDescending(order => order.Id)
+            .Select(ServiceOrderQueries.Summary)
+            .ToListAsync(cancellationToken);
+        return details with { ServiceOrders = orders };
+    }
 
     public async Task<IReadOnlyList<CustomerDeviceItem>> ListByCustomerAsync(int customerId, CancellationToken cancellationToken) =>
         await db.Devices
