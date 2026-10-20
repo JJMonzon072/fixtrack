@@ -2,9 +2,22 @@
 
   <!-- Capa de presentación: ASP.NET Core MVC. Es la raíz de composición de la aplicación. -->
 
+  <PropertyGroup>
+    <!-- La cadena de conexión de desarrollo vive en dotnet user-secrets, fuera del repositorio. -->
+    <UserSecretsId>fixtrack-web-5f0c2a8e-7d1b-4c39-9a64-2b1e8f3d6c70</UserSecretsId>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\FixTrack.Application\FixTrack.Application.csproj" />
     <ProjectReference Include="..\FixTrack.Infrastructure\FixTrack.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Necesario solo para las herramientas de migraciones (dotnet ef); no se publica con la aplicación. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>
