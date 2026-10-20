@@ -1,6 +1,7 @@
 using FixTrack.Application;
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
+using FixTrack.Application.Dashboard;
 using FixTrack.Application.Devices;
 using FixTrack.Application.ServiceOrders;
 using FixTrack.Application.Technicians;
@@ -12,18 +13,20 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace FixTrack.Tests.Application;
 
-/// <summary>Cola de trabajo con repositorios en memoria.</summary>
-public sealed class WorkQueueTests
+/// <summary>Panel y cola de trabajo con repositorios en memoria.</summary>
+public sealed class DashboardServiceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 20, 15, 0, 0, TimeSpan.Zero);
 
     private readonly InMemoryStore _store = new();
+    private readonly FakeDashboardRepository _dashboard = new();
     private readonly ServiceProvider _services;
 
-    public WorkQueueTests()
+    public DashboardServiceTests()
     {
         _services = new ServiceCollection()
             .AddApplication()
+            .AddSingleton<IDashboardRepository>(_dashboard)
             .AddSingleton<IServiceOrderRepository>(new FakeServiceOrderRepository(_store))
             .AddSingleton<IDeviceRepository>(new FakeDeviceRepository(_store))
             .AddSingleton<ITechnicianRepository>(new FakeTechnicianRepository(_store))
@@ -80,6 +83,23 @@ public sealed class WorkQueueTests
     }
 
     [Fact]
+    public async Task Without_orders_the_dashboard_shows_zeros_and_empty_lists()
+    {
+        AddTechnician("Luis Pérez");
+        AddTechnician("Marco Reyes", active: false);
+
+        var summary = await _services.GetRequiredService<IDashboardService>().GetAsync(Token);
+
+        Assert.Equal(0, summary.Counts.Total);
+        Assert.Empty(summary.RecommendedActions);
+        Assert.Empty(summary.UpcomingDeliveries);
+        Assert.Empty(summary.RecentlyReceived);
+        Assert.Equal(["Luis Pérez"], summary.Workload.Select(t => t.FullName));
+        Assert.Equal(UtcNow, summary.CalculatedAtUtc);
+        Assert.Equal(7, summary.RecentDays);
+    }
+
+    [Fact]
     public async Task The_work_queue_separates_repairs_parts_and_deliveries_and_ranks_each_list()
     {
         var luis = AddTechnician("Luis Pérez");
@@ -102,4 +122,44 @@ public sealed class WorkQueueTests
         Assert.Equal(5, queue.Count);
     }
 
+    [Fact]
+    public async Task Recommended_actions_combine_every_list_with_the_same_ranking()
+    {
+        var luis = AddTechnician("Luis Pérez");
+        AddOrder(ServiceOrderPriority.Low, ServiceOrderStatus.Received, 0, null, luis);
+        var ready = AddOrder(ServiceOrderPriority.High, ServiceOrderStatus.ReadyForPickup, 1, -5, luis);
+        var repair = AddOrder(ServiceOrderPriority.Urgent, ServiceOrderStatus.InRepair, 1, 48, luis);
+        _dashboard.Counts = OrderCounts.Empty with { Received = 1, InRepair = 1, ReadyForPickup = 1 };
+
+        var summary = await _services.GetRequiredService<IDashboardService>().GetAsync(Token);
+
+        // Lista para entrega y vencida: 60 + 50 + 2 = 112; urgente en reparación con entrega en 48 h: 90 + 15 + 2 = 107.
+        Assert.Equal([ready.Id, repair.Id], summary.RecommendedActions.Take(2).Select(item => item.Order.Id));
+        Assert.Equal([112, 107, 10], summary.RecommendedActions.Select(item => item.Score.Total));
+        Assert.Equal(RecommendedAction.DeliverToCustomer, summary.RecommendedActions[0].Score.Action);
+        Assert.Equal(_dashboard.LastNow, UtcNow);
+        Assert.Equal(UtcNow.AddDays(-7), _dashboard.LastRecentSince);
+    }
+
+    private sealed class FakeDashboardRepository : IDashboardRepository
+    {
+        public OrderCounts Counts { get; set; } = OrderCounts.Empty;
+
+        public DateTime? LastNow { get; private set; }
+
+        public DateTime? LastRecentSince { get; private set; }
+
+        public Task<OrderCounts> CountOrdersAsync(DateTime nowUtc, DateTime recentSinceUtc, CancellationToken cancellationToken)
+        {
+            LastNow = nowUtc;
+            LastRecentSince = recentSinceUtc;
+            return Task.FromResult(Counts);
+        }
+
+        public Task<IReadOnlyList<ServiceOrderSummary>> ListUpcomingDeliveriesAsync(DateTime nowUtc, int take, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ServiceOrderSummary>>([]);
+
+        public Task<IReadOnlyList<ServiceOrderSummary>> ListRecentlyReceivedAsync(int take, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ServiceOrderSummary>>([]);
+    }
 }
