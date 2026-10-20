@@ -469,6 +469,25 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
         return await ScenarioAsync(admin, tag);
     }
 
+    [Fact]
+    public async Task A_double_submitted_order_form_registers_one_order()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var scenario = await ScenarioAsync(client, "doble-envio");
+        var page = await client.GetStringAsync($"/ordenes/nueva?cliente={scenario.CustomerId}", Token);
+        var requestId = Regex.Match(page, "name=\"RequestId\" value=\"(?<id>[0-9a-f-]{36})\"").Groups["id"].Value;
+        var form = OrderForm(scenario);
+        form["RequestId"] = requestId;
+
+        using var first = await FormPost.SendAsync(client, "/ordenes/nueva", new(form));
+        using var second = await FormPost.SendAsync(client, "/ordenes/nueva", new(form));
+
+        Assert.NotEmpty(requestId);
+        Assert.Equal(first.RequestMessage!.RequestUri, second.RequestMessage!.RequestUri);
+        await using var scope = factory.Services.CreateAsyncScope();
+        Assert.Equal(1, await scope.ServiceProvider.GetRequiredService<FixTrackDbContext>().ServiceOrders.CountAsync(order => order.DeviceId == scenario.DeviceId, Token));
+    }
+
     private static string[] OrderNumbers(string html) =>
         [.. OrderLink().Matches(html).Select(match => match.Groups["number"].Value)];
 

@@ -58,7 +58,7 @@ public sealed class ServiceOrdersController(
         [FromQuery(Name = "equipo")] int? deviceId,
         CancellationToken cancellationToken)
     {
-        var form = new ServiceOrderFormModel { Priority = ServiceOrderPriority.Normal };
+        var form = new ServiceOrderFormModel { Priority = ServiceOrderPriority.Normal, RequestId = Guid.NewGuid() };
         CustomerOption? customer = null;
         if (deviceId is > 0 && await devices.GetAsync(deviceId.Value, cancellationToken) is { } device)
         {
@@ -102,7 +102,8 @@ public sealed class ServiceOrdersController(
                     form.TechnicianId,
                     promisedAt,
                     estimatedCost,
-                    form.IntakeNotes),
+                    form.IntakeNotes,
+                    form.RequestId),
                 cancellationToken);
             if (result.Succeeded)
             {

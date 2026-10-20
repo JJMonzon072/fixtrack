@@ -17,7 +17,8 @@ public sealed record ServiceOrderInput(
     int? TechnicianId,
     DateTime? PromisedAtUtc,
     decimal? EstimatedCost,
-    string? IntakeNotes);
+    string? IntakeNotes,
+    Guid? RequestId = null);
 
 /// <summary>Nueva planificación de una orden abierta.</summary>
 public sealed record ServiceOrderPlanInput(ServiceOrderPriority? Priority, DateTime? PromisedAtUtc, decimal? EstimatedCost);

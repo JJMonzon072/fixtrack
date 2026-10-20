@@ -224,6 +224,12 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
     public Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken) =>
         db.ServiceOrders.SingleOrDefaultAsync(order => order.Id == id, cancellationToken);
 
+    public Task<int?> FindIdByCreationRequestAsync(Guid requestId, CancellationToken cancellationToken) =>
+        db.ServiceOrders.AsNoTracking()
+            .Where(order => order.CreationRequestId == requestId)
+            .Select(order => (int?)order.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+
     public void Add(ServiceOrder order) => db.ServiceOrders.Add(order);
 
     private static IQueryable<ServiceOrder> Filter(IQueryable<ServiceOrder> orders, ServiceOrderSearch search)

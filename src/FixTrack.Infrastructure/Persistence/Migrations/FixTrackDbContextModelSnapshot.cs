@@ -232,6 +232,9 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                         .HasPrecision(3)
                         .HasColumnType("datetime2(3)");
 
+                    b.Property<Guid?>("CreationRequestId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime?>("DeliveredAtUtc")
                         .HasPrecision(3)
                         .HasColumnType("datetime2(3)");
@@ -290,6 +293,11 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreationRequestId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ServiceOrders_CreationRequestId")
+                        .HasFilter("[CreationRequestId] IS NOT NULL");
 
                     b.HasIndex("DeviceId")
                         .HasDatabaseName("IX_ServiceOrders_DeviceId");

@@ -288,6 +288,9 @@ public sealed class FakeServiceOrderRepository(InMemoryStore store) : IServiceOr
                 order.Id, order.Status, order.Priority, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId,
                 order.Technician?.FullName, order.Device!.Customer!.FullName, order.Device.Type, order.Device.Brand, order.Device.Model))]);
 
+    public Task<int?> FindIdByCreationRequestAsync(Guid requestId, CancellationToken cancellationToken) =>
+        Task.FromResult(store.ServiceOrders.FirstOrDefault(order => order.CreationRequestId == requestId)?.Id);
+
     public Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken) =>
         Task.FromResult(store.ServiceOrders.SingleOrDefault(order => order.Id == id));
 

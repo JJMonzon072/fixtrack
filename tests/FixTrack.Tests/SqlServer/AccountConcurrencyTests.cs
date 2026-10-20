@@ -2,15 +2,10 @@ using System.Diagnostics;
 using FixTrack.Application.Common;
 using FixTrack.Application.Security;
 using FixTrack.Infrastructure.Persistence;
-using FixTrack.Tests.Web;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace FixTrack.Tests.SqlServer;
 
@@ -38,34 +33,7 @@ public sealed class AccountConcurrencyTests(DisposableSqlServerDatabase database
             return;
         }
 
-        // La aplicación real (servicios, Identity y estrategia de reintentos) sobre la base desechable. El entorno
-        // "Pruebas" no carga secretos de usuario, y el contexto se reemplaza explícitamente: aunque la máquina tenga
-        // configurada otra base, estas pruebas solo pueden escribir en la desechable.
-        _app = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder
-            .UseEnvironment("Pruebas")
-            .UseSetting("ConnectionStrings:FixTrack", connectionString)
-            .UseProtectedKeysInDatabase()
-            .ConfigureTestServices(services =>
-            {
-                services.RemoveAll<DbContextOptions<FixTrackDbContext>>();
-                services.RemoveAll<DbContextOptions>();
-                services.RemoveAll<IDbContextOptionsConfiguration<FixTrackDbContext>>();
-                services.RemoveAll<FixTrackDbContext>();
-                services.AddDbContext<FixTrackDbContext>(options => options.UseSqlServer(
-                    connectionString, sql => sql.EnableRetryOnFailure(maxRetryCount: 3)));
-                services.RemoveAll<DbContextOptions<DataProtectionKeysDbContext>>();
-                services.RemoveAll<IDbContextOptionsConfiguration<DataProtectionKeysDbContext>>();
-                services.RemoveAll<DataProtectionKeysDbContext>();
-                services.AddDbContext<DataProtectionKeysDbContext>(options => options.UseSqlServer(connectionString));
-            }));
-
-        await using var scope = _app.Services.CreateAsyncScope();
-        var catalog = new SqlConnectionStringBuilder(scope.ServiceProvider.GetRequiredService<FixTrackDbContext>().Database.GetConnectionString())
-            .InitialCatalog;
-        if (!catalog.StartsWith("FixTrackPrueba_", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"Las pruebas de concurrencia solo se ejecutan en una base desechable; se obtuvo «{catalog}».");
-        }
+        _app = await DisposableApp.CreateAsync(connectionString);
     }
 
     public async ValueTask DisposeAsync()

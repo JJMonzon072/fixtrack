@@ -121,6 +121,9 @@ public sealed class ServiceOrderFormModel
     public string? EstimatedCost { get; set; }
 
     public int? TechnicianId { get; set; }
+
+    /// <summary>Identificador de este envío del formulario: si se envía dos veces, se registra una sola orden.</summary>
+    public Guid? RequestId { get; set; }
 }
 
 /// <param name="Customer">Cliente elegido o preseleccionado.</param>

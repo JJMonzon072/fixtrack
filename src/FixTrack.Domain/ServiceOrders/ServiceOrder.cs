@@ -18,6 +18,7 @@ public sealed class ServiceOrder : Entity
     /// <summary>Registra la recepción de un equipo. El propietario del equipo debe estar cargado y activo.</summary>
     /// <param name="technician">Técnico responsable desde la recepción; puede asignarse después.</param>
     /// <param name="registeredBy">Quién registra la orden (queda en el historial).</param>
+    /// <param name="creationRequestId">Identificador del formulario que la registró: evita duplicarla si se envía dos veces.</param>
     public ServiceOrder(
         Device device,
         string? reportedIssue,
@@ -27,7 +28,8 @@ public sealed class ServiceOrder : Entity
         decimal? estimatedCost,
         string? intakeNotes,
         Technician? technician = null,
-        Actor? registeredBy = null)
+        Actor? registeredBy = null,
+        Guid? creationRequestId = null)
     {
         ArgumentNullException.ThrowIfNull(device);
         var owner = device.Customer
@@ -57,6 +59,7 @@ public sealed class ServiceOrder : Entity
         EstimatedCost = estimatedCost;
         Status = ServiceOrderStatus.Received;
         CreatedAtUtc = ReceivedAtUtc;
+        CreationRequestId = creationRequestId is { } requestId && requestId != Guid.Empty ? requestId : null;
         _statusHistory.Add(new ServiceOrderStatusChange(null, ServiceOrderStatus.Received, ReceivedAtUtc, "Orden registrada.", registeredBy));
 
         if (technician is not null)
@@ -117,6 +120,12 @@ public sealed class ServiceOrder : Entity
     /// si otra persona modificó la orden, el guardado se rechaza en lugar de sobrescribir su cambio.
     /// </summary>
     public int Version { get; private set; }
+
+    /// <summary>
+    /// Identificador del envío del formulario que creó la orden (único si existe). Un segundo envío o un reintento con el
+    /// mismo identificador devuelve la orden ya creada en lugar de registrar otra.
+    /// </summary>
+    public Guid? CreationRequestId { get; private set; }
 
     public IReadOnlyCollection<ServiceOrderStatusChange> StatusHistory => _statusHistory;
 

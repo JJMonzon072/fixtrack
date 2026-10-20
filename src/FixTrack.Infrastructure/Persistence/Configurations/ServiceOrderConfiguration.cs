@@ -77,5 +77,11 @@ internal sealed class ServiceOrderConfiguration : IEntityTypeConfiguration<Servi
 
         // Orden predeterminado del listado y de las órdenes recibidas recientemente.
         builder.HasIndex(order => order.ReceivedAtUtc).HasDatabaseName("IX_ServiceOrders_ReceivedAtUtc");
+
+        // Un mismo envío del formulario no puede registrar dos órdenes (doble clic o reintento tras un fallo de red).
+        builder.HasIndex(order => order.CreationRequestId)
+            .IsUnique()
+            .HasFilter("[CreationRequestId] IS NOT NULL")
+            .HasDatabaseName("UX_ServiceOrders_CreationRequestId");
     }
 }

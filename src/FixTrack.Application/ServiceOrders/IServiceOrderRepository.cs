@@ -24,5 +24,8 @@ public interface IServiceOrderRepository
     /// </summary>
     Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken);
 
+    /// <summary>Id de la orden registrada con ese envío del formulario, si existe.</summary>
+    Task<int?> FindIdByCreationRequestAsync(Guid requestId, CancellationToken cancellationToken);
+
     void Add(ServiceOrder order);
 }

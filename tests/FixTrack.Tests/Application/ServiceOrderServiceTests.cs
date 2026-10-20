@@ -384,6 +384,20 @@ public sealed class ServiceOrderServiceTests
     }
 
     [Fact]
+    public async Task Submitting_the_same_form_twice_registers_one_order()
+    {
+        var input = Input(null) with { RequestId = Guid.NewGuid() };
+
+        var first = await _service.CreateAsync(input, Token);
+        var again = await _service.CreateAsync(input, Token);
+
+        Assert.True(again.Succeeded);
+        Assert.Equal(first.Value, again.Value);
+        Assert.Single(_store.ServiceOrders);
+        Assert.Single(_audit.Events, entry => entry.Action == AuditActions.OrderRegistered);
+    }
+
+    [Fact]
     public async Task Closed_orders_reject_further_changes()
     {
         var order = await CreateOrderAsync();

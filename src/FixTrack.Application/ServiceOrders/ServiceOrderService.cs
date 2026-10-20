@@ -90,7 +90,32 @@ internal sealed class ServiceOrderService(
             open.Count > MaxPrioritizedOrders);
     }
 
-    public Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken)
+    public async Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken)
+    {
+        // Un envío repetido del mismo formulario (doble clic, recarga o reintento) devuelve la orden ya registrada.
+        if (input.RequestId is { } requestId && await orders.FindIdByCreationRequestAsync(requestId, cancellationToken) is { } existing)
+        {
+            return CommandResult<int>.Success(existing);
+        }
+
+        try
+        {
+            return await RegisterAsync(input, cancellationToken);
+        }
+        catch (DuplicateValueException) when (input.RequestId is not null)
+        {
+            // Dos envíos simultáneos, o un reintento después de un COMMIT cuya confirmación se perdió: el índice único
+            // aceptó solo uno.
+            if (await orders.FindIdByCreationRequestAsync(input.RequestId.Value, cancellationToken) is { } created)
+            {
+                return CommandResult<int>.Success(created);
+            }
+
+            throw;
+        }
+    }
+
+    private Task<CommandResult<int>> RegisterAsync(ServiceOrderInput input, CancellationToken cancellationToken)
     {
         var receivedAt = UtcNow;
         var issue = Text.CleanMultilineOrNull(input.ReportedIssue);
@@ -137,7 +162,16 @@ internal sealed class ServiceOrderService(
                 }
 
                 var order = new ServiceOrder(
-                    device!, issue, input.Priority!.Value, receivedAt, input.PromisedAtUtc, input.EstimatedCost, notes, technician, currentUser.Actor);
+                    device!,
+                    issue,
+                    input.Priority!.Value,
+                    receivedAt,
+                    input.PromisedAtUtc,
+                    input.EstimatedCost,
+                    notes,
+                    technician,
+                    currentUser.Actor,
+                    input.RequestId);
                 orders.Add(order);
                 await unitOfWork.SaveChangesAsync(token);
 

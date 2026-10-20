@@ -146,6 +146,20 @@ public sealed class MigrationTests
         Assert.DoesNotContain("UPDATE [", script, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void The_phase_4_creation_request_migration_only_adds_a_nullable_column_and_its_index()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: MigrationId("RecordVersions"),
+            toMigration: MigrationId("OrderCreationRequests"));
+
+        Assert.Contains("ALTER TABLE [ServiceOrders] ADD [CreationRequestId] uniqueidentifier NULL", script);
+        Assert.Contains("CREATE UNIQUE INDEX [UX_ServiceOrders_CreationRequestId]", script);
+        Assert.Contains("WHERE [CreationRequestId] IS NOT NULL", script);
+        Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string MigrationId(string name)
     {
         using var context = CreateSqlServerContext();
