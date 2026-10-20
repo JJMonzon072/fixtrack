@@ -57,6 +57,7 @@ public static class SecurityServiceCollectionExtensions
         services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.FromMinutes(1));
 
         services.AddAuthorization(AuthorizationPolicies.Configure);
+        services.AddScoped<FailedLoginEqualizer>();
 
         // Las claves que cifran cookies y tokens se guardan en la base: sobreviven a reinicios del contenedor.
         services.AddDataProtection()

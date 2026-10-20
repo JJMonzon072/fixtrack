@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using FixTrack.Application.Security;
 using FixTrack.Infrastructure.Identity;
 using FixTrack.Infrastructure.Persistence;
+using FixTrack.Web.Controllers;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -195,8 +196,8 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
         using var wrongResponse = await AuthenticatedClients.LogInAsync(wrong, TestAccounts.Administrator.Email, "Incorrecta12345");
         var wrongHtml = await wrongResponse.Content.ReadAsStringAsync(Token);
 
-        Assert.Contains("El correo o la contraseña no son correctos.", unknownHtml);
-        Assert.Contains("El correo o la contraseña no son correctos.", wrongHtml);
+        Assert.Contains(AccountController.LoginFailed, unknownHtml);
+        Assert.Contains(AccountController.LoginFailed, wrongHtml);
         Assert.Equal(HttpStatusCode.OK, wrongResponse.StatusCode);
         Assert.DoesNotContain(wrongResponse.Headers.TryGetValues("Set-Cookie", out var cookies) ? cookies : [], cookie => cookie.StartsWith(AuthenticatedClients.SessionCookie, StringComparison.Ordinal));
     }
@@ -214,7 +215,11 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
 
         var locked = await (await AuthenticatedClients.LogInAsync(client, account.Email, account.Password)).Content.ReadAsStringAsync(Token);
 
-        Assert.Contains("la cuenta está bloqueada temporalmente o deshabilitada", locked);
+        // El mensaje es el genérico, pero la cuenta sí quedó bloqueada: ni la contraseña correcta abre sesión.
+        Assert.Contains(AccountController.LoginFailed, locked);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<FixTrackUser>>();
+        Assert.True(await users.IsLockedOutAsync((await users.FindByEmailAsync(account.Email))!));
     }
 
     [Fact]
@@ -373,7 +378,7 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, before.StatusCode);
         Assert.Equal(HttpStatusCode.Redirect, after.StatusCode);
-        Assert.Contains("deshabilitada", retry);
+        Assert.Contains(AccountController.LoginFailed, retry);
     }
 
     [Fact]

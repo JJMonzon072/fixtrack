@@ -2,6 +2,7 @@ using FixTrack.Application.Security;
 using FixTrack.Infrastructure.Identity;
 using FixTrack.Infrastructure.Persistence;
 using FixTrack.Tests.Infrastructure;
+using FixTrack.Web.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -31,6 +32,9 @@ public sealed class FixTrackWebApplicationFactory : WebApplicationFactory<Progra
 
         // Muchas pruebas inician sesión desde la misma "dirección": el límite real se prueba aparte.
         builder.UseSetting("Security:LoginAttemptsPerMinute", "10000");
+
+        // El tiempo mínimo de un inicio de sesión fallido se prueba aparte; aquí solo haría lentas las pruebas.
+        builder.UseSetting(FailedLoginEqualizer.MinimumDurationSetting, "0");
 
         builder.ConfigureTestServices(services =>
         {

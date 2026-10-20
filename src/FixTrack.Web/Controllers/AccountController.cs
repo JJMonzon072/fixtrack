@@ -14,19 +14,19 @@ namespace FixTrack.Web.Controllers;
 
 /// <summary>
 /// Inicio y cierre de sesión y cambio de la contraseña propia. No existe registro público: las cuentas las crea un
-/// administrador. Los mensajes de error no revelan si un correo tiene cuenta.
+/// administrador. Un intento fallido recibe siempre el mismo mensaje y tarda lo mismo, exista o no la cuenta, esté
+/// bloqueada o deshabilitada (ver <see cref="FailedLoginEqualizer"/>); el motivo real solo queda en el registro interno.
 /// </summary>
 [Route("cuenta")]
 public sealed class AccountController(
     SignInManager<FixTrackUser> signIn,
     IUserAccountService accounts,
+    FailedLoginEqualizer failedLogins,
     ApplicationInfo application,
     ILogger<AccountController> logger) : Controller
 {
-    private const string InvalidCredentials = "El correo o la contraseña no son correctos.";
-
-    private const string LockedOut =
-        "Por seguridad, la cuenta está bloqueada temporalmente o deshabilitada. Intenta de nuevo en 15 minutos o comunícate con el administrador.";
+    public const string LoginFailed =
+        "No se pudo iniciar sesión con esos datos. Revisa el correo y la contraseña. Tras varios intentos fallidos, el acceso se bloquea unos minutos por seguridad.";
 
     [AllowAnonymous]
     [HttpGet("iniciar-sesion")]
@@ -51,11 +51,13 @@ public sealed class AccountController(
             return View(LoginModel(email, returnUrl, "Escribe tu correo electrónico y tu contraseña.", null));
         }
 
+        var startedAt = failedLogins.Start();
         var user = await signIn.UserManager.FindByEmailAsync(email);
         if (user is null)
         {
-            logger.LogInformation("Intento de inicio de sesión con un correo sin cuenta.");
-            return View(LoginModel(email, returnUrl, InvalidCredentials, null));
+            failedLogins.SimulatePasswordCheck(form.Password);
+            logger.LogInformation("Inicio de sesión rechazado: el correo no tiene cuenta.");
+            return await LoginFailedAsync(email, returnUrl, startedAt, cancellationToken);
         }
 
         // lockoutOnFailure: tras 5 intentos fallidos la cuenta se bloquea 15 minutos.
@@ -67,14 +69,21 @@ public sealed class AccountController(
             return LocalRedirect(SafeReturnUrl(returnUrl));
         }
 
-        if (result.IsLockedOut)
+        if (result.IsLockedOut || result.IsNotAllowed)
         {
-            logger.LogWarning("Inicio de sesión rechazado: la cuenta {UserId} está bloqueada o deshabilitada.", user.Id);
-            return View(LoginModel(email, returnUrl, LockedOut, null));
+            // Identity rechaza sin calcular el hash: se calcula uno equivalente para no responder más rápido.
+            failedLogins.SimulatePasswordCheck(form.Password);
+            logger.LogWarning(
+                "Inicio de sesión rechazado: la cuenta {UserId} está {Reason}.",
+                user.Id,
+                user.LockoutEnd == DateTimeOffset.MaxValue ? "deshabilitada" : "bloqueada temporalmente");
+        }
+        else
+        {
+            logger.LogInformation("Inicio de sesión rechazado: contraseña incorrecta para la cuenta {UserId}.", user.Id);
         }
 
-        logger.LogInformation("Contraseña incorrecta para la cuenta {UserId}.", user.Id);
-        return View(LoginModel(email, returnUrl, InvalidCredentials, null));
+        return await LoginFailedAsync(email, returnUrl, startedAt, cancellationToken);
     }
 
     [HttpPost("cerrar-sesion")]
@@ -125,6 +134,13 @@ public sealed class AccountController(
 
         StatusMessage.Success(TempData, "Tu contraseña se cambió correctamente.");
         return LocalRedirect("/");
+    }
+
+    /// <summary>La misma respuesta para cualquier fallo, después del tiempo mínimo.</summary>
+    private async Task<IActionResult> LoginFailedAsync(string email, string? returnUrl, long startedAt, CancellationToken cancellationToken)
+    {
+        await failedLogins.CompleteFailureAsync(startedAt, cancellationToken);
+        return View(LoginModel(email, returnUrl, LoginFailed, null));
     }
 
     private LoginViewModel LoginModel(string? email, string? returnUrl, string? error, string? notice) =>

@@ -2,6 +2,7 @@ using System.Net;
 using FixTrack.Application.Common;
 using FixTrack.Application.Security;
 using FixTrack.Infrastructure.Persistence;
+using FixTrack.Web.Controllers;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -164,7 +165,7 @@ public sealed class UsersPageTests(FixTrackWebApplicationFactory factory)
 
         Assert.Contains("Cuenta deshabilitada.", disabled);
         Assert.Contains("Deshabilitada", disabled);
-        Assert.Contains("deshabilitada", blockedLogin);
+        Assert.Contains(AccountController.LoginFailed, blockedLogin);
         Assert.Contains("Cuenta habilitada.", enabled);
         Assert.Equal("/", allowedLogin.RequestMessage!.RequestUri!.AbsolutePath);
     }
