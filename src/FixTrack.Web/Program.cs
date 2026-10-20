@@ -11,7 +11,8 @@ builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration)
     .AddPresentation()
-    .AddSecurity(builder.Configuration, builder.Environment);
+    .AddSecurity(builder.Configuration, builder.Environment)
+    .AddHealthEndpoints();
 
 var app = builder.Build();
 
@@ -32,9 +33,10 @@ app.UseStatusCodePagesWithReExecute("/error/{0}");
 // Fuera de Desarrollo, HTTPS es obligatorio: HSTS y redirección. En Desarrollo solo se redirige
 // cuando el perfil expone un endpoint HTTPS (perfil "https"). El perfil "http" no tiene puerto
 // HTTPS de destino, y el middleware solo registraría una advertencia en cada arranque.
+// Las comprobaciones de salud responden también por HTTP: las usa la plataforma desde su red interna.
 if (!app.Environment.IsDevelopment() || HttpsEndpoint.IsConfigured(app.Configuration))
 {
-    app.UseHttpsRedirection();
+    app.UseWhen(context => !HealthEndpoints.IsHealthRequest(context), branch => branch.UseHttpsRedirection());
 }
 
 app.UseSecurityHeaders();
@@ -46,6 +48,7 @@ app.UseAuthorization();
 
 // Los archivos estáticos (estilos, íconos, fuentes) son públicos: los necesita la página de inicio de sesión.
 app.MapStaticAssets().AllowAnonymous();
+app.MapHealthEndpoints();
 app.MapControllers()
     .WithStaticAssets();
 
