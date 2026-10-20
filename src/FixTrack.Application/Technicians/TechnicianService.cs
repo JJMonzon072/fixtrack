@@ -68,32 +68,39 @@ internal sealed class TechnicianService(
         return await TrySaveAsync(cancellationToken) ? CommandResult.Success() : CommandResult.Invalid(EmailTaken());
     }
 
-    public async Task<CommandResult> DeactivateAsync(int id, CancellationToken cancellationToken)
-    {
-        var technician = await FindAsync(id, cancellationToken);
-        if (technician is null)
-        {
-            return CommandResult.NotFound();
-        }
+    public Task<CommandResult> DeactivateAsync(int id, CancellationToken cancellationToken) =>
+        id <= 0
+            ? Task.FromResult(CommandResult.NotFound())
+            : unitOfWork.ExecuteInTransactionAsync(
+                async token =>
+                {
+                    // Bloquea al técnico: una asignación simultánea espera a que esta operación termine
+                    // (y después lo encuentra inactivo), o termina antes y su orden se cuenta abajo.
+                    var technician = await technicians.FindForAssignmentAsync(id, token);
+                    if (technician is null)
+                    {
+                        return CommandResult.NotFound();
+                    }
 
-        if (!technician.IsActive)
-        {
-            return CommandResult.Conflict("El técnico ya estaba inactivo.");
-        }
+                    if (!technician.IsActive)
+                    {
+                        return CommandResult.Conflict("El técnico ya estaba inactivo.");
+                    }
 
-        // Un trabajo en curso no puede quedarse sin responsable: primero hay que reasignar sus órdenes abiertas.
-        var openOrders = await technicians.CountOpenOrdersAsync(id, cancellationToken);
-        if (openOrders > 0)
-        {
-            return CommandResult.Conflict(openOrders == 1
-                ? "No se puede desactivar: el técnico tiene 1 orden abierta asignada. Reasígnala antes de desactivarlo."
-                : $"No se puede desactivar: el técnico tiene {openOrders} órdenes abiertas asignadas. Reasígnalas antes de desactivarlo.");
-        }
+                    // Un trabajo en curso no puede quedarse sin responsable: primero hay que reasignar sus órdenes abiertas.
+                    var openOrders = await technicians.CountOpenOrdersAsync(id, token);
+                    if (openOrders > 0)
+                    {
+                        return CommandResult.Conflict(openOrders == 1
+                            ? "No se puede desactivar: el técnico tiene 1 orden abierta asignada. Reasígnala antes de desactivarlo."
+                            : $"No se puede desactivar: el técnico tiene {openOrders} órdenes abiertas asignadas. Reasígnalas antes de desactivarlo.");
+                    }
 
-        technician.Deactivate(UtcNow);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return CommandResult.Success();
-    }
+                    technician.Deactivate(UtcNow);
+                    await unitOfWork.SaveChangesAsync(token);
+                    return CommandResult.Success();
+                },
+                cancellationToken);
 
     public async Task<CommandResult> ReactivateAsync(int id, CancellationToken cancellationToken)
     {

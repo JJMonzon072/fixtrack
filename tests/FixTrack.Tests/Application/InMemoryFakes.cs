@@ -34,6 +34,9 @@ public sealed class InMemoryStore
     /// <summary>Indica si hay una transacción en curso (la abre <see cref="FakeUnitOfWork"/>).</summary>
     public bool InTransaction { get; set; }
 
+    /// <summary>Técnicos bloqueados con FindForAssignmentAsync, en orden.</summary>
+    public List<int> LockedTechnicians { get; } = [];
+
     /// <summary>Asigna el Id como lo haría la columna IDENTITY de SQL Server.</summary>
     public static void AssignId(Entity entity, int id) =>
         typeof(Entity).GetProperty(nameof(Entity.Id))!.SetValue(entity, id);
@@ -198,6 +201,17 @@ public sealed class FakeTechnicianRepository(InMemoryStore store) : ITechnicianR
 
     public Task<bool> EmailExistsAsync(string email, int? excludingTechnicianId, CancellationToken cancellationToken) =>
         Task.FromResult(store.Technicians.Any(t => t.Email == email && t.Id != excludingTechnicianId));
+
+    public Task<Technician?> FindForAssignmentAsync(int id, CancellationToken cancellationToken)
+    {
+        if (!store.InTransaction)
+        {
+            throw new InvalidOperationException("El bloqueo del técnico requiere una transacción activa.");
+        }
+
+        store.LockedTechnicians.Add(id);
+        return FindAsync(id, cancellationToken);
+    }
 
     public Task<int> CountOpenOrdersAsync(int technicianId, CancellationToken cancellationToken) =>
         Task.FromResult(store.OpenOrdersByTechnician.GetValueOrDefault(technicianId));

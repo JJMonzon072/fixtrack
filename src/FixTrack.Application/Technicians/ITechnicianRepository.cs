@@ -12,6 +12,13 @@ public interface ITechnicianRepository
     /// <summary>Obtiene el técnico para modificarlo.</summary>
     Task<Technician?> FindAsync(int id, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Obtiene el técnico y bloquea su registro hasta que termine la transacción en curso. Toda operación que
+    /// asigna órdenes o desactiva técnicos lo usa primero, de modo que esas operaciones sobre un mismo técnico
+    /// se ejecutan una después de otra. Debe llamarse dentro de <see cref="Common.IUnitOfWork.ExecuteInTransactionAsync{TResult}"/>.
+    /// </summary>
+    Task<Technician?> FindForAssignmentAsync(int id, CancellationToken cancellationToken);
+
     Task<bool> EmailExistsAsync(string email, int? excludingTechnicianId, CancellationToken cancellationToken);
 
     /// <summary>Órdenes asignadas al técnico que no están entregadas ni canceladas.</summary>

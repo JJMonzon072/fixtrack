@@ -4,6 +4,7 @@ using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
 using FixTrack.Domain.Technicians;
 using FixTrack.Infrastructure.Persistence;
+using FixTrack.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace FixTrack.Tests.Infrastructure;
@@ -79,6 +80,37 @@ public sealed class UnitOfWorkTests : IDisposable
 
         await using var reader = _database.CreateContext();
         Assert.Equal(0, await reader.Technicians.CountAsync(Token));
+    }
+
+    [Fact]
+    public async Task The_technician_lock_requires_a_transaction()
+    {
+        await using var context = _database.CreateContext();
+        var repository = new TechnicianRepository(context);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => repository.FindForAssignmentAsync(1, Token));
+    }
+
+    [Fact]
+    public async Task The_technician_lock_reads_the_technician_inside_a_transaction()
+    {
+        await using (var setup = _database.CreateContext())
+        {
+            setup.Technicians.Add(new Technician("Luis Pérez", "Laptops", null, null, Now));
+            await setup.SaveChangesAsync(Token);
+        }
+
+        await using var context = _database.CreateContext();
+        Technician? found = null;
+        await new EfUnitOfWork(context).ExecuteInTransactionAsync(
+            async token =>
+            {
+                found = await new TechnicianRepository(context).FindForAssignmentAsync(1, token);
+                return CommandResult.Success();
+            },
+            Token);
+
+        Assert.Equal("Luis Pérez", found?.FullName);
     }
 
     [Fact]

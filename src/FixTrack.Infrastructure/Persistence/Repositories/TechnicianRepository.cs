@@ -98,6 +98,29 @@ internal sealed class TechnicianRepository(FixTrackDbContext db) : ITechnicianRe
     public Task<Technician?> FindAsync(int id, CancellationToken cancellationToken) =>
         db.Technicians.SingleOrDefaultAsync(technician => technician.Id == id, cancellationToken);
 
+    /// <remarks>
+    /// En SQL Server se lee con <c>WITH (UPDLOCK, ROWLOCK)</c>: el bloqueo de actualización sobre la fila del
+    /// técnico se conserva hasta el final de la transacción y es incompatible con otro UPDLOCK sobre la misma
+    /// fila. Así, una asignación y una desactivación del mismo técnico nunca se intercalan: la segunda espera
+    /// a que la primera confirme y después lee el estado actualizado. Las lecturas normales (listados,
+    /// detalle) no se bloquean, porque el bloqueo U es compatible con los bloqueos compartidos.
+    /// SQLite, que solo se usa en las pruebas, no admite estas sugerencias; allí cada transacción de
+    /// escritura ya bloquea la base completa.
+    /// </remarks>
+    public Task<Technician?> FindForAssignmentAsync(int id, CancellationToken cancellationToken)
+    {
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("El bloqueo del técnico requiere una transacción activa (IUnitOfWork.ExecuteInTransactionAsync).");
+        }
+
+        return db.Database.IsSqlServer()
+            ? db.Technicians
+                .FromSql($"SELECT * FROM [Technicians] WITH (UPDLOCK, ROWLOCK) WHERE [Id] = {id}")
+                .SingleOrDefaultAsync(cancellationToken)
+            : FindAsync(id, cancellationToken);
+    }
+
     public Task<bool> EmailExistsAsync(string email, int? excludingTechnicianId, CancellationToken cancellationToken) =>
         db.Technicians.AnyAsync(
             technician => technician.Email == email && (excludingTechnicianId == null || technician.Id != excludingTechnicianId),
