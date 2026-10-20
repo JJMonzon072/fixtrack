@@ -488,6 +488,21 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
         Assert.Equal(1, await scope.ServiceProvider.GetRequiredService<FixTrackDbContext>().ServiceOrders.CountAsync(order => order.DeviceId == scenario.DeviceId, Token));
     }
 
+    [Fact]
+    public async Task Deactivating_a_customer_with_open_orders_warns_how_many_remain()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var scenario = await ScenarioAsync(client, "cliente-con-ordenes");
+        await CreateOrderAsync(client, scenario);
+        var withoutOrders = await FormPost.CreateCustomerAsync(client, "Cliente Sin Ordenes", "5555-7400");
+
+        var details = await client.GetStringAsync($"/clientes/{scenario.CustomerId}", Token);
+        var empty = await client.GetStringAsync($"/clientes/{withoutOrders}", Token);
+
+        Assert.Contains("Tiene 1 orden abierta, que seguirá", details);
+        Assert.DoesNotContain("deactivate-open-orders", empty);
+    }
+
     private static string[] OrderNumbers(string html) =>
         [.. OrderLink().Matches(html).Select(match => match.Groups["number"].Value)];
 
