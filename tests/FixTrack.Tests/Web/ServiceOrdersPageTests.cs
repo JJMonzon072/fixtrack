@@ -407,6 +407,68 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task A_reassignment_appears_in_the_timeline_with_its_author_and_reason()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var scenario = await ScenarioAsync(client, "reasignacion");
+        var id = await CreateOrderAsync(client, scenario, scenario.TechnicianId);
+        var second = FormPost.CreatedId(await FormPost.SendAsync(client, "/tecnicos/nuevo", new()
+        {
+            ["FullName"] = "Andrea Reasignada",
+            ["Specialty"] = "Impresoras",
+        }));
+        var order = await LoadAsync(id);
+
+        var form = await client.GetStringAsync($"/ordenes/{id}/asignar", Token);
+        using var response = await FormPost.SendAsync(client, $"/ordenes/{id}/asignar", new()
+        {
+            ["TechnicianId"] = second.ToString(),
+            ["Note"] = "El técnico anterior está incapacitado",
+            ["Version"] = order.Version.ToString(),
+        });
+        var details = await response.Content.ReadAsStringAsync(Token);
+
+        Assert.Contains("Motivo de la reasignación", form);
+        Assert.Contains("Técnico asignado: Tecnico reasignacion", details);
+        Assert.Contains("Reasignada a Andrea Reasignada", details);
+        Assert.Contains("antes: Tecnico reasignacion", details);
+        Assert.Contains("El técnico anterior está incapacitado", details);
+        Assert.Contains($"por {TestAccounts.Administrator.FullName}", details);
+        Assert.Contains("Historial de la orden", details);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var assignments = await scope.ServiceProvider.GetRequiredService<FixTrackDbContext>().ServiceOrderAssignments
+            .Where(assignment => assignment.ServiceOrderId == id)
+            .OrderBy(assignment => assignment.Id)
+            .ToListAsync(Token);
+        Assert.Equal([(null, scenario.TechnicianId), (scenario.TechnicianId, second)], assignments.Select(a => (a.FromTechnicianId, a.ToTechnicianId)));
+        Assert.All(assignments, assignment => Assert.Equal(TestAccounts.Administrator.FullName, assignment.AssignedByName));
+    }
+
+    [Fact]
+    public async Task Status_changes_show_who_made_them()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync(TestAccounts.Operator);
+        var scenario = await ScenarioAsyncAsAdministratorAsync("autor");
+        var id = await CreateOrderAsync(client, scenario, scenario.TechnicianId);
+
+        using var response = await ChangeStatusAsync(client, id, ServiceOrderStatus.Diagnosing, (await LoadAsync(id)).Version);
+        var details = await response.Content.ReadAsStringAsync(Token);
+        var history = (await LoadAsync(id)).StatusHistory.OrderBy(change => change.Id).ToList();
+
+        Assert.Contains($"por {TestAccounts.Operator.FullName}", details);
+        Assert.All(history, change => Assert.Equal(TestAccounts.Operator.FullName, change.ChangedByName));
+        Assert.All(history, change => Assert.False(string.IsNullOrEmpty(change.ChangedByUserId)));
+    }
+
+    /// <summary>El operador no registra técnicos: el escenario lo prepara un administrador.</summary>
+    private async Task<Scenario> ScenarioAsyncAsAdministratorAsync(string tag)
+    {
+        using var admin = await factory.CreateAuthenticatedClientAsync();
+        return await ScenarioAsync(admin, tag);
+    }
+
     private static string[] OrderNumbers(string html) =>
         [.. OrderLink().Matches(html).Select(match => match.Groups["number"].Value)];
 

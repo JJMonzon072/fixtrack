@@ -174,10 +174,11 @@ public sealed class ServiceOrdersController(
     public async Task<IActionResult> Assign(
         int id,
         [FromForm] int? technicianId,
+        [FromForm] string? note,
         [FromForm] int version,
         CancellationToken cancellationToken)
     {
-        var result = await orders.AssignTechnicianAsync(id, technicianId, null, version, cancellationToken);
+        var result = await orders.AssignTechnicianAsync(id, technicianId, note, version, cancellationToken);
         if (Completed(result, id, "Técnico asignado correctamente.") is { } done)
         {
             return done;
@@ -185,7 +186,7 @@ public sealed class ServiceOrdersController(
 
         AddErrors(result.Errors);
         return await WithOpenOrderAsync(id, cancellationToken, async order =>
-            View("Assign", new ServiceOrderAssignViewModel(order, await ActiveTechniciansAsync(cancellationToken), technicianId, version)));
+            View("Assign", new ServiceOrderAssignViewModel(order, await ActiveTechniciansAsync(cancellationToken), technicianId, version, note)));
     }
 
     [HttpGet("{id:int}/diagnostico")]

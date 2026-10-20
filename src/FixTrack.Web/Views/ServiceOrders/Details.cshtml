@@ -200,24 +200,30 @@ else if (order.Status == ServiceOrderStatus.Delivered && order.DeliveredAtUtc is
         <section class="card" aria-labelledby="history-title">
             <header class="card__header">
                 <div class="card__title-row">
-                    <h2 class="card__title" id="history-title">Historial de estados</h2>
-                    <span class="badge badge--neutral mono">@order.History.Count</span>
+                    <h2 class="card__title" id="history-title">Historial de la orden</h2>
+                    <span class="badge badge--neutral mono">@Model.Timeline.Count</span>
                 </div>
             </header>
             <ol class="timeline">
-                @foreach (var entry in order.History)
+                @foreach (var entry in Model.Timeline)
                 {
-                    <li class="timeline__item" data-status="@DomainDisplay.Tone(entry.ToStatus)">
-                        <span class="timeline__icon" aria-hidden="true"><icon name="@DomainDisplay.Icon(entry.ToStatus)" /></span>
+                    <li class="timeline__item" data-status="@entry.Tone">
+                        <span class="timeline__icon" aria-hidden="true"><icon name="@entry.Icon" /></span>
                         <div class="timeline__body">
                             <p class="timeline__title">
-                                @DomainDisplay.Name(entry.ToStatus)
-                                @if (entry.FromStatus is { } from)
+                                @entry.Title
+                                @if (entry.Detail is { } detail)
                                 {
-                                    <span class="timeline__from">desde @DomainDisplay.Name(from)</span>
+                                    <span class="timeline__from">@detail</span>
                                 }
                             </p>
-                            <time class="timeline__time" datetime="@DateDisplay.Iso(entry.ChangedAtUtc)">@Dates.Long(entry.ChangedAtUtc)</time>
+                            <p class="timeline__meta">
+                                <time class="timeline__time" datetime="@DateDisplay.Iso(entry.AtUtc)">@Dates.Long(entry.AtUtc)</time>
+                                @if (entry.Author is { } author)
+                                {
+                                    <span class="timeline__author">por @author</span>
+                                }
+                            </p>
                             @if (entry.Note is { } note)
                             {
                                 <p class="timeline__note">@note</p>
@@ -226,7 +232,7 @@ else if (order.Status == ServiceOrderStatus.Delivered && order.DeliveredAtUtc is
                     </li>
                 }
             </ol>
-            <p class="card__footnote">El historial es de solo lectura: cada cambio de estado agrega un registro que no puede modificarse ni eliminarse.</p>
+            <p class="card__footnote">El historial es de solo lectura: cada cambio de estado y cada asignación de técnico agregan un registro que no puede modificarse ni eliminarse.</p>
         </section>
     </div>
 

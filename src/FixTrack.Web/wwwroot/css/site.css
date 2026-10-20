@@ -2148,6 +2148,8 @@ fieldset.field > legend {
 [data-status="ready"] { --status-color: var(--status-ready); }
 [data-status="delivered"] { --status-color: var(--status-delivered); }
 [data-status="cancelled"] { --status-color: var(--status-cancelled); }
+[data-status="assignment"] { --status-color: var(--color-accent); }
+[data-status="note"] { --status-color: var(--color-text-tertiary); }
 
 /* Prioridad: ícono y texto con un tono según la urgencia */
 .priority {
@@ -2910,10 +2912,17 @@ fieldset.field > legend {
     color: var(--color-text-tertiary);
 }
 
-.timeline__time {
-    display: block;
+.timeline__meta {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--space-1);
     font-size: var(--text-xs);
     color: var(--color-text-tertiary);
+}
+
+.timeline__author::before {
+    content: "·";
+    margin-right: var(--space-1);
 }
 
 .timeline__note {

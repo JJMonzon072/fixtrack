@@ -134,7 +134,10 @@ public sealed record ServiceOrderEditorViewModel(
     IReadOnlyList<TechnicianWorkload> Technicians,
     string? Notice);
 
-public sealed record ServiceOrderDetailsViewModel(ServiceOrderDetails Order, DateTime NowUtc);
+public sealed record ServiceOrderDetailsViewModel(ServiceOrderDetails Order, DateTime NowUtc)
+{
+    public IReadOnlyList<TimelineEntry> Timeline { get; } = OrderTimeline.Build(Order);
+}
 
 public sealed class ServiceOrderStatusFormModel
 {
@@ -153,7 +156,8 @@ public sealed record ServiceOrderAssignViewModel(
     ServiceOrderDetails Order,
     IReadOnlyList<TechnicianWorkload> Technicians,
     int? SelectedTechnicianId,
-    int Version);
+    int Version,
+    string? Note = null);
 
 public sealed record ServiceOrderDiagnosisViewModel(ServiceOrderDetails Order, string? Diagnosis, int Version);
 
