@@ -1,5 +1,8 @@
+using FixTrack.Application.ServiceOrders;
+using FixTrack.Domain.ServiceOrders;
 using FixTrack.Tests.Application;
 using FixTrack.Web.Models;
+using FixTrack.Web.Models.ServiceOrders;
 using FixTrack.Web.Services;
 
 namespace FixTrack.Tests.Web;
@@ -91,6 +94,32 @@ public sealed class PresentationTests
         Assert.Equal("mañana", dates.RelativeDay(new DateTime(2026, 10, 21, 7, 0, 0, DateTimeKind.Utc)));
         Assert.Equal("ayer", dates.RelativeDay(new DateTime(2026, 10, 20, 2, 0, 0, DateTimeKind.Utc)));
         Assert.Null(dates.RelativeDay(new DateTime(2026, 10, 25, 2, 0, 0, DateTimeKind.Utc)));
+    }
+
+    [Fact]
+    public void List_parameters_are_read_from_spanish_slugs()
+    {
+        var query = ServiceOrderListQuery.Parse(" laptop ", "vencidas", "en-reparacion", "urgente", "sin-asignar", customer: 3, device: 0);
+
+        Assert.Equal("laptop", query.Text);
+        Assert.Equal(ServiceOrderView.Overdue, query.View);
+        Assert.Equal(ServiceOrderStatus.InRepair, query.Status);
+        Assert.Equal(ServiceOrderPriority.Urgent, query.Priority);
+        Assert.True(query.Unassigned);
+        Assert.Null(query.TechnicianId);
+        Assert.Equal(3, query.CustomerId);
+        Assert.Null(query.DeviceId);
+    }
+
+    [Fact]
+    public void A_status_outside_the_view_is_discarded()
+    {
+        var query = ServiceOrderListQuery.Parse(null, "cerradas", "en-reparacion", "x", "7");
+
+        Assert.Null(query.Status);
+        Assert.Null(query.Priority);
+        Assert.Equal(7, query.TechnicianId);
+        Assert.False(query.HasRecordFilter);
     }
 
     private sealed class ZonedClock(DateTimeOffset now, TimeZoneInfo zone) : TimeProvider

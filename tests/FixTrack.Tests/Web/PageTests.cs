@@ -46,21 +46,6 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
         Assert.Contains($"href=\"{expectedHref}\"", activeLink.Value);
     }
 
-    [Theory]
-    [InlineData("/ordenes", "Nueva orden")]
-    public async Task Pending_modules_show_an_empty_state_with_a_disabled_action(string url, string actionLabel)
-    {
-        using var client = factory.CreateClient();
-
-        var html = await client.GetStringAsync(url, CancellationToken);
-
-        Assert.Contains("En preparación", html);
-        Assert.Contains("Este módulo se habilitará en una próxima fase", html);
-        var button = Assert.Single(PrimaryButton().Matches(html));
-        Assert.Contains(" disabled", button.Groups["attributes"].Value);
-        Assert.Contains(actionLabel, button.Value);
-    }
-
     [Fact]
     public async Task Dashboard_does_not_present_sample_metrics()
     {
@@ -102,9 +87,6 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
 
     [GeneratedRegex("<a class=\"nav-link\"[^>]*aria-current=\"page\"[^>]*>")]
     private static partial Regex ActiveNavigationLink();
-
-    [GeneratedRegex("<button class=\"button button--primary\"(?<attributes>[^>]*)>.*?</button>", RegexOptions.Singleline)]
-    private static partial Regex PrimaryButton();
 
     [GeneratedRegex("<dd class=\"metric__value\">.*?</dd>", RegexOptions.Singleline)]
     private static partial Regex MetricValue();

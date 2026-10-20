@@ -1,0 +1,51 @@
+@using FixTrack.Domain.ServiceOrders
+@using FixTrack.Web.Services
+@model OrderDueViewModel
+@inject DateDisplay Dates
+@{
+    var isOpen = ServiceOrderWorkflow.IsOpen(Model.Status);
+    var promised = Model.PromisedAtUtc;
+    var remaining = promised is { } date ? date - Model.NowUtc : TimeSpan.Zero;
+    var tone = !isOpen || promised is null ? null
+        : remaining < TimeSpan.Zero ? "due--overdue"
+        : remaining <= TimeSpan.FromHours(24) ? "due--soon"
+        : null;
+}
+@if (promised is null)
+{
+    <span class="due">
+        <span class="due__date meta-list__muted">Sin fecha</span>
+        @if (Model.Status == ServiceOrderStatus.Delivered && Model.DeliveredAtUtc is { } deliveredAt)
+        {
+            <span class="due__meta">Entregada el @Dates.Short(deliveredAt)</span>
+        }
+    </span>
+}
+else
+{
+    <span class="due @tone">
+        <time class="due__date" datetime="@DateDisplay.Iso(promised.Value)">@Dates.Short(promised.Value)</time>
+        @if (Model.Status == ServiceOrderStatus.Delivered && Model.DeliveredAtUtc is { } deliveredAt)
+        {
+            <span class="due__meta">
+                @(deliveredAt <= promised ? "Entregada a tiempo" : $"Entregada con {DateDisplay.Duration(deliveredAt - promised.Value)} de atraso")
+            </span>
+        }
+        else if (!isOpen)
+        {
+            <span class="due__meta">Orden cancelada</span>
+        }
+        else if (remaining < TimeSpan.Zero)
+        {
+            <span class="due__meta"><icon name="triangle-alert" />Vencida hace @DateDisplay.Duration(remaining)</span>
+        }
+        else if (Dates.RelativeDay(promised.Value) is { } day)
+        {
+            <span class="due__meta">Vence @day, @Dates.Time(promised.Value)</span>
+        }
+        else
+        {
+            <span class="due__meta">En @DateDisplay.Duration(remaining), @Dates.Time(promised.Value)</span>
+        }
+    </span>
+}

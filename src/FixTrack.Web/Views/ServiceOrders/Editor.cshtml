@@ -1,0 +1,219 @@
+@using FixTrack.Domain.ServiceOrders
+@using FixTrack.Web.Models.Forms
+@using FixTrack.Web.Models.ServiceOrders
+@model ServiceOrderEditorViewModel
+@{
+    ViewData["Title"] = "Nueva orden";
+    ViewData["ParentTitle"] = "Órdenes de servicio";
+    ViewData["ParentUrl"] = Url.Action("Index");
+
+    var form = Model.Form;
+    var customer = Model.Customer;
+    var errors = FormErrors.From(ViewData.ModelState,
+        ("CustomerId", "Cliente", "CustomerSearch"),
+        ("DeviceId", "Equipo", "DeviceId"),
+        (nameof(form.ReportedIssue), "Problema reportado", null),
+        (nameof(form.IntakeNotes), "Observaciones de recepción", null),
+        (nameof(form.Priority), "Prioridad", null),
+        ("PromisedAtUtc", "Entrega comprometida", "PromisedAt"),
+        (nameof(form.EstimatedCost), "Costo estimado", null),
+        (nameof(form.TechnicianId), "Técnico responsable", null));
+
+    var customerError = errors.For("CustomerId");
+    var deviceError = errors.For("DeviceId");
+    var lockedDevice = form.DeviceLocked ? Model.Devices.FirstOrDefault(device => device.Id == form.DeviceId) : null;
+    var technicianOptions = Model.Technicians
+        .Select(t => (t.Id.ToString(), $"{t.FullName} · {(t.OpenOrderCount == 1 ? "1 orden abierta" : $"{t.OpenOrderCount} órdenes abiertas")}"))
+        .ToList();
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">Nueva orden de servicio</h1>
+        <p class="page-description">
+            Registra la recepción de un equipo. El número de orden y la fecha de recepción se asignan automáticamente al guardar.
+        </p>
+    </div>
+</header>
+
+@if (Model.Notice is { } notice)
+{
+    <div class="alert alert--warning" role="status">
+        <icon name="triangle-alert" />
+        <p class="alert__text">@notice</p>
+    </div>
+}
+
+<div class="form-layout">
+    @* novalidate: la validación la hace el servidor, con mensajes en español y el mismo estilo en todos los navegadores. *@
+    <form class="form-card form-card--wide" method="post" novalidate asp-action="Create" asp-antiforgery="true" data-order-form>
+        <partial name="_ErrorSummary" model="errors" />
+
+        <div class="form-section" role="group" aria-labelledby="section-customer">
+            <div>
+                <h2 class="form-section__title" id="section-customer">Cliente y equipo</h2>
+                <p class="form-section__text">El equipo debe pertenecer al cliente. Solo se reciben órdenes de clientes activos.</p>
+            </div>
+            <div class="form-grid form-grid--single">
+                @if (lockedDevice is not null && customer is not null)
+                {
+                    <input type="hidden" name="CustomerId" value="@customer.Id" />
+                    <input type="hidden" name="DeviceId" value="@lockedDevice.Id" />
+                    <input type="hidden" name="DeviceLocked" value="true" />
+                    <div class="field">
+                        <span class="field__label">Cliente</span>
+                        <div class="owner-box">
+                            <span class="avatar" aria-hidden="true">@ContactDisplay.Initials(customer.FullName)</span>
+                            <span class="owner-box__text">
+                                <a class="link" asp-controller="Customers" asp-action="Details" asp-route-id="@customer.Id">@customer.FullName</a>
+                                <span class="owner-box__meta">@customer.Phone@(customer.Email is { } email ? $" · {email}" : string.Empty)</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <span class="field__label">Equipo</span>
+                        <div class="owner-box">
+                            <span class="thing-icon" aria-hidden="true"><icon name="@DomainDisplay.Icon(lockedDevice.Type)" /></span>
+                            <span class="owner-box__text">
+                                <a class="link" asp-controller="Devices" asp-action="Details" asp-route-id="@lockedDevice.Id">@DomainDisplay.DeviceTitle(lockedDevice.Brand, lockedDevice.Model)</a>
+                                <span class="owner-box__meta">@DomainDisplay.Name(lockedDevice.Type)@(lockedDevice.SerialNumber is { } serial ? $" · Serie {serial}" : string.Empty)</span>
+                            </span>
+                        </div>
+                        <p class="field__hint">
+                            <a class="link" asp-action="Create" asp-route-cliente="@customer.Id">Elegir otro equipo de este cliente</a>
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <div class="field combobox" data-combobox data-source="@Url.Action("Options", "Customers")">
+                        <label class="field__label" for="CustomerSearch">Cliente</label>
+                        <p class="field__hint" id="CustomerId-hint">Busca por nombre, teléfono o correo. Solo aparecen clientes activos.</p>
+                        <div class="combobox__control">
+                            <icon name="search" class="combobox__icon" />
+                            <input class="input combobox__input" id="CustomerSearch" type="text" role="combobox"
+                                   value="@customer?.FullName" autocomplete="off" spellcheck="false"
+                                   aria-autocomplete="list" aria-expanded="false" aria-controls="customer-options"
+                                   aria-invalid="@(customerError is null ? null : "true")"
+                                   aria-describedby="CustomerId-hint@(customerError is null ? string.Empty : " CustomerId-error") customer-selected" />
+                            <input type="hidden" name="CustomerId" value="@form.CustomerId" data-combobox-value />
+                        </div>
+                        <ul class="combobox__list" id="customer-options" role="listbox" aria-label="Clientes activos" hidden></ul>
+                        <p class="combobox__selected" id="customer-selected" data-combobox-selected hidden="@(customer is null)">
+                            @if (customer is not null)
+                            {
+                                @customer.Phone@(customer.Email is { } customerEmail ? $" · {customerEmail}" : string.Empty)
+                            }
+                        </p>
+                        @if (customerError is not null)
+                        {
+                            <p class="field__error" id="CustomerId-error"><icon name="triangle-alert" />@customerError</p>
+                        }
+                    </div>
+
+                    <div class="field" data-device-field data-source-template="@Url.Action("Devices", "Customers", new { id = 0 })">
+                        <label class="field__label" for="DeviceId">Equipo</label>
+                        <p class="field__hint" id="DeviceId-hint" data-device-hint>
+                            @if (customer is null)
+                            {
+                                @:Primero elige el cliente para ver sus equipos.
+                            }
+                            else if (Model.Devices.Count == 0)
+                            {
+                                @:Este cliente no tiene equipos registrados.
+                                <a class="link" asp-controller="Devices" asp-action="Create" asp-route-cliente="@customer.Id">Registrar un equipo</a>
+                            }
+                            else
+                            {
+                                @:Equipos registrados a nombre del cliente.
+                            }
+                        </p>
+                        <div class="select">
+                            <select class="input select__control" id="DeviceId" name="DeviceId" disabled="@(customer is null || Model.Devices.Count == 0)"
+                                    aria-invalid="@(deviceError is null ? null : "true")"
+                                    aria-describedby="DeviceId-hint@(deviceError is null ? string.Empty : " DeviceId-error")">
+                                <option value="">Selecciona el equipo</option>
+                                @foreach (var device in Model.Devices)
+                                {
+                                    <option value="@device.Id" selected="@(device.Id == form.DeviceId)">
+                                        @DomainDisplay.DeviceTitle(device.Brand, device.Model) · @DomainDisplay.Name(device.Type)@(device.SerialNumber is { } serial ? $" · {serial}" : string.Empty)
+                                    </option>
+                                }
+                            </select>
+                            <icon name="chevron-down" class="select__icon" />
+                        </div>
+                        @if (deviceError is not null)
+                        {
+                            <p class="field__error" id="DeviceId-error"><icon name="triangle-alert" />@deviceError</p>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="form-section" role="group" aria-labelledby="section-intake">
+            <div>
+                <h2 class="form-section__title" id="section-intake">Recepción</h2>
+                <p class="form-section__text">Lo que el cliente reporta y el estado en que se recibe el equipo. No se modifican después.</p>
+            </div>
+            <div class="form-grid form-grid--single">
+                <partial name="_FormField" model='new FormField(nameof(form.ReportedIssue), "Problema reportado")
+                {
+                    Value = form.ReportedIssue, Error = errors.For(nameof(form.ReportedIssue)),
+                    Hint = "Describe la falla con las palabras del cliente: qué ocurre, desde cuándo y en qué situaciones.",
+                    Rows = 4, MaxLength = ServiceOrderRules.ReportedIssueMaxLength,
+                }' />
+                <partial name="_FormField" model='new FormField(nameof(form.IntakeNotes), "Observaciones de recepción")
+                {
+                    Value = form.IntakeNotes, Error = errors.For(nameof(form.IntakeNotes)), Optional = true,
+                    Hint = "Estado físico del equipo y accesorios que se reciben (cargador, funda, memoria, cables).",
+                    Rows = 3, MaxLength = ServiceOrderRules.IntakeNotesMaxLength,
+                }' />
+            </div>
+        </div>
+
+        <div class="form-section" role="group" aria-labelledby="section-plan">
+            <div>
+                <h2 class="form-section__title" id="section-plan">Planificación</h2>
+                <p class="form-section__text">La prioridad y la fecha de entrega definen el lugar de la orden en la cola de trabajo.</p>
+            </div>
+            <div class="form-grid">
+                <partial name="_PrioritySelector" model="new PrioritySelectorViewModel(form.Priority, errors.For(nameof(form.Priority)))" />
+                <partial name="_FormField" model='new FormField("PromisedAt", "Entrega comprometida")
+                {
+                    Value = form.PromisedAt, Error = errors.For("PromisedAtUtc"), Optional = true,
+                    Hint = "Fecha y hora acordadas con el cliente.", InputType = "datetime-local",
+                }' />
+                <partial name="_FormField" model='new FormField(nameof(form.EstimatedCost), "Costo estimado")
+                {
+                    Value = form.EstimatedCost, Error = errors.For(nameof(form.EstimatedCost)), Optional = true, Mono = true,
+                    Hint = "En quetzales, por ejemplo 350.00. Puede actualizarse después.", Prefix = "Q",
+                    InputMode = "decimal", Autocomplete = "off", MaxLength = 16,
+                }' />
+            </div>
+        </div>
+
+        <div class="form-section" role="group" aria-labelledby="section-technician">
+            <div>
+                <h2 class="form-section__title" id="section-technician">Responsable</h2>
+                <p class="form-section__text">Puedes asignar el técnico ahora o más tarde. Solo aparecen técnicos activos.</p>
+            </div>
+            <div class="form-grid form-grid--single">
+                <partial name="_FormField" model='new FormField(nameof(form.TechnicianId), "Técnico responsable")
+                {
+                    Value = form.TechnicianId?.ToString(), Error = errors.For(nameof(form.TechnicianId)), Optional = true,
+                    Hint = "Junto a cada técnico se muestra su carga actual de órdenes abiertas.",
+                    Options = technicianOptions, Placeholder = "Sin asignar por ahora",
+                }' />
+            </div>
+        </div>
+
+        <footer class="form-card__actions">
+            <a class="button button--secondary" asp-action="Index">Cancelar</a>
+            <button class="button button--primary" type="submit">
+                <icon name="check" />
+                Registrar orden
+            </button>
+        </footer>
+    </form>
+</div>

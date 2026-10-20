@@ -1,0 +1,366 @@
+@using FixTrack.Domain.ServiceOrders
+@using FixTrack.Web.Models.ServiceOrders
+@using FixTrack.Web.Services
+@model ServiceOrderDetailsViewModel
+@inject DateDisplay Dates
+@{
+    var order = Model.Order;
+    var device = order.Device;
+    var customer = order.Customer;
+    var technician = order.Technician;
+    var deviceTitle = DomainDisplay.DeviceTitle(device.Brand, device.Model);
+    ViewData["Title"] = order.Number;
+    ViewData["ParentTitle"] = "Órdenes de servicio";
+    ViewData["ParentUrl"] = Url.Action("Index");
+
+    var overdue = order.IsOverdueAt(Model.NowUtc);
+    var closingEntry = order.IsClosed ? order.History.LastOrDefault(entry => entry.ToStatus == order.Status) : null;
+
+    // Camino principal de una orden; "En espera de repuestos" forma parte del paso de reparación.
+    (string Label, ServiceOrderStatus[] Statuses)[] steps =
+    [
+        ("Recibida", [ServiceOrderStatus.Received]),
+        ("Diagnóstico", [ServiceOrderStatus.Diagnosing]),
+        ("Reparación", [ServiceOrderStatus.InRepair, ServiceOrderStatus.AwaitingParts]),
+        ("Lista para entrega", [ServiceOrderStatus.ReadyForPickup]),
+        ("Entregada", [ServiceOrderStatus.Delivered]),
+    ];
+    var currentStep = Array.FindIndex(steps, step => step.Statuses.Contains(order.Status));
+
+    DateTime? ReachedAt(ServiceOrderStatus[] statuses) =>
+        order.History.FirstOrDefault(entry => statuses.Contains(entry.ToStatus))?.ChangedAtUtc;
+
+    string StepState(int index) =>
+        order.Status == ServiceOrderStatus.Delivered || index < currentStep ? "done"
+        : index == currentStep ? "current"
+        : "pending";
+
+    var variance = order.CostVariance;
+}
+
+<header class="page-header page-header--entity">
+    <div class="entity">
+        <span class="thing-icon thing-icon--large" aria-hidden="true"><icon name="@DomainDisplay.Icon(device.Type)" /></span>
+        <div class="page-header__text">
+            <div class="page-header__title-row">
+                <h1 class="page-title order-title">@order.Number</h1>
+                <span class="status status--large" data-status="@DomainDisplay.Tone(order.Status)">@DomainDisplay.Name(order.Status)</span>
+                <partial name="_OrderPriority" model="order.Priority" />
+                @if (overdue)
+                {
+                    <span class="badge badge--danger"><icon name="triangle-alert" />Entrega vencida</span>
+                }
+            </div>
+            <p class="order-header__meta">
+                <a class="link" asp-controller="Devices" asp-action="Details" asp-route-id="@device.Id">@deviceTitle</a>
+                <span class="order-header__dot" aria-hidden="true">·</span>
+                <a class="link" asp-controller="Customers" asp-action="Details" asp-route-id="@customer.Id">@customer.FullName</a>
+                <span class="order-header__dot" aria-hidden="true">·</span>
+                <span>Recibida el <time datetime="@DateDisplay.Iso(order.ReceivedAtUtc)">@Dates.Long(order.ReceivedAtUtc)</time></span>
+            </p>
+        </div>
+    </div>
+
+</header>
+
+@if (order.Status == ServiceOrderStatus.Cancelled)
+{
+    <div class="alert alert--neutral" role="note">
+        <icon name="circle-x" />
+        <p class="alert__text">
+            Orden cancelada@(closingEntry is null ? string.Empty : $" el {Dates.Long(closingEntry.ChangedAtUtc)}").
+            @if (closingEntry?.Note is { } reason)
+            {
+                @:Motivo: @reason
+            }
+            La orden está cerrada y ya no admite cambios.
+        </p>
+    </div>
+}
+else if (order.Status == ServiceOrderStatus.Delivered && order.DeliveredAtUtc is { } deliveredAt)
+{
+    <div class="alert alert--success" role="note">
+        <icon name="circle-check" />
+        <p class="alert__text">
+            Entregada al cliente el <time datetime="@DateDisplay.Iso(deliveredAt)">@Dates.Long(deliveredAt)</time>@(order.FinalCost is { } paid ? $" con un costo final de {Money.Format(paid)}" : string.Empty).
+            La orden está cerrada y ya no admite cambios.
+        </p>
+    </div>
+}
+
+@if (currentStep >= 0)
+{
+    <ol class="stepper" aria-label="Avance de la orden">
+        @for (var i = 0; i < steps.Length; i++)
+        {
+            var state = StepState(i);
+            var reachedAt = ReachedAt(steps[i].Statuses);
+            <li class="stepper__step" data-state="@state" data-status="@(state == "current" ? DomainDisplay.Tone(order.Status) : null)"
+                aria-current="@(state == "current" ? "step" : null)">
+                <span class="stepper__marker" aria-hidden="true">
+                    @if (state == "done")
+                    {
+                        <icon name="check" />
+                    }
+                </span>
+                <span class="stepper__label">@steps[i].Label</span>
+                <span class="stepper__meta">
+                    @if (state == "current" && order.Status == ServiceOrderStatus.AwaitingParts)
+                    {
+                        @:En espera de repuestos
+                    }
+                    else if (reachedAt is { } at && state != "pending")
+                    {
+                        @Dates.ShortWithTime(at)
+                    }
+                    else if (state == "done")
+                    {
+                        @:No fue necesaria
+                    }
+                    else
+                    {
+                        @:Pendiente
+                    }
+                </span>
+            </li>
+        }
+        <li class="stepper__summary" aria-hidden="true">
+            Paso @(currentStep + 1) de @steps.Length · @DomainDisplay.Name(order.Status)
+        </li>
+    </ol>
+}
+
+<div class="detail-layout">
+    <div class="detail-layout__main">
+        <section class="card" aria-labelledby="intake-title">
+            <header class="card__header">
+                <h2 class="card__title" id="intake-title">Problema reportado</h2>
+            </header>
+            <p class="card__body card__body--text">@order.ReportedIssue</p>
+            <div class="card__subsection">
+                <h3 class="card__subtitle"><icon name="file-text" />Observaciones de recepción</h3>
+                @if (order.IntakeNotes is { } intakeNotes)
+                {
+                    <p class="notes">@intakeNotes</p>
+                }
+                else
+                {
+                    <p class="meta-list__muted">Sin observaciones.</p>
+                }
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="diagnosis-title">
+            <header class="card__header">
+                <h2 class="card__title" id="diagnosis-title">Diagnóstico técnico</h2>
+            </header>
+            @if (order.Diagnosis is { } diagnosis)
+            {
+                <p class="card__body card__body--text">@diagnosis</p>
+            }
+            else
+            {
+                <div class="card__body inline-empty">
+                    <icon name="scan-search" />
+                    <p>
+                        Todavía no hay diagnóstico.
+                        @if (order.Status == ServiceOrderStatus.Received)
+                        {
+                            @:Se registra cuando la orden pasa a «En diagnóstico».
+                        }
+                        else if (order.CanRecordDiagnosis)
+                        {
+                            @:Regístralo antes de iniciar la reparación o de marcar la orden como lista para entrega.
+                        }
+                    </p>
+                </div>
+            }
+        </section>
+
+        <section class="card" aria-labelledby="history-title">
+            <header class="card__header">
+                <div class="card__title-row">
+                    <h2 class="card__title" id="history-title">Historial de estados</h2>
+                    <span class="badge badge--neutral mono">@order.History.Count</span>
+                </div>
+            </header>
+            <ol class="timeline">
+                @foreach (var entry in order.History)
+                {
+                    <li class="timeline__item" data-status="@DomainDisplay.Tone(entry.ToStatus)">
+                        <span class="timeline__icon" aria-hidden="true"><icon name="@DomainDisplay.Icon(entry.ToStatus)" /></span>
+                        <div class="timeline__body">
+                            <p class="timeline__title">
+                                @DomainDisplay.Name(entry.ToStatus)
+                                @if (entry.FromStatus is { } from)
+                                {
+                                    <span class="timeline__from">desde @DomainDisplay.Name(from)</span>
+                                }
+                            </p>
+                            <time class="timeline__time" datetime="@DateDisplay.Iso(entry.ChangedAtUtc)">@Dates.Long(entry.ChangedAtUtc)</time>
+                            @if (entry.Note is { } note)
+                            {
+                                <p class="timeline__note">@note</p>
+                            }
+                        </div>
+                    </li>
+                }
+            </ol>
+            <p class="card__footnote">El historial es de solo lectura: cada cambio de estado agrega un registro que no puede modificarse ni eliminarse.</p>
+        </section>
+    </div>
+
+    <aside class="detail-layout__side" aria-label="Datos de la orden">
+        <section class="card" aria-labelledby="summary-title">
+            <header class="card__header">
+                <h2 class="card__title" id="summary-title">Resumen</h2>
+            </header>
+            <dl class="meta-list meta-list--stacked">
+                <div class="meta-list__row">
+                    <dt><icon name="flag" />Prioridad</dt>
+                    <dd><partial name="_OrderPriority" model="order.Priority" /></dd>
+                </div>
+                <div class="meta-list__row">
+                    <dt><icon name="calendar" />Recibida</dt>
+                    <dd><time datetime="@DateDisplay.Iso(order.ReceivedAtUtc)">@Dates.ShortWithTime(order.ReceivedAtUtc)</time></dd>
+                </div>
+                <div class="meta-list__row">
+                    <dt><icon name="calendar-clock" />Entrega comprometida</dt>
+                    <dd><partial name="_OrderDue" model="new OrderDueViewModel(order.Status, order.PromisedAtUtc, order.DeliveredAtUtc, Model.NowUtc)" /></dd>
+                </div>
+                @if (order.DeliveredAtUtc is { } delivered)
+                {
+                    <div class="meta-list__row">
+                        <dt><icon name="circle-check" />Entregada</dt>
+                        <dd><time datetime="@DateDisplay.Iso(delivered)">@Dates.ShortWithTime(delivered)</time></dd>
+                    </div>
+                }
+                <div class="meta-list__row">
+                    <dt><icon name="clock" />Última actualización</dt>
+                    <dd>
+                        @if (order.UpdatedAtUtc is { } updatedAt)
+                        {
+                            <time datetime="@DateDisplay.Iso(updatedAt)">@Dates.ShortWithTime(updatedAt)</time>
+                        }
+                        else
+                        {
+                            <span class="meta-list__muted">Sin cambios</span>
+                        }
+                    </dd>
+                </div>
+            </dl>
+        </section>
+
+        <section class="card" aria-labelledby="costs-title">
+            <header class="card__header">
+                <h2 class="card__title" id="costs-title">Costos</h2>
+            </header>
+            <dl class="meta-list meta-list--stacked">
+                <div class="meta-list__row">
+                    <dt><icon name="coins" />Costo estimado</dt>
+                    @if (order.EstimatedCost is { } estimate)
+                    {
+                        <dd class="money">@Money.Format(estimate)</dd>
+                    }
+                    else
+                    {
+                        <dd class="meta-list__muted">Sin estimar</dd>
+                    }
+                </div>
+                <div class="meta-list__row meta-list__row--total">
+                    <dt><icon name="circle-check" />Costo final</dt>
+                    @if (order.FinalCost is { } final)
+                    {
+                        <dd class="money">@Money.Format(final)</dd>
+                    }
+                    else
+                    {
+                        <dd class="meta-list__muted">Se registra al entregar</dd>
+                    }
+                </div>
+                @if (variance is { } difference)
+                {
+                    <div class="meta-list__row">
+                        <dt><icon name="arrow-right" />Diferencia</dt>
+                        <dd class="money @(difference > 0 ? "variance--over" : difference < 0 ? "variance--under" : null)">
+                            @(difference == 0 ? "Sin diferencia" : (difference > 0 ? "+" : string.Empty) + Money.Format(difference))
+                        </dd>
+                    </div>
+                }
+            </dl>
+        </section>
+
+        <section class="card" aria-labelledby="technician-title">
+            <header class="card__header">
+                <h2 class="card__title" id="technician-title">Técnico responsable</h2>
+            </header>
+            <div class="card__body">
+                @if (technician is not null)
+                {
+                    <div class="owner-box owner-box--plain">
+                        <span class="avatar" aria-hidden="true">@ContactDisplay.Initials(technician.FullName)</span>
+                        <span class="owner-box__text">
+                            <a class="link" asp-controller="Technicians" asp-action="Details" asp-route-id="@technician.Id">@technician.FullName</a>
+                            <span class="owner-box__meta">@technician.Specialty · desde el @Dates.Short(technician.AssignedAtUtc)</span>
+                        </span>
+                    </div>
+                    @if (!technician.IsActive)
+                    {
+                        <p class="card__hint">El técnico está inactivo. Su historial se conserva; reasigna la orden si sigue abierta.</p>
+                    }
+                }
+                else
+                {
+                    <p class="meta-list__muted">Sin técnico asignado. La orden no puede pasar a diagnóstico hasta asignarlo.</p>
+                }
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="customer-title">
+            <header class="card__header">
+                <h2 class="card__title" id="customer-title">Cliente</h2>
+                @if (!customer.IsActive)
+                {
+                    <span class="badge badge--neutral">Inactivo</span>
+                }
+            </header>
+            <div class="card__body">
+                <div class="owner-box owner-box--plain">
+                    <span class="avatar" aria-hidden="true">@ContactDisplay.Initials(customer.FullName)</span>
+                    <span class="owner-box__text">
+                        <a class="link" asp-controller="Customers" asp-action="Details" asp-route-id="@customer.Id">@customer.FullName</a>
+                        <span class="owner-box__meta">
+                            <a class="link mono" href="@ContactDisplay.PhoneHref(customer.Phone)">@customer.Phone</a>
+                            @if (customer.Email is { } email)
+                            {
+                                @:·
+                                <a class="link" href="mailto:@email">@email</a>
+                            }
+                        </span>
+                    </span>
+                </div>
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="device-title">
+            <header class="card__header">
+                <h2 class="card__title" id="device-title">Equipo</h2>
+            </header>
+            <div class="card__body">
+                <div class="owner-box owner-box--plain">
+                    <span class="thing-icon" aria-hidden="true"><icon name="@DomainDisplay.Icon(device.Type)" /></span>
+                    <span class="owner-box__text">
+                        <a class="link" asp-controller="Devices" asp-action="Details" asp-route-id="@device.Id">@deviceTitle</a>
+                        <span class="owner-box__meta">
+                            @DomainDisplay.Name(device.Type)
+                            @if (device.SerialNumber is { } serial)
+                            {
+                                @:· Serie <span class="mono">@serial</span>
+                            }
+                        </span>
+                    </span>
+                </div>
+            </div>
+        </section>
+    </aside>
+</div>

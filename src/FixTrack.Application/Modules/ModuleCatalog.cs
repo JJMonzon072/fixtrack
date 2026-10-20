@@ -22,12 +22,8 @@ internal sealed class ModuleCatalog : IModuleCatalog
                 ModuleKey.ServiceOrders,
                 "Órdenes de servicio",
                 "Registro y seguimiento de cada reparación, desde la recepción del equipo hasta su entrega.",
-                ModuleStatus.Planned,
-                [
-                    "Registro de órdenes con diagnóstico inicial",
-                    "Asignación de técnicos, estados y prioridades",
-                    "Cálculo de costos y priorización por fecha de entrega",
-                ]),
+                ModuleStatus.Available,
+                []),
             new ModuleInfo(
                 ModuleKey.Customers,
                 "Clientes",

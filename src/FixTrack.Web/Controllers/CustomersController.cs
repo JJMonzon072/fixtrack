@@ -32,6 +32,25 @@ public sealed class CustomersController(ICustomerService customers, IDeviceServi
         return Json(options.Select(option => new { option.Id, option.FullName, option.Phone, option.Email }));
     }
 
+    /// <summary>Equipos del cliente para el selector del formulario de órdenes.</summary>
+    [HttpGet("{id:int}/equipos")]
+    public async Task<IActionResult> Devices(int id, CancellationToken cancellationToken)
+    {
+        if (await customers.GetOptionAsync(id, cancellationToken) is null)
+        {
+            return NotFound();
+        }
+
+        var customerDevices = await devices.ListByCustomerAsync(id, cancellationToken);
+        return Json(customerDevices.Select(device => new
+        {
+            device.Id,
+            Title = DomainDisplay.DeviceTitle(device.Brand, device.Model),
+            Type = DomainDisplay.Name(device.Type),
+            device.SerialNumber,
+        }));
+    }
+
     [HttpGet("nuevo")]
     public IActionResult Create() => View("Editor", new CustomerEditorViewModel(null, null, new CustomerFormModel()));
 

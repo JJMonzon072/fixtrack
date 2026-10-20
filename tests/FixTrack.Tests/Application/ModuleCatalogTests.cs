@@ -35,12 +35,10 @@ public sealed class ModuleCatalogTests
     }
 
     [Fact]
-    public void Planned_modules_describe_their_upcoming_features()
+    public void Every_module_is_available_since_phase_3()
     {
-        var planned = _catalog.Modules.Where(module => !module.IsAvailable).ToList();
-
-        Assert.NotEmpty(planned);
-        Assert.All(planned, module => Assert.NotEmpty(module.PlannedFeatures));
+        Assert.All(_catalog.Modules, module => Assert.True(module.IsAvailable, $"{module.Name} sigue marcado como planificado."));
+        Assert.All(_catalog.Modules, module => Assert.Empty(module.PlannedFeatures));
     }
 
     [Fact]
