@@ -1,11 +1,15 @@
 using FixTrack.Domain.Common;
 using FixTrack.Domain.ServiceOrders;
+using FixTrack.Domain.Technicians;
 
 namespace FixTrack.Tests.Domain;
 
 public sealed class ServiceOrderTests
 {
     private static readonly DateTime Received = new(2026, 10, 19, 15, 0, 0, DateTimeKind.Utc);
+
+    private static Technician ActiveTechnician() =>
+        new("Luis Pérez", "Laptops y equipos de escritorio", null, null, Received);
 
     private static ServiceOrder NewOrder() =>
         new(deviceId: 1, "No enciende", ServiceOrderPriority.Normal, Received, Received.AddDays(3), estimatedCost: 350.50m);
@@ -51,7 +55,7 @@ public sealed class ServiceOrderTests
         Assert.Equal(Received.AddDays(2), order.DeliveredAtUtc);
         Assert.Equal(400m, order.FinalCost);
         Assert.Throws<DomainException>(() => order.ChangeStatus(ServiceOrderStatus.InRepair, Received.AddDays(3)));
-        Assert.Throws<DomainException>(() => order.AssignTechnician(1, Received.AddDays(3)));
+        Assert.Throws<DomainException>(() => order.AssignTechnician(ActiveTechnician(), Received.AddDays(3)));
     }
 
     [Theory]
@@ -66,10 +70,25 @@ public sealed class ServiceOrderTests
     public void A_technician_can_be_assigned_later()
     {
         var order = NewOrder();
+        var technician = ActiveTechnician();
 
-        order.AssignTechnician(technicianId: 7, Received.AddHours(1));
+        order.AssignTechnician(technician, Received.AddHours(1));
 
-        Assert.Equal(7, order.TechnicianId);
+        Assert.Same(technician, order.Technician);
+        Assert.Equal(Received.AddHours(1), order.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void An_inactive_technician_cannot_receive_new_assignments()
+    {
+        var order = NewOrder();
+        var technician = ActiveTechnician();
+        technician.Deactivate(Received);
+
+        var error = Assert.Throws<DomainException>(() => order.AssignTechnician(technician, Received.AddHours(1)));
+
+        Assert.Contains("inactivo", error.Message);
+        Assert.Null(order.Technician);
     }
 
     [Theory]
