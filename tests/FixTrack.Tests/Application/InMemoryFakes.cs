@@ -31,6 +31,9 @@ public sealed class InMemoryStore
     /// <summary>Órdenes abiertas por técnico (el módulo Órdenes todavía no existe).</summary>
     public Dictionary<int, int> OpenOrdersByTechnician { get; } = [];
 
+    /// <summary>Indica si hay una transacción en curso (la abre <see cref="FakeUnitOfWork"/>).</summary>
+    public bool InTransaction { get; set; }
+
     /// <summary>Asigna el Id como lo haría la columna IDENTITY de SQL Server.</summary>
     public static void AssignId(Entity entity, int id) =>
         typeof(Entity).GetProperty(nameof(Entity.Id))!.SetValue(entity, id);
@@ -41,7 +44,13 @@ public sealed class FakeUnitOfWork(InMemoryStore store) : IUnitOfWork
 {
     public int SaveCount { get; private set; }
 
+    public int CommittedTransactions { get; private set; }
+
+    public int RolledBackTransactions { get; private set; }
+
     public bool FailNextSaveWithDuplicate { get; set; }
+
+    public bool FailNextSaveWithConcurrencyConflict { get; set; }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {
@@ -50,6 +59,13 @@ public sealed class FakeUnitOfWork(InMemoryStore store) : IUnitOfWork
             FailNextSaveWithDuplicate = false;
             store.Pending.Clear();
             throw new DuplicateValueException("Duplicado", new InvalidOperationException());
+        }
+
+        if (FailNextSaveWithConcurrencyConflict)
+        {
+            FailNextSaveWithConcurrencyConflict = false;
+            store.Pending.Clear();
+            throw new ConcurrencyConflictException("Conflicto", new InvalidOperationException());
         }
 
         foreach (var entity in store.Pending)
@@ -74,6 +90,30 @@ public sealed class FakeUnitOfWork(InMemoryStore store) : IUnitOfWork
         store.Pending.Clear();
         SaveCount++;
         return Task.CompletedTask;
+    }
+
+    public async Task<TResult> ExecuteInTransactionAsync<TResult>(Func<CancellationToken, Task<TResult>> operation, CancellationToken cancellationToken)
+        where TResult : CommandResult
+    {
+        store.InTransaction = true;
+        try
+        {
+            var result = await operation(cancellationToken);
+            if (result.Succeeded)
+            {
+                CommittedTransactions++;
+            }
+            else
+            {
+                RolledBackTransactions++;
+            }
+
+            return result;
+        }
+        finally
+        {
+            store.InTransaction = false;
+        }
     }
 }
 
