@@ -3,6 +3,7 @@ using FixTrack.Domain.Customers;
 using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
 using FixTrack.Infrastructure.Persistence.Repositories;
+using Microsoft.EntityFrameworkCore;
 
 namespace FixTrack.Tests.Infrastructure;
 
@@ -132,7 +133,8 @@ public sealed class DeviceRepositoryTests : IDisposable
         await using (var context = _database.CreateContext())
         {
             var deviceId = (await new DeviceRepository(context).ListByCustomerAsync(anaId, Token))[0].Id;
-            context.ServiceOrders.Add(new ServiceOrder(deviceId, "No imprime", ServiceOrderPriority.High, Now, Now.AddDays(2), 150m));
+            var device = await context.Devices.Include(d => d.Customer).SingleAsync(d => d.Id == deviceId, Token);
+            context.ServiceOrders.Add(new ServiceOrder(device, "No imprime", ServiceOrderPriority.High, Now, Now.AddDays(2), 150m, null));
             await context.SaveChangesAsync(Token);
         }
 

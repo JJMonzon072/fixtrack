@@ -86,11 +86,9 @@ public sealed class TechnicianRepositoryTests : IDisposable
             var device = customer.RegisterDevice(DeviceType.Printer, "HP", null, null, null, Now);
             await context.SaveChangesAsync(Token);
 
-            var open = new ServiceOrder(device.Id, "No imprime", ServiceOrderPriority.Normal, Now, null, null);
-            open.AssignTechnician(technician, Now);
-            var cancelled = new ServiceOrder(device.Id, "Atasco de papel", ServiceOrderPriority.Low, Now, null, null);
-            cancelled.AssignTechnician(technician, Now);
-            cancelled.ChangeStatus(ServiceOrderStatus.Cancelled, Now.AddHours(1));
+            var open = new ServiceOrder(device, "No imprime", ServiceOrderPriority.Normal, Now, null, null, null, technician);
+            var cancelled = new ServiceOrder(device, "Atasco de papel", ServiceOrderPriority.Low, Now, null, null, null, technician);
+            cancelled.ChangeStatus(ServiceOrderStatus.Cancelled, Now.AddHours(1), "Orden duplicada");
             context.ServiceOrders.AddRange(open, cancelled);
             await context.SaveChangesAsync(Token);
         }

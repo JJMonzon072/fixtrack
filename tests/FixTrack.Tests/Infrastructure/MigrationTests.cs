@@ -67,4 +67,22 @@ public sealed class MigrationTests
         // Sin valor por defecto: no rellena datos existentes en silencio.
         Assert.DoesNotContain("SET [Specialty]", script, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void The_phase_3_migration_only_adds_order_columns_and_rules()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: "20261020045452_TechnicianSpecialtyAndDeviceSerialRules",
+            toMigration: "20261020060713_ServiceOrderWorkflowFields");
+
+        Assert.Contains("ADD [IntakeNotes] nvarchar(500) NULL", script);
+        Assert.Contains("ADD [TechnicianAssignedAtUtc] datetime2(3) NULL", script);
+        Assert.Contains("ADD [Version] int NOT NULL DEFAULT 0", script);
+        Assert.Contains("CREATE INDEX [IX_ServiceOrders_ReceivedAtUtc]", script);
+        Assert.Contains("CK_ServiceOrders_FinalCost_OnDelivery", script);
+        Assert.Contains("CK_ServiceOrders_TechnicianAssignment", script);
+        Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ALTER COLUMN", script, StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -181,6 +181,10 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
 
+                    b.Property<string>("IntakeNotes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<int>("Priority")
                         .HasColumnType("int");
 
@@ -200,6 +204,10 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("TechnicianAssignedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
                     b.Property<int?>("TechnicianId")
                         .HasColumnType("int");
 
@@ -207,10 +215,17 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                         .HasPrecision(3)
                         .HasColumnType("datetime2(3)");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DeviceId")
                         .HasDatabaseName("IX_ServiceOrders_DeviceId");
+
+                    b.HasIndex("ReceivedAtUtc")
+                        .HasDatabaseName("IX_ServiceOrders_ReceivedAtUtc");
 
                     b.HasIndex("TechnicianId")
                         .HasDatabaseName("IX_ServiceOrders_TechnicianId");
@@ -226,6 +241,8 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_ServiceOrders_FinalCost", "[FinalCost] IS NULL OR [FinalCost] >= 0");
 
+                            t.HasCheckConstraint("CK_ServiceOrders_FinalCost_OnDelivery", "([Status] = 6 AND [FinalCost] IS NOT NULL) OR ([Status] <> 6 AND [FinalCost] IS NULL)");
+
                             t.HasCheckConstraint("CK_ServiceOrders_Priority", "[Priority] BETWEEN 1 AND 4");
 
                             t.HasCheckConstraint("CK_ServiceOrders_PromisedAt", "[PromisedAtUtc] IS NULL OR [PromisedAtUtc] >= [ReceivedAtUtc]");
@@ -233,6 +250,8 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_ServiceOrders_ReportedIssue_NotEmpty", "[ReportedIssue] <> ''");
 
                             t.HasCheckConstraint("CK_ServiceOrders_Status", "[Status] BETWEEN 1 AND 7");
+
+                            t.HasCheckConstraint("CK_ServiceOrders_TechnicianAssignment", "([TechnicianId] IS NULL AND [TechnicianAssignedAtUtc] IS NULL) OR ([TechnicianId] IS NOT NULL AND [TechnicianAssignedAtUtc] IS NOT NULL)");
                         });
                 });
 
