@@ -1,0 +1,67 @@
+@inject FixTrack.Web.Services.ApplicationInfo Application
+@{
+    var title = ViewData["Title"] as string ?? "FixTrack";
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="FixTrack: gestión y seguimiento de órdenes de servicio técnico." />
+    <title>@title · FixTrack</title>
+    <script>
+        // Aplica el tema guardado antes de pintar la página para evitar un parpadeo.
+        try {
+            const theme = localStorage.getItem("fixtrack-theme");
+            if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+        } catch { }
+    </script>
+    @* Misma URL que usa @font-face en site.css (sin huella de versión) para que la precarga se reutilice. *@
+    <link rel="preload" href="@Url.Content("~/fonts/ibm-plex-sans-latin-wght.woff2")" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="icon" href="~/favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+    <a class="skip-link" href="#main">Saltar al contenido</a>
+
+    <div class="app" data-app>
+        @await Component.InvokeAsync("Sidebar")
+        <div class="sidebar-backdrop" data-sidebar-close aria-hidden="true"></div>
+
+        <div class="app-panel">
+            <header class="topbar">
+                <button class="icon-button topbar__menu" type="button"
+                        aria-label="Abrir menú de navegación" aria-controls="sidebar" aria-expanded="false"
+                        data-sidebar-open>
+                    <icon name="menu" />
+                </button>
+
+                <nav class="breadcrumb" aria-label="Ruta de navegación">
+                    <ol>
+                        <li><a asp-controller="Dashboard" asp-action="Index">FixTrack</a></li>
+                        <li aria-current="page">@title</li>
+                    </ol>
+                </nav>
+
+                <div class="topbar__actions">
+                    @if (Application.IsDevelopment)
+                    {
+                        <span class="badge badge--neutral topbar__environment" title="Entorno de ejecución">@Application.EnvironmentName</span>
+                    }
+                    <button class="icon-button theme-toggle" type="button" aria-label="Cambiar tema" title="Cambiar tema" data-theme-toggle>
+                        <icon name="moon" class="theme-toggle__moon" />
+                        <icon name="sun" class="theme-toggle__sun" />
+                    </button>
+                </div>
+            </header>
+
+            <main id="main" class="content" tabindex="-1">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+
+    <script src="~/js/site.js" asp-append-version="true" defer></script>
+</body>
+</html>

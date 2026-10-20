@@ -1,0 +1,20 @@
+@model ErrorViewModel
+
+<section class="error-page" aria-labelledby="error-title">
+    <div class="empty-state__icon">
+        <icon name="@Model.Icon" />
+    </div>
+    <p class="error-page__code mono">Error @Model.StatusCode</p>
+    <h1 class="error-page__title" id="error-title">@Model.Title</h1>
+    <p class="error-page__message">@Model.Message</p>
+
+    @if (Model.RequestId is not null)
+    {
+        <p class="error-page__request">Identificador de la solicitud: <span class="mono">@Model.RequestId</span></p>
+    }
+
+    <a class="button button--secondary" asp-controller="Dashboard" asp-action="Index">
+        <icon name="arrow-left" />
+        Volver al panel
+    </a>
+</section>

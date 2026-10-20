@@ -1,0 +1,115 @@
+@model DashboardViewModel
+@{
+    ViewData["Title"] = "Panel";
+    string[] indicators = ["Órdenes abiertas", "En reparación", "Listas para entrega", "Con entrega vencida"];
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <p class="page-header__eyebrow">
+            <icon name="calendar" />
+            <span>@Model.Today</span>
+        </p>
+        <h1 class="page-title">Panel general</h1>
+        <p class="page-description">Resumen de la operación del taller de servicio técnico.</p>
+    </div>
+</header>
+
+<section class="section" aria-labelledby="indicators-title">
+    <div class="section__header">
+        <h2 class="section__title" id="indicators-title">Indicadores de operación</h2>
+        <span class="badge badge--neutral">Sin datos</span>
+    </div>
+
+    <dl class="metrics">
+        @foreach (var indicator in indicators)
+        {
+            <div class="metric">
+                <dt class="metric__label">@indicator</dt>
+                <dd class="metric__value"><span aria-hidden="true">—</span><span class="visually-hidden">Sin datos</span></dd>
+            </div>
+        }
+    </dl>
+
+    <p class="notice">
+        <icon name="info" />
+        <span>Los indicadores se calcularán con las órdenes registradas cuando el módulo de órdenes de servicio esté disponible. No se muestran datos de ejemplo.</span>
+    </p>
+</section>
+
+<div class="dashboard-grid">
+    <section class="card" aria-labelledby="setup-title">
+        <header class="card__header">
+            <div>
+                <h2 class="card__title" id="setup-title">Puesta en marcha</h2>
+                <p class="card__description">Cada orden de servicio requiere un técnico, un cliente y un equipo.</p>
+            </div>
+        </header>
+
+        <ol class="step-list" role="list">
+            @for (var i = 0; i < Model.SetupSteps.Count; i++)
+            {
+                var step = Model.SetupSteps[i];
+                var route = ModuleNavigation.For(step.Key);
+                <li>
+                    <a class="step" asp-controller="@route.Controller" asp-action="Index">
+                        <span class="step__number" aria-hidden="true">@(i + 1)</span>
+                        <span class="step__body">
+                            <span class="step__title">@step.Name</span>
+                            <span class="step__description">@step.Description</span>
+                        </span>
+                        @if (step.IsAvailable)
+                        {
+                            <span class="step__status step__status--available">
+                                <icon name="check" />
+                                Disponible
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="step__status">
+                                <icon name="circle-dashed" />
+                                Planificado
+                            </span>
+                        }
+                        <icon name="chevron-right" class="step__chevron" />
+                    </a>
+                </li>
+            }
+        </ol>
+    </section>
+
+    <section class="card" aria-labelledby="system-title">
+        <header class="card__header">
+            <div>
+                <h2 class="card__title" id="system-title">Estado del sistema</h2>
+                <p class="card__description">Información de esta instancia de FixTrack.</p>
+            </div>
+        </header>
+
+        <dl class="meta-list">
+            <div class="meta-list__row">
+                <dt>Versión</dt>
+                <dd class="mono">@Model.Application.Version</dd>
+            </div>
+            <div class="meta-list__row">
+                <dt>Entorno</dt>
+                <dd>@Model.Application.EnvironmentName</dd>
+            </div>
+            <div class="meta-list__row">
+                <dt>Plataforma</dt>
+                <dd class="mono">@Model.Application.Runtime</dd>
+            </div>
+            <div class="meta-list__row">
+                <dt>Módulos habilitados</dt>
+                <dd><span class="mono">@Model.AvailableModules</span> de <span class="mono">@Model.TotalModules</span></dd>
+            </div>
+            <div class="meta-list__row">
+                <dt>Base de datos</dt>
+                <dd class="meta-list__muted">Sin configurar</dd>
+            </div>
+        </dl>
+
+        <p class="card__footnote">La base de datos se integrará en una fase posterior.</p>
+    </section>
+</div>

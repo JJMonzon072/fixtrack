@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [JJ]
+  pull_request:
+    branches: [main]
+
+# Solo lectura del repositorio: el workflow no publica nada ni usa secretos.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Compilar y probar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configurar .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Mostrar la versión del SDK
+        run: dotnet --version
+
+      - name: Restaurar dependencias
+        run: dotnet restore
+
+      - name: Compilar en Release
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Ejecutar las pruebas
+        run: dotnet test --configuration Release --no-build

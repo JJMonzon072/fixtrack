@@ -1,0 +1,91 @@
+// FixTrack: comportamiento de la interfaz (menú lateral móvil y tema de color).
+(() => {
+    "use strict";
+
+    const root = document.documentElement;
+
+    // --- Menú lateral en pantallas pequeñas -----------------------------------
+
+    const app = document.querySelector("[data-app]");
+    const sidebar = document.querySelector("[data-sidebar]");
+    const openButton = document.querySelector("[data-sidebar-open]");
+    const desktop = window.matchMedia("(min-width: 1024px)");
+
+    const isSidebarOpen = () => app?.hasAttribute("data-sidebar-expanded") ?? false;
+
+    function setSidebarOpen(open, { restoreFocus = true } = {}) {
+        if (!app || !sidebar || !openButton || open === isSidebarOpen()) return;
+
+        app.toggleAttribute("data-sidebar-expanded", open);
+        root.classList.toggle("is-scroll-locked", open);
+        openButton.setAttribute("aria-expanded", String(open));
+
+        if (open) {
+            const target = sidebar.querySelector("a[aria-current='page']") ?? sidebar.querySelector("a[href]");
+            target?.focus();
+        } else if (restoreFocus) {
+            openButton.focus();
+        }
+    }
+
+    openButton?.addEventListener("click", () => setSidebarOpen(true));
+
+    document.querySelectorAll("[data-sidebar-close]").forEach((element) =>
+        element.addEventListener("click", () => setSidebarOpen(false)));
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && isSidebarOpen()) setSidebarOpen(false);
+    });
+
+    // Mantiene el foco dentro del menú mientras está abierto.
+    sidebar?.addEventListener("keydown", (event) => {
+        if (event.key !== "Tab" || !isSidebarOpen()) return;
+
+        const focusable = [...sidebar.querySelectorAll("a[href], button:not([disabled])")]
+            .filter((element) => element.offsetParent !== null);
+        const first = focusable[0];
+        const last = focusable.at(-1);
+
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first?.focus();
+        }
+    });
+
+    // Al pasar a escritorio el menú vuelve a ser fijo.
+    desktop.addEventListener("change", (event) => {
+        if (event.matches) setSidebarOpen(false, { restoreFocus: false });
+    });
+
+    // --- Tema claro / oscuro --------------------------------------------------
+
+    const THEME_KEY = "fixtrack-theme";
+    const themeToggle = document.querySelector("[data-theme-toggle]");
+    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const currentTheme = () => root.dataset.theme ?? (systemPrefersDark.matches ? "dark" : "light");
+
+    function updateThemeToggle() {
+        if (!themeToggle) return;
+        const label = currentTheme() === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro";
+        themeToggle.setAttribute("aria-label", label);
+        themeToggle.setAttribute("title", label);
+    }
+
+    themeToggle?.addEventListener("click", () => {
+        const next = currentTheme() === "dark" ? "light" : "dark";
+        root.dataset.theme = next;
+        try {
+            localStorage.setItem(THEME_KEY, next);
+        } catch {
+            // Sin almacenamiento disponible: el tema se aplica solo a esta página.
+        }
+        updateThemeToggle();
+    });
+
+    systemPrefersDark.addEventListener("change", updateThemeToggle);
+    updateThemeToggle();
+})();
