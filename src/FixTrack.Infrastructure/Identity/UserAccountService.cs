@@ -235,10 +235,30 @@ internal sealed class UserAccountService(
             return CommandResult.Invalid(errors);
         }
 
+        // Probar contraseñas desde una sesión abierta también cuenta para el bloqueo: si la cuenta está bloqueada, no se
+        // comprueba la contraseña actual.
+        if (await users.IsLockedOutAsync(user))
+        {
+            return CommandResult.Invalid(new Dictionary<string, string>
+            {
+                [CurrentPasswordField] = "Por seguridad, el cambio de contraseña está bloqueado unos minutos. Intenta de nuevo más tarde.",
+            });
+        }
+
         var changed = await users.ChangePasswordAsync(user, currentPassword!, password!);
-        return changed.Succeeded
-            ? CommandResult.Success()
-            : CommandResult.Invalid(ToErrors(changed, changed.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.PasswordMismatch)) ? CurrentPasswordField : PasswordField));
+        if (changed.Succeeded)
+        {
+            await users.ResetAccessFailedCountAsync(user);
+            return CommandResult.Success();
+        }
+
+        var mismatch = changed.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.PasswordMismatch));
+        if (mismatch)
+        {
+            await users.AccessFailedAsync(user);
+        }
+
+        return CommandResult.Invalid(ToErrors(changed, mismatch ? CurrentPasswordField : PasswordField));
     }
 
     public async Task RecordSignInAsync(string userId, CancellationToken cancellationToken)

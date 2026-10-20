@@ -101,6 +101,7 @@ public sealed class AccountController(
     public IActionResult ChangePassword() => View(new ChangePasswordFormModel());
 
     [HttpPost("contrasena")]
+    [EnableRateLimiting(SecurityServiceCollectionExtensions.LoginRateLimit)]
     public async Task<IActionResult> ChangePassword(ChangePasswordFormModel form, CancellationToken cancellationToken)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

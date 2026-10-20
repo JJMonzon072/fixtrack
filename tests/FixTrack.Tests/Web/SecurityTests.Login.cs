@@ -160,6 +160,37 @@ public sealed partial class SecurityTests
         }
     }
 
+    [Fact]
+    public async Task Guessing_the_current_password_from_an_open_session_locks_the_account()
+    {
+        var account = await CreateAccountAsync();
+        using var client = factory.CreateClient();
+        await AuthenticatedClients.LogInAsync(client, account.Email, account.Password);
+        var newPassword = TestAccounts.RandomPassword();
+
+        for (var attempt = 0; attempt < IdentitySettings.MaxFailedAttempts; attempt++)
+        {
+            await FormPost.SendAsync(client, "/cuenta/contrasena", new()
+            {
+                ["CurrentPassword"] = WrongPassword,
+                ["Password"] = newPassword,
+                ["ConfirmPassword"] = newPassword,
+            });
+        }
+
+        var blocked = await (await FormPost.SendAsync(client, "/cuenta/contrasena", new()
+        {
+            ["CurrentPassword"] = account.Password,
+            ["Password"] = newPassword,
+            ["ConfirmPassword"] = newPassword,
+        })).Content.ReadAsStringAsync(Token);
+        using var other = AnonymousClient();
+        using var login = await AuthenticatedClients.LogInAsync(other, account.Email, account.Password);
+
+        Assert.Contains("el cambio de contraseña está bloqueado unos minutos", blocked);
+        Assert.Contains(AccountController.LoginFailed, await login.Content.ReadAsStringAsync(Token));
+    }
+
     [GeneratedRegex("((?:value|nonce))=\"[^\"]*\"")]
     private static partial Regex VolatileAttribute();
 
