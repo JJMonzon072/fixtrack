@@ -1,6 +1,7 @@
 using System.Text;
 using FixTrack.Application.Security;
 using FixTrack.Infrastructure.Persistence;
+using FixTrack.Web.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace FixTrack.Web.Hosting;
@@ -12,6 +13,8 @@ namespace FixTrack.Web.Hosting;
 /// (secretos de usuario o variables de entorno). Si falta la contraseña y hay una terminal interactiva, la pide sin
 /// mostrarla. No hace nada si ya existe un administrador habilitado.</item>
 /// <item><c>aplicar-migraciones</c>: aplica a la base configurada las migraciones pendientes.</item>
+/// <item><c>proteger-claves</c>: crea una clave de Data Protection cifrada con el certificado configurado; con
+/// <c>--revocar-sin-cifrar</c>, además revoca las claves guardadas sin cifrar.</item>
 /// </list>
 /// Nunca escriben contraseñas en la consola ni en las bitácoras.
 /// </summary>
@@ -19,8 +22,10 @@ public static class ConsoleCommands
 {
     public const string CreateAdministrator = "crear-administrador";
     public const string ApplyMigrations = "aplicar-migraciones";
+    public const string ProtectKeys = "proteger-claves";
+    public const string RevokeUnencryptedOption = "--revocar-sin-cifrar";
 
-    public static bool IsCommand(string[] args) => args.Length > 0 && args[0] is CreateAdministrator or ApplyMigrations;
+    public static bool IsCommand(string[] args) => args.Length > 0 && args[0] is CreateAdministrator or ApplyMigrations or ProtectKeys;
 
     public static async Task<int> RunAsync(WebApplication app, string[] args)
     {
@@ -28,6 +33,7 @@ public static class ConsoleCommands
         return args[0] switch
         {
             CreateAdministrator => await CreateAdministratorAsync(scope.ServiceProvider, app.Configuration),
+            ProtectKeys => await ProtectKeysAsync(scope.ServiceProvider, args.Contains(RevokeUnencryptedOption)),
             _ => await ApplyMigrationsAsync(scope.ServiceProvider),
         };
     }
@@ -94,6 +100,42 @@ public static class ConsoleCommands
         Console.WriteLine($"Aplicando {pending.Count} migración(es): {string.Join(", ", pending)}");
         await database.MigrateAsync();
         Console.WriteLine("Migraciones aplicadas.");
+        return 0;
+    }
+
+    private static async Task<int> ProtectKeysAsync(IServiceProvider services, bool revokeUnencrypted)
+    {
+        var result = await services.GetRequiredService<DataProtectionKeyRotation>().ProtectAsync(revokeUnencrypted, CancellationToken.None);
+        if (!result.Configured)
+        {
+            Console.Error.WriteLine(result.Problem);
+            return 2;
+        }
+
+        Console.WriteLine(result.CreatedKey is { } created
+            ? $"Se creó la clave cifrada {created:D}."
+            : "Ya hay una clave cifrada activa: no se creó otra.");
+        if (result.RevokedKeys.Count > 0)
+        {
+            Console.WriteLine($"Claves sin cifrar revocadas: {result.RevokedKeys.Count}. Las sesiones emitidas con ellas deben iniciarse de nuevo.");
+        }
+
+        Console.WriteLine("Claves del anillo (sin su material):");
+        foreach (var key in result.Keys)
+        {
+            Console.WriteLine(
+                $" - {key.Id:D} · creada {key.CreatedAt:yyyy-MM-dd HH:mm} UTC · activa desde {key.ActivatesAt:yyyy-MM-dd HH:mm} · " +
+                $"expira {key.ExpiresAt:yyyy-MM-dd} · {(key.IsEncrypted ? "cifrada" : "SIN CIFRAR")}{(key.IsRevoked ? " · revocada" : string.Empty)}");
+        }
+
+        if (!revokeUnencrypted && result.Keys.Any(key => !key.IsEncrypted && !key.IsRevoked))
+        {
+            Console.WriteLine(
+                "Quedan claves sin cifrar, que se siguen usando: la clave cifrada pasa a ser la predeterminada cuando termina su " +
+                $"periodo de propagación (48 horas). Después, ejecuta de nuevo con {RevokeUnencryptedOption}. Si no hay sesiones " +
+                "que conservar (por ejemplo, antes del primer despliegue), puedes hacerlo ya: la clave cifrada se usará de inmediato.");
+        }
+
         return 0;
     }
 

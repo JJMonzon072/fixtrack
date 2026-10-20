@@ -17,7 +17,8 @@ namespace FixTrack.Web.Security;
 /// <item><c>DataProtection:AllowUnprotectedKeys</c>: fuera de Desarrollo, guardar claves en la base sin certificado
 /// exige declararlo con este valor. Sin certificado ni esta declaración, la aplicación no arranca.</item>
 /// </list>
-/// Las claves que ya estaban sin cifrar se siguen leyendo; las nuevas se cifran.
+/// Las claves que ya estaban sin cifrar se siguen leyendo; las nuevas se cifran. El comando <c>proteger-claves</c> crea
+/// una clave cifrada de inmediato y, más adelante, revoca las anteriores (ver el README).
 /// </summary>
 public static class DataProtectionSetup
 {
@@ -67,6 +68,7 @@ public static class DataProtectionSetup
     {
         var settings = Read(configuration, environment);
         services.AddSingleton(settings);
+        services.AddScoped<DataProtectionKeyRotation>();
 
         var builder = services.AddDataProtection().SetApplicationName(ApplicationName);
         if (settings.Store == KeyStore.Database)

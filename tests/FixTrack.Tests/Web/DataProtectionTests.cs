@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using FixTrack.Infrastructure;
 using FixTrack.Infrastructure.Persistence;
 using FixTrack.Web.Security;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -14,7 +16,7 @@ using Microsoft.Extensions.Options;
 
 namespace FixTrack.Tests.Web;
 
-/// <summary>Claves de Data Protection cifradas con un certificado y compatibilidad con las anteriores.</summary>
+/// <summary>Claves de Data Protection cifradas con un certificado, compatibilidad con las anteriores y rotación.</summary>
 public sealed class DataProtectionTests
 {
     private const string Purpose = "FixTrack.Pruebas";
@@ -30,6 +32,12 @@ public sealed class DataProtectionTests
         return await scope.ServiceProvider.GetRequiredService<FixTrackDbContext>().DataProtectionKeys.AsNoTracking()
             .Where(row => row.FriendlyName!.StartsWith("key-"))
             .ToListAsync(Token);
+    }
+
+    private static async Task<DataProtectionKeyRotation.Result> ProtectAsync(WebApplicationFactory<Program> app, bool revoke)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<DataProtectionKeyRotation>().ProtectAsync(revoke, Token);
     }
 
     /// <summary>Una instancia de la aplicación sobre la misma base, sin certificado (como antes de esta fase).</summary>
@@ -55,15 +63,68 @@ public sealed class DataProtectionTests
     }
 
     [Fact]
-    public async Task Keys_saved_before_the_certificate_are_still_read()
+    public async Task Old_unencrypted_keys_keep_working_until_the_rotation_revokes_them()
     {
         await using var database = new FixTrackWebApplicationFactory();
+
+        // 1. Antes: claves sin cifrar (como en la base actual).
         await using var before = WithoutCertificate(database);
         var oldPayload = Protector(before).Protect("sesión anterior");
+        var oldKey = KeyOf(oldPayload);
+        Assert.Contains(await StoredKeysAsync(before), key => key.Xml!.Contains("<masterKey", StringComparison.Ordinal));
 
+        // 2. Con el certificado, lo protegido antes se sigue leyendo. proteger-claves crea una clave cifrada, pero
+        // Data Protection no la usa por defecto hasta que termina su periodo de propagación mientras haya otra válida.
         await using var after = database.WithWebHostBuilder(_ => { });
-
         Assert.Equal("sesión anterior", Protector(after).Unprotect(oldPayload));
+        var rotation = await ProtectAsync(after, revoke: false);
+        Assert.NotNull(rotation.CreatedKey);
+        Assert.Contains(rotation.Keys, key => key.Id == rotation.CreatedKey && key.IsEncrypted);
+        Assert.Equal(oldKey, KeyOf(Protector(after).Protect("sesión durante la propagación")));
+        Assert.Null((await ProtectAsync(after, revoke: false)).CreatedKey);
+
+        // 3. Al revocar las claves sin cifrar, lo emitido con ellas deja de leerse y la clave cifrada se usa de inmediato.
+        var revocation = await ProtectAsync(after, revoke: true);
+        await using var later = database.WithWebHostBuilder(_ => { });
+        var newPayload = Protector(later).Protect("sesión nueva");
+        Assert.Equal([oldKey], revocation.RevokedKeys);
+        Assert.ThrowsAny<CryptographicException>(() => Protector(later).Unprotect(oldPayload));
+        Assert.Equal(rotation.CreatedKey, KeyOf(newPayload));
+        Assert.Equal("sesión nueva", Protector(later).Unprotect(newPayload));
+        Assert.All(revocation.Keys.Where(key => !key.IsEncrypted), key => Assert.True(key.IsRevoked));
+    }
+
+    [Fact]
+    public async Task Revoking_on_a_first_deployment_switches_to_an_encrypted_key_at_once()
+    {
+        await using var database = new FixTrackWebApplicationFactory();
+        await using (var before = WithoutCertificate(database))
+        {
+            Protector(before).Protect("clave sin cifrar existente");
+        }
+
+        // Un solo paso: crear la clave cifrada y revocar las anteriores.
+        await using var deploy = database.WithWebHostBuilder(_ => { });
+        var result = await ProtectAsync(deploy, revoke: true);
+        await using var running = database.WithWebHostBuilder(_ => { });
+
+        Assert.NotNull(result.CreatedKey);
+        Assert.Equal(result.CreatedKey, KeyOf(Protector(running).Protect("dato")));
+    }
+
+    /// <summary>Id de la clave que protegió el dato: va en los bytes 4 a 19 del formato de Data Protection.</summary>
+    private static Guid KeyOf(string payload) => new(WebEncoders.Base64UrlDecode(payload).AsSpan(4, 16));
+
+    [Fact]
+    public async Task The_rotation_needs_a_certificate()
+    {
+        await using var database = new FixTrackWebApplicationFactory();
+        await using var app = WithoutCertificate(database);
+
+        var result = await ProtectAsync(app, revoke: true);
+
+        Assert.False(result.Configured);
+        Assert.Contains("DataProtection:Certificate", result.Problem);
     }
 
     [Fact]
