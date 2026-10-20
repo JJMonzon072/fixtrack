@@ -29,7 +29,7 @@ public sealed class DataProtectionTests
     private static async Task<List<DataProtectionKey>> StoredKeysAsync(WebApplicationFactory<Program> app)
     {
         await using var scope = app.Services.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<FixTrackDbContext>().DataProtectionKeys.AsNoTracking()
+        return await scope.ServiceProvider.GetRequiredService<DataProtectionKeysDbContext>().DataProtectionKeys.AsNoTracking()
             .Where(row => row.FriendlyName!.StartsWith("key-"))
             .ToListAsync(Token);
     }

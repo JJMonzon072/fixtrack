@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FixTrack.Application.Security;
 using FixTrack.Infrastructure.Identity;
 using FixTrack.Infrastructure.Persistence;
@@ -7,6 +8,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,10 +22,16 @@ namespace FixTrack.Tests.Web;
 /// por completo, de modo que las pruebas nunca pueden conectarse a la base de datos real.
 /// Crea las cuentas de <see cref="TestAccounts"/>, con contraseñas aleatorias generadas en cada ejecución.
 /// </summary>
-public sealed class FixTrackWebApplicationFactory : WebApplicationFactory<Program>
+public sealed partial class FixTrackWebApplicationFactory : WebApplicationFactory<Program>
 {
     // El esquema se crea antes de iniciar la aplicación: Data Protection lee sus claves de la base al arrancar.
     private readonly SqliteTestDatabase _database = new();
+
+    // Las claves de Data Protection van en otra base en memoria, con una conexión por contexto. EF Core registra sus
+    // funciones en la conexión cada vez que crea un contexto; con la conexión compartida de _database, la actualización
+    // del anillo de claves en segundo plano (.NET 9+) podía hacerlo mientras otra consulta leía en esa misma conexión
+    // (SQLite Error 5: "unable to delete/modify user-function due to active statements").
+    private readonly KeysDatabase _keys = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -49,7 +57,7 @@ public sealed class FixTrackWebApplicationFactory : WebApplicationFactory<Progra
             services.RemoveAll<DbContextOptions<DataProtectionKeysDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<DataProtectionKeysDbContext>>();
             services.RemoveAll<DataProtectionKeysDbContext>();
-            services.AddDbContext<DataProtectionKeysDbContext>(options => options.UseSqlite(_database.Connection));
+            services.AddDbContext<DataProtectionKeysDbContext>(options => options.UseSqlite(_keys.ConnectionString));
         });
     }
 
@@ -67,7 +75,38 @@ public sealed class FixTrackWebApplicationFactory : WebApplicationFactory<Progra
         if (disposing)
         {
             _database.Dispose();
+            _keys.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Base en memoria compartida entre conexiones (<c>Cache=Shared</c>): existe mientras la conexión de mantenimiento
+    /// siga abierta, y cada contexto abre la suya. SQLite serializa los accesos con bloqueos y Microsoft.Data.Sqlite
+    /// reintenta mientras están ocupados.
+    /// </summary>
+    private sealed partial class KeysDatabase : IDisposable
+    {
+        private readonly SqliteConnection _keepAlive;
+
+        public KeysDatabase()
+        {
+            ConnectionString = $"Data Source=fixtrack-claves-{Guid.NewGuid():N};Mode=Memory;Cache=Shared";
+            _keepAlive = new SqliteConnection(ConnectionString);
+            _keepAlive.Open();
+            // El contexto de las claves excluye su tabla de las migraciones (la crea FixTrackDbContext): se usa la misma
+            // instrucción que genera el modelo principal.
+            using var model = new FixTrackDbContext(new DbContextOptionsBuilder<FixTrackDbContext>().UseSqlite(_keepAlive).Options);
+            using var create = _keepAlive.CreateCommand();
+            create.CommandText = CreateKeysTable().Match(model.Database.GenerateCreateScript()).Value;
+            create.ExecuteNonQuery();
+        }
+
+        public string ConnectionString { get; }
+
+        public void Dispose() => _keepAlive.Dispose();
+
+        [GeneratedRegex(@"CREATE TABLE ""DataProtectionKeys"" \(.*?\);", RegexOptions.Singleline)]
+        private static partial Regex CreateKeysTable();
     }
 
     private static async Task SeedAccountsAsync(UserManager<FixTrackUser> users)
