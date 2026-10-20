@@ -14,20 +14,29 @@ namespace FixTrack.Tests.SqlServer;
 
 /// <summary>
 /// Comportamientos que SQLite no reproduce y se comprueban contra SQL Server: el trigger del historial, los
-/// bloqueos UPDLOCK, la concurrencia optimista, la intercalación sin tildes y las agregaciones del panel. Solo se ejecutan si la variable de
-/// entorno <c>FIXTRACK_TEST_SQLSERVER</c> contiene una cadena de conexión; en GitHub Actions se omiten.
+/// bloqueos UPDLOCK, la concurrencia optimista, la intercalación sin tildes y las agregaciones del panel.
+/// Se ejecutan contra la base indicada en <c>FIXTRACK_TEST_SQLSERVER</c> (por ejemplo, una base ya migrada) o, si no
+/// existe, contra la base desechable de <see cref="DisposableSqlServerDatabase"/>. Sin ninguna de las dos se omiten.
 /// Cada prueba trabaja dentro de transacciones que se revierten, de modo que no deja cambios en la base.
 /// </summary>
-public sealed class SqlServerBehaviorTests
+[Collection(SqlServerCollection.Name)]
+public sealed class SqlServerBehaviorTests(DisposableSqlServerDatabase disposable)
 {
     private const string ConnectionVariable = "FIXTRACK_TEST_SQLSERVER";
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    private static string ConnectionString()
+    private string ConnectionString()
     {
         var value = Environment.GetEnvironmentVariable(ConnectionVariable);
-        Assert.SkipWhen(string.IsNullOrWhiteSpace(value), $"Prueba de SQL Server omitida: define {ConnectionVariable} para ejecutarla.");
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            value = disposable.ConnectionString;
+        }
+
+        Assert.SkipWhen(
+            string.IsNullOrWhiteSpace(value),
+            $"Prueba de SQL Server omitida: define {ConnectionVariable} o {DisposableSqlServerDatabase.ServerVariable} para ejecutarla.");
         return value!;
     }
 
@@ -157,8 +166,9 @@ public sealed class SqlServerBehaviorTests
     public async Task Order_search_ignores_accents_and_case_with_the_spanish_collation()
     {
         await using var context = CreateContext(ConnectionString());
-        var name = await context.ServiceOrders.Select(order => order.Device!.Customer!.FullName).FirstOrDefaultAsync(Token);
-        Assert.SkipWhen(name is null || !name.Any(c => "áéíóúÁÉÍÓÚ".Contains(c)), "No hay clientes con tildes y órdenes para probar la búsqueda.");
+        var names = await context.ServiceOrders.Select(order => order.Device!.Customer!.FullName).Distinct().ToListAsync(Token);
+        var name = names.FirstOrDefault(candidate => candidate.Any(c => "áéíóúÁÉÍÓÚ".Contains(c)));
+        Assert.SkipWhen(name is null, "No hay clientes con tildes y órdenes para probar la búsqueda.");
 
         var withoutAccents = new string(name!.Normalize(System.Text.NormalizationForm.FormD)
             .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
