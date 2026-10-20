@@ -15,6 +15,12 @@ builder.Services
 
 var app = builder.Build();
 
+// Comandos de administración (crear el primer administrador, aplicar migraciones): se ejecutan y terminan.
+if (ConsoleCommands.IsCommand(args))
+{
+    return await ConsoleCommands.RunAsync(app, args);
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/error");
