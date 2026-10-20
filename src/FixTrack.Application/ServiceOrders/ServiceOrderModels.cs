@@ -118,4 +118,20 @@ public sealed record ServiceOrderDetails(
     public decimal? CostVariance => FinalCost - EstimatedCost;
 
     public bool IsOverdueAt(DateTime nowUtc) => ServiceOrderSchedule.IsOverdue(Status, PromisedAtUtc, nowUtc);
+
+    /// <summary>Estados a los que puede pasar la orden, con el motivo si todavía no es posible.</summary>
+    public IReadOnlyList<ServiceOrderNextStep> NextSteps =>
+    [
+        .. ServiceOrderWorkflow.NextStatuses(Status).Select(next => new ServiceOrderNextStep(
+            next,
+            ServiceOrderWorkflow.TransitionBlocker(Status, next, Technician is not null, Diagnosis is not null))),
+    ];
+
+    public bool CanRecordDiagnosis => ServiceOrderWorkflow.DiagnosisStatuses.Contains(Status);
+}
+
+/// <summary>Estado siguiente posible. <see cref="Blocker"/> explica qué falta para poder elegirlo.</summary>
+public sealed record ServiceOrderNextStep(ServiceOrderStatus Status, string? Blocker)
+{
+    public bool IsAvailable => Blocker is null;
 }

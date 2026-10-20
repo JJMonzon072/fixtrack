@@ -64,6 +64,43 @@ public static class ServiceOrderWorkflow
 
     public static bool CanTransition(ServiceOrderStatus from, ServiceOrderStatus to) => NextStatuses(from).Contains(to);
 
+    /// <summary>
+    /// Explica por qué una orden en <paramref name="from"/> no puede pasar a <paramref name="to"/>, o devuelve
+    /// <c>null</c> si puede hacerlo. Los estados de trabajo exigen un técnico asignado y salir del diagnóstico
+    /// exige haberlo registrado. No incluye los datos que se piden al cambiar (nota o costo final).
+    /// </summary>
+    public static string? TransitionBlocker(ServiceOrderStatus from, ServiceOrderStatus to, bool hasTechnician, bool hasDiagnosis)
+    {
+        if (IsClosed(from))
+        {
+            return "La orden está cerrada (entregada o cancelada) y no admite cambios.";
+        }
+
+        if (!Enum.IsDefined(to))
+        {
+            return "Selecciona el nuevo estado.";
+        }
+
+        if (to == from)
+        {
+            return "La orden ya se encuentra en ese estado.";
+        }
+
+        if (!CanTransition(from, to))
+        {
+            return $"Una orden «{Name(from)}» no puede pasar a «{Name(to)}».";
+        }
+
+        return to switch
+        {
+            ServiceOrderStatus.Diagnosing when !hasTechnician => "Asigna un técnico antes de iniciar el diagnóstico.",
+            ServiceOrderStatus.InRepair when !hasTechnician => "Asigna un técnico antes de iniciar la reparación.",
+            ServiceOrderStatus.InRepair or ServiceOrderStatus.AwaitingParts or ServiceOrderStatus.ReadyForPickup when !hasDiagnosis =>
+                "Registra el diagnóstico antes de continuar con la orden.",
+            _ => null,
+        };
+    }
+
     /// <summary>Nombre del estado en español, tal como se muestra a los usuarios.</summary>
     public static string Name(ServiceOrderStatus status) => status switch
     {

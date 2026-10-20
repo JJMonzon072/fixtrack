@@ -54,4 +54,21 @@ public sealed class ServiceOrderWorkflowTests
     [InlineData(ServiceOrderStatus.Cancelled, "Cancelada")]
     public void Statuses_have_spanish_names(ServiceOrderStatus status, string expected) =>
         Assert.Equal(expected, ServiceOrderWorkflow.Name(status));
+
+    [Theory]
+    [InlineData(ServiceOrderStatus.Received, ServiceOrderStatus.Diagnosing, false, false, "Asigna un técnico antes de iniciar el diagnóstico.")]
+    [InlineData(ServiceOrderStatus.Diagnosing, ServiceOrderStatus.InRepair, true, false, "Registra el diagnóstico antes de continuar con la orden.")]
+    [InlineData(ServiceOrderStatus.Diagnosing, ServiceOrderStatus.ReadyForPickup, true, false, "Registra el diagnóstico antes de continuar con la orden.")]
+    [InlineData(ServiceOrderStatus.Received, ServiceOrderStatus.Delivered, true, true, "Una orden «Recibida» no puede pasar a «Entregada».")]
+    [InlineData(ServiceOrderStatus.Delivered, ServiceOrderStatus.InRepair, true, true, "La orden está cerrada (entregada o cancelada) y no admite cambios.")]
+    [InlineData(ServiceOrderStatus.Received, ServiceOrderStatus.Cancelled, false, false, null)]
+    [InlineData(ServiceOrderStatus.Diagnosing, ServiceOrderStatus.AwaitingParts, true, true, null)]
+    public void Explains_why_a_transition_is_not_possible_yet(
+        ServiceOrderStatus from,
+        ServiceOrderStatus to,
+        bool hasTechnician,
+        bool hasDiagnosis,
+        string? expected) =>
+        Assert.Equal(expected, ServiceOrderWorkflow.TransitionBlocker(from, to, hasTechnician, hasDiagnosis));
 }
+

@@ -11,8 +11,6 @@ namespace FixTrack.Domain.ServiceOrders;
 /// </summary>
 public sealed class ServiceOrder : Entity
 {
-    private const string ClosedMessage = "La orden está cerrada (entregada o cancelada) y no admite cambios.";
-
     private readonly List<ServiceOrderStatusChange> _statusHistory = [];
 
     /// <summary>Registra la recepción de un equipo. El propietario del equipo debe estar cargado y activo.</summary>
@@ -270,37 +268,8 @@ public sealed class ServiceOrder : Entity
         return errors;
     }
 
-    private string? StatusError(ServiceOrderStatus newStatus)
-    {
-        if (IsClosed)
-        {
-            return ClosedMessage;
-        }
-
-        if (!Enum.IsDefined(newStatus))
-        {
-            return "Selecciona el nuevo estado.";
-        }
-
-        if (newStatus == Status)
-        {
-            return "La orden ya se encuentra en ese estado.";
-        }
-
-        if (!ServiceOrderWorkflow.CanTransition(Status, newStatus))
-        {
-            return $"Una orden «{ServiceOrderWorkflow.Name(Status)}» no puede pasar a «{ServiceOrderWorkflow.Name(newStatus)}».";
-        }
-
-        return newStatus switch
-        {
-            ServiceOrderStatus.Diagnosing when TechnicianId is null => "Asigna un técnico antes de iniciar el diagnóstico.",
-            ServiceOrderStatus.InRepair when TechnicianId is null => "Asigna un técnico antes de iniciar la reparación.",
-            ServiceOrderStatus.InRepair or ServiceOrderStatus.AwaitingParts or ServiceOrderStatus.ReadyForPickup when Diagnosis is null =>
-                "Registra el diagnóstico antes de continuar con la orden.",
-            _ => null,
-        };
-    }
+    private string? StatusError(ServiceOrderStatus newStatus) =>
+        ServiceOrderWorkflow.TransitionBlocker(Status, newStatus, TechnicianId is not null, Diagnosis is not null);
 
     private void SetTechnician(Technician technician, DateTime assignedAtUtc)
     {
@@ -324,7 +293,7 @@ public sealed class ServiceOrder : Entity
     {
         if (IsClosed)
         {
-            throw new DomainException(ClosedMessage);
+            throw new DomainException("La orden está cerrada (entregada o cancelada) y no admite cambios.");
         }
     }
 
