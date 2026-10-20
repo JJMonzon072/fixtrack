@@ -43,6 +43,28 @@ public sealed class Customer : Entity
 
     public IReadOnlyCollection<Device> Devices => _devices;
 
+    /// <summary>
+    /// Registra un equipo a nombre de este cliente. Solo los clientes activos admiten equipos nuevos;
+    /// los equipos de un cliente inactivo se conservan y siguen siendo consultables.
+    /// </summary>
+    public Device RegisterDevice(
+        DeviceType type,
+        string brand,
+        string? model,
+        string? serialNumber,
+        string? notes,
+        DateTime registeredAtUtc)
+    {
+        if (!IsActive)
+        {
+            throw new DomainException("No se pueden registrar equipos para un cliente inactivo.");
+        }
+
+        var device = new Device(this, type, brand, model, serialNumber, notes, registeredAtUtc);
+        _devices.Add(device);
+        return device;
+    }
+
     public void UpdateDetails(string fullName, string phone, string? email, string? notes, DateTime updatedAtUtc)
     {
         SetDetails(fullName, phone, email, notes);

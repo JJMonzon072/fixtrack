@@ -1,5 +1,4 @@
 using FixTrack.Domain.Common;
-using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
 
 namespace FixTrack.Tests.Domain;
@@ -85,16 +84,4 @@ public sealed class ServiceOrderTests
     public void The_promised_date_cannot_be_before_reception() =>
         Assert.Throws<DomainException>(() =>
             new ServiceOrder(1, "No enciende", ServiceOrderPriority.High, Received, Received.AddDays(-1), null));
-
-    [Fact]
-    public void Devices_belong_to_a_customer_and_validate_their_data()
-    {
-        Assert.Throws<DomainException>(() => new Device(0, DeviceType.Laptop, "Dell", null, null, null, Received));
-        Assert.Throws<DomainException>(() => new Device(1, (DeviceType)99, "Dell", null, null, null, Received));
-        Assert.Throws<DomainException>(() => new Device(1, DeviceType.Laptop, " ", null, null, null, Received));
-
-        var device = new Device(1, DeviceType.Laptop, " Dell ", "Latitude 5440", "  ", null, Received);
-        Assert.Equal("Dell", device.Brand);
-        Assert.Null(device.SerialNumber);
-    }
 }

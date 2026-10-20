@@ -16,10 +16,10 @@ internal sealed class DeviceConfiguration : IEntityTypeConfiguration<Device>
 
         builder.HasKey(device => device.Id);
 
-        builder.Property(device => device.Brand).HasMaxLength(Device.BrandMaxLength);
-        builder.Property(device => device.Model).HasMaxLength(Device.ModelMaxLength);
-        builder.Property(device => device.SerialNumber).HasMaxLength(Device.SerialNumberMaxLength).IsUnicode(false);
-        builder.Property(device => device.Notes).HasMaxLength(Device.NotesMaxLength);
+        builder.Property(device => device.Brand).HasMaxLength(DeviceRules.BrandMaxLength);
+        builder.Property(device => device.Model).HasMaxLength(DeviceRules.ModelMaxLength);
+        builder.Property(device => device.SerialNumber).HasMaxLength(DeviceRules.SerialNumberMaxLength).IsUnicode(false);
+        builder.Property(device => device.Notes).HasMaxLength(DeviceRules.NotesMaxLength);
 
         builder.HasIndex(device => device.CustomerId).HasDatabaseName("IX_Devices_CustomerId");
 
