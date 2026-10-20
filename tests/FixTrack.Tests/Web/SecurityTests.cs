@@ -109,6 +109,8 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
     }
 
     [Theory]
+    [InlineData("/usuarios")]
+    [InlineData("/usuarios/nueva")]
     [InlineData("/tecnicos/nuevo")]
     [InlineData("/tecnicos/1/editar")]
     public async Task Operators_cannot_open_administrator_pages(string url)
@@ -123,7 +125,7 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task Operators_cannot_change_technicians()
+    public async Task Operators_cannot_change_technicians_or_accounts()
     {
         using var admin = await factory.CreateAuthenticatedClientAsync();
         var technicianId = FormPost.CreatedId(await FormPost.SendAsync(admin, "/tecnicos/nuevo", new()
@@ -135,13 +137,23 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
 
         using var create = await FormPost.SendAsync(client, "/tecnicos/nuevo", new() { ["FullName"] = "Tecnico Operador", ["Specialty"] = "Redes" });
         using var deactivate = await FormPost.SendAsync(client, $"/tecnicos/{technicianId}/desactivar", []);
+        using var newAccount = await FormPost.SendAsync(client, "/usuarios/nueva", new()
+        {
+            ["FullName"] = "Cuenta Intrusa",
+            ["Email"] = "intrusa@fixtrack.test",
+            ["Role"] = Roles.Administrator,
+            ["Password"] = "Intrusa1234567",
+            ["ConfirmPassword"] = "Intrusa1234567",
+        });
 
         Assert.Equal(HttpStatusCode.Forbidden, create.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, deactivate.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, newAccount.StatusCode);
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FixTrackDbContext>();
         Assert.True(await db.Technicians.AnyAsync(t => t.Id == technicianId && t.IsActive, Token));
         Assert.False(await db.Technicians.AnyAsync(t => t.FullName == "Tecnico Operador", Token));
+        Assert.False(await db.Users.AnyAsync(u => u.Email == "intrusa@fixtrack.test", Token));
     }
 
     [Fact]
@@ -160,6 +172,17 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
         Assert.DoesNotContain("href=\"/usuarios\"", dashboard);
         Assert.Contains("Oscar Operador", dashboard);
         Assert.Contains(Roles.Operator, dashboard);
+    }
+
+    [Fact]
+    public async Task Administrators_see_the_accounts_menu()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+
+        var dashboard = await client.GetStringAsync("/", Token);
+
+        Assert.Contains("href=\"/usuarios\"", dashboard);
+        Assert.Contains("Cerrar sesión", dashboard);
     }
 
     [Fact]

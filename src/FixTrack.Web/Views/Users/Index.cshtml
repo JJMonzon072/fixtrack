@@ -1,0 +1,133 @@
+@using FixTrack.Application.Security
+@using FixTrack.Web.Models.Account
+@using FixTrack.Web.Services
+@model UsersIndexViewModel
+@inject DateDisplay Dates
+@{
+    ViewData["Title"] = "Usuarios";
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">Usuarios</h1>
+        <p class="page-description">Cuentas de acceso a FixTrack y su rol. Las cuentas no se eliminan: se deshabilitan y conservan su historial.</p>
+    </div>
+    <a class="button button--primary" asp-action="Create">
+        <icon name="user-plus" />
+        Nueva cuenta
+    </a>
+</header>
+
+<section class="table-card section" aria-labelledby="accounts-title">
+    <h2 class="visually-hidden" id="accounts-title">Cuentas de acceso</h2>
+    <div class="table-scroll">
+        <table class="data-table data-table--interactive data-table--stack">
+            <caption class="visually-hidden">Cuentas de acceso, ordenadas por nombre</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Cuenta</th>
+                    <th scope="col">Rol</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Último acceso</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var account in Model.Accounts)
+                {
+                    <tr>
+                        <td data-label="Cuenta">
+                            <div class="person">
+                                <span class="avatar" aria-hidden="true">@ContactDisplay.Initials(account.FullName)</span>
+                                <span class="person__text">
+                                    <a class="person__name row-link" asp-action="Edit" asp-route-id="@account.Id">
+                                        @account.FullName
+                                    </a>
+                                    <span class="person__meta">@account.Email</span>
+                                </span>
+                                @if (account.Id == Model.CurrentUserId)
+                                {
+                                    <span class="badge badge--neutral">Tú</span>
+                                }
+                            </div>
+                        </td>
+                        <td data-label="Rol" data-indent>
+                            <span class="badge @(account.Role == Roles.Administrator ? "badge--accent" : "badge--neutral")">@(account.Role ?? "Sin rol")</span>
+                        </td>
+                        <td data-label="Estado">
+                            @if (!account.IsEnabled)
+                            {
+                                <span class="status" data-status="cancelled">Deshabilitada</span>
+                            }
+                            else if (account.IsLockedOut)
+                            {
+                                <span class="status" data-status="parts">Bloqueada temporalmente</span>
+                            }
+                            else
+                            {
+                                <span class="status" data-status="ready">Habilitada</span>
+                            }
+                        </td>
+                        <td data-label="Último acceso" data-hide-mobile>
+                            @if (account.LastSignInAtUtc is { } lastSignIn)
+                            {
+                                <time datetime="@DateDisplay.Iso(lastSignIn)">@Dates.ShortWithTime(lastSignIn)</time>
+                            }
+                            else
+                            {
+                                <span class="meta-list__muted">Nunca</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card" aria-labelledby="roles-title">
+    <header class="card__header">
+        <div>
+            <h2 class="card__title" id="roles-title">Roles y permisos</h2>
+            <p class="card__description">Cada cuenta tiene un rol. Los permisos se aplican en el servidor, no solo en los menús.</p>
+        </div>
+    </header>
+    <div class="table-scroll">
+        <table class="data-table permissions-table">
+            <caption class="visually-hidden">Permisos de cada rol</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Operación</th>
+                    <th scope="col">@Roles.Administrator</th>
+                    <th scope="col">@Roles.Operator</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var (operation, admin, operatorAllowed) in new (string, bool, bool)[]
+                {
+                    ("Panel y cola de trabajo", true, true),
+                    ("Clientes y equipos: registrar, editar, desactivar", true, true),
+                    ("Órdenes: registrar, asignar, diagnosticar, cambiar estado y entregar", true, true),
+                    ("Técnicos: consultar", true, true),
+                    ("Técnicos: registrar, editar, desactivar y reactivar", true, false),
+                    ("Cuentas de acceso y roles", true, false),
+                })
+                {
+                    <tr>
+                        <td>@operation</td>
+                        <td>@(admin ? "Sí" : "No")</td>
+                        <td>
+                            @if (operatorAllowed)
+                            {
+                                @:Sí
+                            }
+                            else
+                            {
+                                <span class="meta-list__muted">No</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>

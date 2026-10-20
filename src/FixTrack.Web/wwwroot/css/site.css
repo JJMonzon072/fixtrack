@@ -3667,6 +3667,26 @@ fieldset.field > legend {
     color: var(--color-danger-text);
 }
 
+/* Administración de cuentas */
+.form-layout--stack {
+    display: grid;
+    gap: var(--space-5);
+}
+
+.form-side-card {
+    max-width: 46rem;
+}
+
+.permissions-table {
+    min-width: 32rem;
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.permissions-table td:not(:first-child),
+.permissions-table th:not(:first-child) {
+    width: 9rem;
+}
+
 /* 9. Utilidades ------------------------------------------------------------ */
 
 .mono {

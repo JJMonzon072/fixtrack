@@ -25,3 +25,33 @@ public sealed class ChangePasswordFormModel
     public string? ConfirmPassword { get; set; }
 }
 
+/// <summary>Formulario de cuenta. Al editar se ignoran el correo y las contraseñas.</summary>
+public sealed class UserFormModel
+{
+    public string? FullName { get; set; }
+
+    public string? Email { get; set; }
+
+    public string? Role { get; set; }
+
+    public string? Password { get; set; }
+
+    public string? ConfirmPassword { get; set; }
+}
+
+public sealed class ResetPasswordFormModel
+{
+    public string? Password { get; set; }
+
+    public string? ConfirmPassword { get; set; }
+}
+
+public sealed record UsersIndexViewModel(IReadOnlyList<FixTrack.Application.Security.UserAccount> Accounts, string CurrentUserId);
+
+/// <summary>Registro (Account es null) o edición de una cuenta.</summary>
+public sealed record UserEditorViewModel(FixTrack.Application.Security.UserAccount? Account, UserFormModel Form, bool IsCurrentUser)
+{
+    public bool IsNew => Account is null;
+}
+
+public sealed record ResetPasswordViewModel(FixTrack.Application.Security.UserAccount Account);

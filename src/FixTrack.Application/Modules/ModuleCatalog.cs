@@ -48,6 +48,12 @@ internal sealed class ModuleCatalog : IModuleCatalog
                 "Personal técnico del taller, su especialidad y su disponibilidad.",
                 ModuleStatus.Available,
                 []),
+            new ModuleInfo(
+                ModuleKey.Users,
+                "Usuarios",
+                "Cuentas de acceso al sistema y sus roles. Solo para administradores.",
+                ModuleStatus.Available,
+                []),
         ];
 
         _modulesByKey = Modules.ToDictionary(module => module.Key);

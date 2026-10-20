@@ -28,3 +28,6 @@ public sealed record OrderSummaryTableViewModel(
 
 /// <summary>Una lista de la cola de trabajo, ya ordenada por el algoritmo de priorización.</summary>
 public sealed record QueueTableViewModel(IReadOnlyList<PrioritizedOrder> Items, DateTime NowUtc, string Caption);
+
+/// <summary>Elección del rol de una cuenta. <see cref="Disabled"/> cuando el administrador edita su propia cuenta.</summary>
+public sealed record RoleChoicesViewModel(string? Selected, string? Error, bool Disabled);
