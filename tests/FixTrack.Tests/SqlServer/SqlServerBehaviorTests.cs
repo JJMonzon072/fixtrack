@@ -14,7 +14,7 @@ namespace FixTrack.Tests.SqlServer;
 
 /// <summary>
 /// Comportamientos que SQLite no reproduce y se comprueban contra SQL Server: el trigger del historial, los
-/// bloqueos UPDLOCK, la concurrencia optimista y la intercalación sin tildes. Solo se ejecutan si la variable de
+/// bloqueos UPDLOCK, la concurrencia optimista, la intercalación sin tildes y las agregaciones del panel. Solo se ejecutan si la variable de
 /// entorno <c>FIXTRACK_TEST_SQLSERVER</c> contiene una cadena de conexión; en GitHub Actions se omiten.
 /// Cada prueba trabaja dentro de transacciones que se revierten, de modo que no deja cambios en la base.
 /// </summary>
@@ -169,6 +169,33 @@ public sealed class SqlServerBehaviorTests
 
         Assert.Contains(result.Page.Items, order => order.CustomerName == name);
     }
+
+    [Fact]
+    public async Task Dashboard_indicators_match_direct_sql_counts()
+    {
+        await using var context = CreateContext(ConnectionString());
+        var now = DateTime.UtcNow;
+        var since = now.AddDays(-7);
+
+        var counts = await new DashboardRepository(context).CountOrdersAsync(now, since, Token);
+
+        Assert.Equal(await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [ServiceOrders] WHERE [Status] NOT IN (6, 7)"), counts.Open);
+        Assert.Equal(await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [ServiceOrders]"), counts.Total);
+        Assert.Equal(await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [ServiceOrders] WHERE [Status] = 3"), counts.InRepair);
+        Assert.Equal(
+            await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [ServiceOrders] WHERE [Status] NOT IN (6, 7) AND [PromisedAtUtc] < {now}"),
+            counts.Overdue);
+        Assert.Equal(
+            await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [ServiceOrders] WHERE [Status] NOT IN (6, 7) AND [TechnicianId] IS NULL"),
+            counts.Unassigned);
+        Assert.Equal(await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [ServiceOrders] WHERE [ReceivedAtUtc] >= {since}"), counts.ReceivedRecently);
+        Assert.Equal(
+            await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [ServiceOrders] WHERE [Status] NOT IN (6, 7) AND [Priority] IN (3, 4)"),
+            counts.HighPriorityOpen);
+    }
+
+    private static Task<int> CountAsync(FixTrackDbContext context, FormattableString sql) =>
+        context.Database.SqlQuery<int>(sql).SingleAsync(Token);
 
     /// <summary>Servicio de técnicos real sobre un contexto propio, como en una solicitud web.</summary>
     private static ITechnicianService TechnicianService(FixTrackDbContext context) =>
