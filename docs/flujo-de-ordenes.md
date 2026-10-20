@@ -17,7 +17,9 @@ Una persona del taller registra la orden en **Órdenes → Nueva orden** (`/orde
 | Costo estimado | No | En quetzales, no negativo, con dos decimales como máximo y hasta Q 99,999,999.99 |
 | Observaciones de recepción | No | Hasta 500 caracteres (estado físico, accesorios entregados) |
 
-La **fecha de recepción** la pone el servidor y no se puede elegir. El **número** visible (`OS-000042`) se obtiene del identificador y tampoco se puede elegir. Toda orden nace en estado **Recibida** y con su primer registro en el historial ("Orden registrada.").
+La **fecha de recepción** la pone el servidor y no se puede elegir. El **número** visible (`OS-000042`) se obtiene del identificador y tampoco se puede elegir. Toda orden nace en estado **Recibida** y con su primer registro en el historial ("Orden registrada."), que guarda quién la registró. Si se eligió técnico, también se registra la asignación.
+
+**Un formulario, una orden.** Cada formulario de nueva orden lleva un identificador propio. Si se envía dos veces (doble clic, recarga o una respuesta que tardó), el segundo envío no crea otra orden: lleva a la que ya se registró. La base lo garantiza con un índice único (`UX_ServiceOrders_CreationRequestId`), incluso si los dos envíos llegan a la vez. Además, el navegador desactiva el envío repetido de cualquier formulario POST mientras espera la respuesta.
 
 ## 2. Estados y transiciones
 
@@ -77,16 +79,26 @@ Si una transición no es posible, la pantalla de cambio de estado explica por qu
 
 | Acción | Ruta | Reglas |
 | --- | --- | --- |
-| Asignar o reasignar técnico | `/ordenes/{id}/asignar` | Solo técnicos activos y distintos del actual. Se guarda la fecha de asignación |
+| Asignar o reasignar técnico | `/ordenes/{id}/asignar` | Solo técnicos activos y distintos del actual. Se guarda la fecha, el autor y, opcionalmente, una observación o el motivo de la reasignación (hasta 200 caracteres) |
 | Registrar o corregir el diagnóstico | `/ordenes/{id}/diagnostico` | Solo en diagnóstico, en reparación o en espera de repuestos. Hasta 2000 caracteres |
 | Planificación | `/ordenes/{id}/planificacion` | Prioridad, entrega comprometida y costo estimado. Una nueva fecha comprometida no puede quedar en el pasado |
 | Cambiar de estado | `/ordenes/{id}/estado` | Según la tabla anterior |
 
 Una orden cerrada (Entregada o Cancelada) no ofrece formularios. Si alguien envía uno de todos modos, el dominio lo rechaza: "La orden está cerrada (entregada o cancelada) y no admite cambios."
 
-### Historial
+### Historial y línea de tiempo
 
-Cada cambio de estado agrega un registro con el estado anterior, el nuevo, la fecha y la nota. El estado y su registro se guardan en la **misma transacción**: no puede existir uno sin el otro. El historial es de solo inserción: el dominio solo agrega registros y la tabla tiene el trigger `TR_ServiceOrderStatusHistory_AppendOnly`, que rechaza `UPDATE` y `DELETE`. El detalle de la orden lo muestra como una línea de tiempo.
+El detalle de la orden muestra una **línea de tiempo** que une, en orden cronológico, tres registros:
+
+| Registro | Qué guarda |
+| --- | --- |
+| Cambios de estado (`ServiceOrderStatusHistory`) | Estado anterior, nuevo, fecha, nota y autor |
+| Asignaciones (`ServiceOrderAssignments`) | Técnico anterior (en una reasignación), técnico nuevo, fecha, observación o motivo y autor |
+| Planificación y diagnóstico (auditoría) | Cambios de prioridad, entrega comprometida y costo estimado, y registro del diagnóstico, con su autor |
+
+Cada registro se guarda en la **misma transacción** que el cambio que describe: no puede existir uno sin el otro. Los tres son de solo inserción: el dominio solo agrega registros y las tablas tienen triggers (`TR_ServiceOrderStatusHistory_AppendOnly`, `TR_ServiceOrderAssignments_AppendOnly`, `TR_AuditEvents_AppendOnly`) que rechazan `UPDATE` y `DELETE`. Con la misma hora, el estado va antes que la asignación y esta antes que los demás cambios.
+
+Los registros anteriores a la fase 4 no tienen autor (no se guardaba) y se muestran sin él. Las órdenes que ya tenían técnico antes del historial de asignaciones muestran su **asignación vigente** con la fecha real y la nota "Asignación vigente al activar el historial de asignaciones; los cambios anteriores no se registraron.": la migración `BackfillCurrentAssignments` la agregó sin inventar reasignaciones que no se guardaron.
 
 ### Costos
 
@@ -101,7 +113,7 @@ Una orden está **vencida** si sigue abierta y su entrega comprometida ya pasó.
 
 ## 4. Concurrencia: dos personas sobre la misma orden
 
-Cada orden tiene un número de versión (`Version`) que aumenta con cada cambio. Los formularios envían la versión que vio la persona. Si la orden cambió mientras tanto, el cambio se rechaza sin modificar nada y aparece este mensaje: "Otra persona modificó esta orden mientras la revisabas. Revisa los datos actuales y vuelve a intentarlo." EF Core además usa `Version` como token de concurrencia: si dos guardados coinciden en el mismo instante, el segundo falla con el mismo mensaje.
+Cada orden tiene un número de versión (`Version`) que aumenta con cada cambio. Los clientes, los equipos y los técnicos tienen la misma protección: si dos personas editan el mismo registro, la segunda recibe el aviso "Otra persona modificó este cliente mientras lo editabas…" y su cambio no sobrescribe el primero. Los formularios envían la versión que vio la persona. Si la orden cambió mientras tanto, el cambio se rechaza sin modificar nada y aparece este mensaje: "Otra persona modificó esta orden mientras la revisabas. Revisa los datos actuales y vuelve a intentarlo." EF Core además usa `Version` como token de concurrencia: si dos guardados coinciden en el mismo instante, el segundo falla con el mismo mensaje.
 
 Asignar un técnico y desactivarlo son operaciones que pueden coincidir. Ambas bloquean la fila del técnico (`UPDLOCK, ROWLOCK`) dentro de una transacción `READ COMMITTED`:
 
@@ -184,9 +196,10 @@ La lista **Reparaciones** queda así: OS-000014 (126, completar diagnóstico), O
 ### Implementación
 
 - `WorkPrioritizer.Score` calcula la puntuación, sus factores, la lista y la acción. `WorkPrioritizer.Rank` aplica los desempates. Ambos son funciones puras: reciben la hora actual como parámetro, lo que permite probarlos con fechas fijas (`WorkPrioritizerTests`, 32 casos).
-- `ServiceOrderService.GetWorkQueueAsync` obtiene en una sola consulta los datos mínimos de las órdenes abiertas (`OpenOrderSnapshot`), las puntúa en memoria y las reparte en las tres listas.
-- Se priorizan como máximo **500** órdenes abiertas por consulta, empezando por las más antiguas. Si hubiera más, la cola muestra un aviso. Un taller pequeño tiene muy por debajo de esa cantidad de trabajo en curso.
-- Ordenar *n* órdenes cuesta O(*n* log *n*).
+- **La base de datos aplica la misma fórmula.** `ServiceOrderQueries.PriorityScore` traduce la puntuación a SQL: cada término es una comparación con umbrales calculados para el instante del cálculo ("días completos desde la recepción ≥ k" equivale a "recibida antes de ahora − k días"; no se usa `DATEDIFF`, que cuenta cambios de fecha y no días completos). Los umbrales viajan como parámetros, así que la consulta se compila una sola vez.
+- `ServiceOrderService.GetWorkQueueAsync` cuenta las órdenes abiertas de cada estado y pide a la base, para cada lista, solo las **100** órdenes de mayor puntuación con los mismos desempates. `WorkPrioritizer` calcula después la explicación de cada una. Si una lista tiene más de 100, la página muestra el total y dónde ver las demás.
+- Las acciones recomendadas del panel piden a la base las 5 órdenes de mayor puntuación entre todas las abiertas.
+- El instante del cálculo se trunca a milisegundos, la precisión de las columnas, para que la base y `WorkPrioritizer` comparen exactamente los mismos valores. Una prueba comprueba que el orden de la base es idéntico al de `WorkPrioritizer` en más de 300 órdenes situadas en los bordes de la fórmula (justo antes y después de 24 y 72 horas, de cada día completo y del tope de antigüedad), en SQLite y en SQL Server.
 
 ## 6. Dónde aparecen las órdenes
 
@@ -196,6 +209,7 @@ La lista **Reparaciones** queda así: OS-000014 (126, completar diagnóstico), O
 | `/ordenes/{id}` | Detalle: datos de la recepción, cliente, equipo, técnico, costos, siguientes pasos y línea de tiempo |
 | `/cola-de-trabajo` | Las tres listas priorizadas, con la puntuación desglosada y la acción recomendada |
 | `/` (panel) | Indicadores reales, distribución por estado y por prioridad, acciones recomendadas, próximas entregas, órdenes recientes y carga por técnico |
-| Detalle de un cliente | Sus últimas 10 órdenes y el total, con acceso a "Nueva orden" para ese cliente |
+| `/auditoria` (solo Administrador) | Quién registró, asignó, reasignó, cambió de estado, canceló, entregó o planificó cada orden, y cuándo |
+| Detalle de un cliente | Sus últimas 10 órdenes y el total, con acceso a "Nueva orden" para ese cliente. Al desactivarlo, el diálogo avisa cuántas órdenes abiertas tiene: seguirán su curso hasta la entrega, pero no se le podrán registrar órdenes ni equipos nuevos |
 | Detalle de un equipo | Sus órdenes, de la más reciente a la más antigua |
 | Detalle de un técnico | Sus órdenes abiertas (hasta 20, por fecha de entrega comprometida), el total y un enlace a todas sus órdenes. Si tiene órdenes abiertas, no se puede desactivar |

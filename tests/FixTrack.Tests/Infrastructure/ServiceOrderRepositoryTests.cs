@@ -1,7 +1,9 @@
 using FixTrack.Application.ServiceOrders;
 using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
+using FixTrack.Infrastructure.Persistence;
 using FixTrack.Infrastructure.Persistence.Repositories;
+using Microsoft.EntityFrameworkCore;
 
 namespace FixTrack.Tests.Infrastructure;
 
@@ -198,18 +200,58 @@ public sealed class ServiceOrderRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task Open_orders_for_prioritization_start_with_the_oldest()
+    public async Task The_database_ranks_open_orders_exactly_like_the_prioritizer()
+    {
+        var now = new DateTime(2026, 10, 20, 15, 30, 45, 123, DateTimeKind.Utc);
+        var seeded = await PrioritizationGrid.SeedAsync(_database.CreateContext, now, Token);
+        await using var context = _database.CreateContext();
+
+        var ranked = await PrioritizationGrid.RankedByDatabaseAsync(context, now, take: 1000, Token);
+        var firstFive = await PrioritizationGrid.RankedByDatabaseAsync(context, now, take: 5, Token);
+
+        Assert.True(seeded > 250);
+        Assert.Equal(seeded, ranked.Count);
+        Assert.Equal(PrioritizationGrid.ExpectedOrder(ranked, now), ranked.Select(order => order.Id));
+        Assert.Equal(ranked.Take(5).Select(order => order.Id), firstFive.Select(order => order.Id));
+    }
+
+    [Fact]
+    public void The_score_thresholds_travel_as_parameters_so_the_query_is_compiled_once()
+    {
+        // Proveedor de SQL Server sin conexión: ToQueryString solo traduce.
+        using var context = new FixTrackDbContext(new DbContextOptionsBuilder<FixTrackDbContext>()
+            .UseSqlServer("Server=tcp:no-existe.invalid;Database=NoUsar;").Options);
+        var now = new DateTime(2026, 10, 20, 15, 30, 45, 123, DateTimeKind.Utc);
+
+        var sql = context.ServiceOrders.OrderByDescending(ServiceOrderQueries.PriorityScore(now)).Select(order => order.Id).ToQueryString();
+        var query = sql[sql.IndexOf("SELECT", StringComparison.Ordinal)..];
+
+        Assert.DoesNotContain("2026", query);
+        Assert.DoesNotContain("DATEDIFF", query);
+        Assert.Contains("ORDER BY CASE", query);
+        Assert.Contains("[s].[ReceivedAtUtc] <= @", query);
+    }
+
+    [Fact]
+    public async Task Only_open_orders_in_the_requested_statuses_are_ranked_and_counted()
     {
         await ServiceOrderSeed.SeedAsync(_database, Now, Token);
         await using var context = _database.CreateContext();
         var repository = new ServiceOrderRepository(context);
 
-        var all = await repository.ListOpenAsync(10, Token);
-        var limited = await repository.ListOpenAsync(2, Token);
+        var diagnosing = await repository.ListMostUrgentAsync([ServiceOrderStatus.Diagnosing], Now, 10, Token);
+        var all = await repository.ListMostUrgentAsync(ServiceOrderWorkflow.OpenStatuses, Now, 10, Token);
+        var counts = await repository.CountOpenByStatusAsync(Token);
 
-        Assert.Equal([1, 2, 5], all.Select(order => order.Id));
-        Assert.Equal([1, 2], limited.Select(order => order.Id));
-        Assert.Equal(("Carla Ruiz", "Ana Morales", "Dell"), (all[0].TechnicianName, all[0].CustomerName, all[0].DeviceBrand));
-        Assert.Null(all[1].TechnicianName);
+        Assert.Equal([5], diagnosing.Select(order => order.Id));
+        Assert.Equal([1, 2, 5], all.Select(order => order.Id).Order());
+        Assert.Equal(("Carla Ruiz", "Ana Morales", "Dell"), (all.Single(o => o.Id == 1).TechnicianName, all.Single(o => o.Id == 1).CustomerName, all.Single(o => o.Id == 1).DeviceBrand));
+        Assert.Null(all.Single(o => o.Id == 2).TechnicianName);
+        Assert.Equal(new Dictionary<ServiceOrderStatus, int>
+        {
+            [ServiceOrderStatus.InRepair] = 1,
+            [ServiceOrderStatus.Received] = 1,
+            [ServiceOrderStatus.Diagnosing] = 1,
+        }, counts);
     }
 }

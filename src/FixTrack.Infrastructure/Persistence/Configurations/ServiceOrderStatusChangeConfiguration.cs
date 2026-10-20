@@ -1,3 +1,4 @@
+using FixTrack.Domain.Common;
 using FixTrack.Domain.ServiceOrders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -24,6 +25,8 @@ internal sealed class ServiceOrderStatusChangeConfiguration : IEntityTypeConfigu
 
         builder.HasKey(change => change.Id);
         builder.Property(change => change.Note).HasMaxLength(ServiceOrderStatusChange.NoteMaxLength);
+        builder.Property(change => change.ChangedByUserId).HasMaxLength(Actor.UserIdMaxLength);
+        builder.Property(change => change.ChangedByName).HasMaxLength(Actor.NameMaxLength);
 
         builder.HasIndex(change => new { change.ServiceOrderId, change.ChangedAtUtc })
             .HasDatabaseName("IX_ServiceOrderStatusHistory_ServiceOrderId_ChangedAtUtc");

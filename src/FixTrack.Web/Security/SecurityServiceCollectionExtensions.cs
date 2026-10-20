@@ -1,8 +1,8 @@
 using System.Threading.RateLimiting;
+using FixTrack.Application.Common;
 using FixTrack.Infrastructure.Identity;
 using FixTrack.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 
 namespace FixTrack.Web.Security;
@@ -57,11 +57,14 @@ public static class SecurityServiceCollectionExtensions
         services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.FromMinutes(1));
 
         services.AddAuthorization(AuthorizationPolicies.Configure);
+        services.AddScoped<FailedLoginEqualizer>();
 
-        // Las claves que cifran cookies y tokens se guardan en la base: sobreviven a reinicios del contenedor.
-        services.AddDataProtection()
-            .SetApplicationName("FixTrack")
-            .PersistKeysToDbContext<FixTrackDbContext>();
+        // Autor de los cambios para el historial y la auditoría.
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUser, HttpCurrentUser>();
+
+        // Claves que cifran cookies y tokens: en la base (cifradas con un certificado) fuera de Desarrollo.
+        services.AddFixTrackDataProtection(configuration, environment);
 
         var attemptsPerMinute = configuration.GetValue("Security:LoginAttemptsPerMinute", 10);
         services.AddRateLimiter(options =>

@@ -70,6 +70,10 @@
             }' />
         </div>
 
+        @if (!isNew)
+        {
+            <input type="hidden" name="Version" value="@Model.Form.Version" />
+        }
         <footer class="form-card__actions">
             <a class="button button--secondary" href="@cancelUrl">Cancelar</a>
             <button class="button button--primary" type="submit">

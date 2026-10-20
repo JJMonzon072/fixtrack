@@ -15,7 +15,8 @@ public interface ITechnicianService
     /// <summary>Registra un técnico activo. Si tiene éxito, devuelve su Id.</summary>
     Task<CommandResult<int>> CreateAsync(TechnicianInput input, CancellationToken cancellationToken);
 
-    Task<CommandResult> UpdateAsync(int id, TechnicianInput input, CancellationToken cancellationToken);
+    /// <param name="version">Versión que vio quien edita: si cambió, se devuelve un conflicto sin guardar.</param>
+    Task<CommandResult> UpdateAsync(int id, TechnicianInput input, int version, CancellationToken cancellationToken);
 
     /// <summary>
     /// Desactiva al técnico si no tiene órdenes abiertas asignadas. La comprobación y la desactivación se hacen

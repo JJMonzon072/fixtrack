@@ -4,6 +4,7 @@ using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Application.Devices;
 using FixTrack.Application.ServiceOrders;
+using FixTrack.Domain.Auditing;
 using FixTrack.Domain.ServiceOrders;
 using Microsoft.EntityFrameworkCore;
 
@@ -94,8 +95,9 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
         return new ServiceOrderSearchResult(new PagedResult<ServiceOrderListItem>(items, page, ServiceOrderSearch.PageSize, total), counts);
     }
 
-    public Task<ServiceOrderDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken) =>
-        db.ServiceOrders
+    public async Task<ServiceOrderDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken)
+    {
+        var details = await db.ServiceOrders
             .AsNoTracking()
             .Where(order => order.Id == id)
             .Select(order => new ServiceOrderDetails(
@@ -130,9 +132,48 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
                 order.StatusHistory
                     .OrderBy(change => change.ChangedAtUtc)
                     .ThenBy(change => change.Id)
-                    .Select(change => new ServiceOrderHistoryEntry(change.FromStatus, change.ToStatus, change.ChangedAtUtc, change.Note))
-                    .ToList()))
+                    .Select(change => new ServiceOrderHistoryEntry(change.FromStatus, change.ToStatus, change.ChangedAtUtc, change.Note, change.ChangedByName))
+                    .ToList(),
+                Array.Empty<ServiceOrderAssignmentEntry>(),
+                Array.Empty<ServiceOrderActivityEntry>()))
             .SingleOrDefaultAsync(cancellationToken);
+        if (details is null)
+        {
+            return null;
+        }
+
+        // Segunda consulta: dos colecciones en la misma multiplicarían las filas (historial × asignaciones).
+        var assignments = await db.ServiceOrderAssignments
+            .AsNoTracking()
+            .Where(assignment => assignment.ServiceOrderId == id)
+            .OrderBy(assignment => assignment.AssignedAtUtc)
+            .ThenBy(assignment => assignment.Id)
+            .Select(assignment => new ServiceOrderAssignmentEntry(
+                db.Technicians.Where(technician => technician.Id == assignment.FromTechnicianId).Select(technician => technician.FullName).FirstOrDefault(),
+                assignment.ToTechnician!.FullName,
+                assignment.AssignedAtUtc,
+                assignment.AssignedByName,
+                assignment.Note))
+            .ToListAsync(cancellationToken);
+
+        // Tercera consulta: los cambios de planificación y diagnóstico están en la auditoría.
+        var orderId = id.ToString(CultureInfo.InvariantCulture);
+        var prefix = details.Number + ": ";
+        var activity = await db.AuditEvents
+            .AsNoTracking()
+            .Where(audit => audit.EntityType == AuditActions.Order && audit.EntityId == orderId
+                && (audit.Action == AuditActions.PlanChanged || audit.Action == AuditActions.DiagnosisRecorded))
+            .OrderBy(audit => audit.OccurredAtUtc)
+            .ThenBy(audit => audit.Id)
+            .Select(audit => new ServiceOrderActivityEntry(audit.Action, audit.OccurredAtUtc, audit.UserName, audit.Summary))
+            .ToListAsync(cancellationToken);
+
+        return details with
+        {
+            Assignments = assignments,
+            Activity = [.. activity.Select(entry => entry.Summary.StartsWith(prefix, StringComparison.Ordinal) ? entry with { Summary = entry.Summary[prefix.Length..] } : entry)],
+        };
+    }
 
     public async Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, int take, CancellationToken cancellationToken)
     {
@@ -159,13 +200,21 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
         return new CustomerServiceOrders(counts.Total, counts.Open, recent);
     }
 
-    public async Task<IReadOnlyList<OpenOrderSnapshot>> ListOpenAsync(int limit, CancellationToken cancellationToken) =>
+    public async Task<IReadOnlyList<OpenOrderSnapshot>> ListMostUrgentAsync(
+        IReadOnlyCollection<ServiceOrderStatus> statuses,
+        DateTime nowUtc,
+        int take,
+        CancellationToken cancellationToken) =>
         await db.ServiceOrders
             .AsNoTracking()
             .WhereOpen()
-            .OrderBy(order => order.ReceivedAtUtc)
+            .Where(order => statuses.Contains(order.Status))
+            .OrderByDescending(ServiceOrderQueries.PriorityScore(nowUtc))
+            .ThenBy(order => order.PromisedAtUtc == null)
+            .ThenBy(order => order.PromisedAtUtc)
+            .ThenBy(order => order.ReceivedAtUtc)
             .ThenBy(order => order.Id)
-            .Take(limit)
+            .Take(take)
             .Select(order => new OpenOrderSnapshot(
                 order.Id,
                 order.Status,
@@ -180,8 +229,22 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
                 order.Device.Model))
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyDictionary<ServiceOrderStatus, int>> CountOpenByStatusAsync(CancellationToken cancellationToken) =>
+        await db.ServiceOrders
+            .AsNoTracking()
+            .WhereOpen()
+            .GroupBy(order => order.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(row => row.Status, row => row.Count, cancellationToken);
+
     public Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken) =>
         db.ServiceOrders.SingleOrDefaultAsync(order => order.Id == id, cancellationToken);
+
+    public Task<int?> FindIdByCreationRequestAsync(Guid requestId, CancellationToken cancellationToken) =>
+        db.ServiceOrders.AsNoTracking()
+            .Where(order => order.CreationRequestId == requestId)
+            .Select(order => (int?)order.Id)
+            .SingleOrDefaultAsync(cancellationToken);
 
     public void Add(ServiceOrder order) => db.ServiceOrders.Add(order);
 

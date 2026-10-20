@@ -1,4 +1,6 @@
+using System.Globalization;
 using FixTrack.Application.Common;
+using FixTrack.Domain.Auditing;
 using FixTrack.Domain.Common;
 using FixTrack.Domain.Customers;
 
@@ -7,8 +9,12 @@ namespace FixTrack.Application.Customers;
 internal sealed class CustomerService(
     ICustomerRepository customers,
     IUnitOfWork unitOfWork,
+    IAuditLog audit,
     TimeProvider clock) : ICustomerService
 {
+    internal const string StaleMessage =
+        "Otra persona modificó este cliente mientras lo editabas. Revisa los datos actuales y vuelve a intentarlo.";
+
     internal const string DuplicateEmailMessage = "Ya existe un cliente registrado con este correo electrónico.";
     internal const int SuggestionLimit = 8;
 
@@ -64,12 +70,18 @@ internal sealed class CustomerService(
         return CommandResult<int>.Success(customer.Id);
     }
 
-    public async Task<CommandResult> UpdateAsync(int id, CustomerInput input, CancellationToken cancellationToken)
+    public async Task<CommandResult> UpdateAsync(int id, CustomerInput input, int version, CancellationToken cancellationToken)
     {
         var customer = await FindAsync(id, cancellationToken);
         if (customer is null)
         {
             return CommandResult.NotFound();
+        }
+
+        // Concurrencia optimista: si otra persona guardó después de abrir el formulario, no se sobrescribe su cambio.
+        if (customer.Version != version)
+        {
+            return CommandResult.Conflict(StaleMessage);
         }
 
         var data = Normalize(input);
@@ -80,7 +92,14 @@ internal sealed class CustomerService(
         }
 
         customer.UpdateDetails(data.FullName!, data.Phone!, data.Email, data.Notes, UtcNow);
-        return await TrySaveAsync(cancellationToken) ? CommandResult.Success() : CommandResult.Invalid(EmailTaken());
+        try
+        {
+            return await TrySaveAsync(cancellationToken) ? CommandResult.Success() : CommandResult.Invalid(EmailTaken());
+        }
+        catch (ConcurrencyConflictException)
+        {
+            return CommandResult.Conflict(StaleMessage);
+        }
     }
 
     public async Task<CommandResult> DeactivateAsync(int id, CancellationToken cancellationToken)
@@ -97,6 +116,7 @@ internal sealed class CustomerService(
         }
 
         customer.Deactivate(UtcNow);
+        Record(customer, AuditActions.CustomerDeactivated, "desactivado");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return CommandResult.Success();
     }
@@ -115,6 +135,7 @@ internal sealed class CustomerService(
         }
 
         customer.Reactivate(UtcNow);
+        Record(customer, AuditActions.CustomerReactivated, "reactivado");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return CommandResult.Success();
     }
@@ -162,4 +183,7 @@ internal sealed class CustomerService(
 
     private static Dictionary<string, string> EmailTaken() =>
         new() { [nameof(Customer.Email)] = DuplicateEmailMessage };
+
+    private void Record(Customer customer, string action, string what) =>
+        audit.Record(action, AuditActions.Customer, customer.Id.ToString(CultureInfo.InvariantCulture), $"Cliente {customer.FullName} {what}.");
 }

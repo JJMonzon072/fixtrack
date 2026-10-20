@@ -144,6 +144,36 @@ public sealed class CustomersPageTests(FixTrackWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task A_stale_edit_form_does_not_overwrite_a_newer_change()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var id = await FormPost.CreateCustomerAsync(client, "Cliente Concurrente", "5555-7300");
+        var page = await client.GetStringAsync($"/clientes/{id}/editar", Token);
+        var version = System.Text.RegularExpressions.Regex.Match(page, "name=\"Version\" value=\"(?<v>\\d+)\"").Groups["v"].Value;
+
+        // Primera pestaña: guarda. Segunda pestaña: envía el formulario que abrió antes.
+        await FormPost.SendAsync(client, $"/clientes/{id}/editar", new()
+        {
+            ["FullName"] = "Cliente Actualizado",
+            ["Phone"] = "5555-7300",
+            ["Version"] = version,
+        });
+        var stale = await (await FormPost.SendAsync(client, $"/clientes/{id}/editar", new()
+        {
+            ["FullName"] = "Cliente Desactualizado",
+            ["Phone"] = "5555-0000",
+            ["Version"] = version,
+        })).Content.ReadAsStringAsync(Token);
+
+        Assert.Equal("0", version);
+        Assert.Contains("Otra persona modificó este cliente mientras lo editabas", stale);
+        Assert.Contains("value=\"Cliente Actualizado\"", stale);
+        var details = await client.GetStringAsync($"/clientes/{id}", Token);
+        Assert.Contains("Cliente Actualizado", details);
+        Assert.DoesNotContain("Cliente Desactualizado", details);
+    }
+
+    [Fact]
     public async Task User_input_is_html_encoded()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();

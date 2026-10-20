@@ -138,6 +138,7 @@ public sealed class DeviceServiceTests
         var result = await _service.UpdateAsync(
             created.Value,
             new DeviceInput(DeviceType.Laptop, "Dell", "Latitude 7450", "SN-001", "Cambio de teclado"),
+            version: 0,
             Token);
 
         Assert.True(result.Succeeded);
@@ -155,7 +156,7 @@ public sealed class DeviceServiceTests
         var created = await _service.RegisterAsync(new RegisterDeviceInput(owner.Id, Laptop()), Token);
         owner.Deactivate(Now.UtcDateTime);
 
-        var result = await _service.UpdateAsync(created.Value, Laptop() with { Notes = "Equipo entregado" }, Token);
+        var result = await _service.UpdateAsync(created.Value, Laptop() with { Notes = "Equipo entregado" }, version: 0, Token);
 
         Assert.True(result.Succeeded);
     }
@@ -163,8 +164,22 @@ public sealed class DeviceServiceTests
     [Fact]
     public async Task Unknown_devices_are_reported_as_not_found()
     {
-        Assert.Equal(CommandStatus.NotFound, (await _service.UpdateAsync(99, Laptop(), Token)).Status);
+        Assert.Equal(CommandStatus.NotFound, (await _service.UpdateAsync(99, Laptop(), version: 0, Token)).Status);
         Assert.Null(await _service.GetAsync(0, Token));
+    }
+
+    [Fact]
+    public async Task A_stale_edit_is_rejected_without_changes()
+    {
+        var owner = AddCustomer("Ana López");
+        var created = await _service.RegisterAsync(new RegisterDeviceInput(owner.Id, Laptop()), Token);
+        Assert.True((await _service.UpdateAsync(created.Value, Laptop() with { Notes = "Primera edición" }, version: 0, Token)).Succeeded);
+
+        var stale = await _service.UpdateAsync(created.Value, Laptop() with { Notes = "Edición desactualizada" }, version: 0, Token);
+
+        Assert.Equal(CommandStatus.Conflict, stale.Status);
+        Assert.Equal(DeviceService.StaleMessage, stale.Message);
+        Assert.Equal("Primera edición", _store.Devices.Single().Notes);
     }
 
     [Fact]

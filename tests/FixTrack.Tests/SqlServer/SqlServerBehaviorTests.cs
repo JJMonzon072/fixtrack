@@ -6,28 +6,40 @@ using FixTrack.Application.Technicians;
 using FixTrack.Domain.ServiceOrders;
 using FixTrack.Infrastructure.Persistence;
 using FixTrack.Infrastructure.Persistence.Repositories;
+using FixTrack.Tests.Application;
+using FixTrack.Tests.Infrastructure;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FixTrack.Tests.SqlServer;
 
 /// <summary>
 /// Comportamientos que SQLite no reproduce y se comprueban contra SQL Server: el trigger del historial, los
-/// bloqueos UPDLOCK, la concurrencia optimista, la intercalación sin tildes y las agregaciones del panel. Solo se ejecutan si la variable de
-/// entorno <c>FIXTRACK_TEST_SQLSERVER</c> contiene una cadena de conexión; en GitHub Actions se omiten.
+/// bloqueos UPDLOCK, la concurrencia optimista, la intercalación sin tildes y las agregaciones del panel.
+/// Se ejecutan contra la base indicada en <c>FIXTRACK_TEST_SQLSERVER</c> (por ejemplo, una base ya migrada) o, si no
+/// existe, contra la base desechable de <see cref="DisposableSqlServerDatabase"/>. Sin ninguna de las dos se omiten.
 /// Cada prueba trabaja dentro de transacciones que se revierten, de modo que no deja cambios en la base.
 /// </summary>
-public sealed class SqlServerBehaviorTests
+[Collection(SqlServerCollection.Name)]
+public sealed class SqlServerBehaviorTests(DisposableSqlServerDatabase disposable)
 {
     private const string ConnectionVariable = "FIXTRACK_TEST_SQLSERVER";
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    private static string ConnectionString()
+    private string ConnectionString()
     {
         var value = Environment.GetEnvironmentVariable(ConnectionVariable);
-        Assert.SkipWhen(string.IsNullOrWhiteSpace(value), $"Prueba de SQL Server omitida: define {ConnectionVariable} para ejecutarla.");
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            value = disposable.ConnectionString;
+        }
+
+        Assert.SkipWhen(
+            string.IsNullOrWhiteSpace(value),
+            $"Prueba de SQL Server omitida: define {ConnectionVariable} o {DisposableSqlServerDatabase.ServerVariable} para ejecutarla.");
         return value!;
     }
 
@@ -65,6 +77,62 @@ public sealed class SqlServerBehaviorTests
         Assert.Equal(50001, delete.Number);
 
         // El error del trigger ya revirtió la transacción en el servidor; al liberarla no queda nada pendiente.
+    }
+
+    [Theory]
+    [InlineData("UPDATE [ServiceOrderAssignments] SET [Note] = N'modificada' WHERE [Id] = {0}")]
+    [InlineData("DELETE FROM [ServiceOrderAssignments] WHERE [Id] = {0}")]
+    public async Task The_assignment_record_rejects_updates_and_deletes(string sql)
+    {
+        await using var context = CreateContext(ConnectionString());
+        await using var transaction = await context.Database.BeginTransactionAsync(Token);
+        var assignmentId = await context.ServiceOrderAssignments.Select(assignment => assignment.Id).FirstOrDefaultAsync(Token);
+        Assert.SkipWhen(assignmentId == 0, "No hay asignaciones para probar el trigger.");
+
+        var error = await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlRawAsync(sql, [assignmentId], Token));
+
+        Assert.Equal(50001, error.Number);
+    }
+
+    [Theory]
+    [InlineData("UPDATE [AuditEvents] SET [Summary] = N'modificado' WHERE [Id] = {0}")]
+    [InlineData("DELETE FROM [AuditEvents] WHERE [Id] = {0}")]
+    public async Task The_audit_log_rejects_updates_and_deletes(string sql)
+    {
+        await using var context = CreateContext(ConnectionString());
+        await using var transaction = await context.Database.BeginTransactionAsync(Token);
+
+        // Un evento propio dentro de la transacción revertida: la prueba no deja datos.
+        var audit = new FixTrack.Domain.Auditing.AuditEvent("prueba.trigger", "prueba", "1", "Evento de prueba.", FakeCurrentUser.Instance.Actor, DateTime.UtcNow);
+        context.AuditEvents.Add(audit);
+        await context.SaveChangesAsync(Token);
+
+        var error = await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlRawAsync(sql, [audit.Id], Token));
+
+        Assert.Equal(50001, error.Number);
+    }
+
+    [Fact]
+    public async Task The_database_ranks_open_orders_exactly_like_the_prioritizer()
+    {
+        // Dentro de una transacción revertida: la rejilla no queda en la base.
+        await using var context = CreateContext(ConnectionString());
+        await using var transaction = await context.Database.BeginTransactionAsync(Token);
+        var now = new DateTime(2026, 10, 20, 15, 30, 45, 123, DateTimeKind.Utc);
+        var seeded = await PrioritizationGrid.SeedAsync(() => ShareTransaction(context), now, Token);
+
+        var ranked = await PrioritizationGrid.RankedByDatabaseAsync(context, now, take: 5000, Token);
+
+        Assert.True(seeded > 250);
+        Assert.Equal(PrioritizationGrid.ExpectedOrder(ranked, now), ranked.Select(order => order.Id));
+    }
+
+    /// <summary>Un contexto que usa la misma conexión y transacción que <paramref name="context"/>.</summary>
+    private static FixTrackDbContext ShareTransaction(FixTrackDbContext context)
+    {
+        var shared = CreateContext((SqlConnection)context.Database.GetDbConnection());
+        shared.Database.UseTransaction(context.Database.CurrentTransaction!.GetDbTransaction());
+        return shared;
     }
 
     [Fact]
@@ -157,8 +225,9 @@ public sealed class SqlServerBehaviorTests
     public async Task Order_search_ignores_accents_and_case_with_the_spanish_collation()
     {
         await using var context = CreateContext(ConnectionString());
-        var name = await context.ServiceOrders.Select(order => order.Device!.Customer!.FullName).FirstOrDefaultAsync(Token);
-        Assert.SkipWhen(name is null || !name.Any(c => "áéíóúÁÉÍÓÚ".Contains(c)), "No hay clientes con tildes y órdenes para probar la búsqueda.");
+        var names = await context.ServiceOrders.Select(order => order.Device!.Customer!.FullName).Distinct().ToListAsync(Token);
+        var name = names.FirstOrDefault(candidate => candidate.Any(c => "áéíóúÁÉÍÓÚ".Contains(c)));
+        Assert.SkipWhen(name is null, "No hay clientes con tildes y órdenes para probar la búsqueda.");
 
         var withoutAccents = new string(name!.Normalize(System.Text.NormalizationForm.FormD)
             .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
@@ -203,6 +272,8 @@ public sealed class SqlServerBehaviorTests
             .AddApplication()
             .AddSingleton<ITechnicianRepository>(new TechnicianRepository(context))
             .AddSingleton<IUnitOfWork>(new EfUnitOfWork(context))
+            .AddSingleton<ICurrentUser>(FakeCurrentUser.Instance)
+            .AddSingleton<IAuditLog>(new EfAuditLog(context, FakeCurrentUser.Instance, TimeProvider.System))
             .AddSingleton(TimeProvider.System)
             .BuildServiceProvider()
             .GetRequiredService<ITechnicianService>();

@@ -9,7 +9,7 @@
     ViewData["ParentTitle"] = order.Number;
     ViewData["ParentUrl"] = Url.Action("Details", new { id = order.Id });
 
-    var errors = FormErrors.From(ViewData.ModelState, ("TechnicianId", "Técnico", "technician-options"));
+    var errors = FormErrors.From(ViewData.ModelState, ("TechnicianId", "Técnico", "technician-options"), ("Note", "Motivo", null));
     var error = errors.For("TechnicianId");
     var maxLoad = Math.Max(1, Model.Technicians.Select(t => t.OpenOrderCount).DefaultIfEmpty(0).Max());
 }
@@ -76,6 +76,15 @@
                         <p class="field__error" id="TechnicianId-error"><icon name="triangle-alert" />@error</p>
                     }
                 </fieldset>
+            }
+            @if (Model.Technicians.Count > 0)
+            {
+                <partial name="_FormField" model='new FormField("Note", current is null ? "Observación" : "Motivo de la reasignación")
+                {
+                    Value = Model.Note, Error = errors.For("Note"), Optional = true, Wide = true, Rows = 2,
+                    MaxLength = FixTrack.Domain.ServiceOrders.ServiceOrderAssignment.NoteMaxLength,
+                    Hint = "Queda en el historial de la orden junto con tu nombre y la fecha.",
+                }' />
             }
         </div>
 

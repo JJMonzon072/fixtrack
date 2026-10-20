@@ -14,10 +14,14 @@ public sealed class TechnicianFormModel
 
     public string? Email { get; set; }
 
+    /// <summary>Versión del registro cuando se abrió el formulario (concurrencia optimista).</summary>
+    public int Version { get; set; }
+
     public TechnicianInput ToInput() => new(FullName, Specialty, Phone, Email);
 
     public static TechnicianFormModel From(TechnicianDetails technician) => new()
     {
+        Version = technician.Version,
         FullName = technician.FullName,
         Specialty = technician.Specialty,
         Phone = technician.Phone,

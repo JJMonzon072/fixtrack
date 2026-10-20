@@ -18,11 +18,17 @@ public interface IServiceOrderService
     /// <summary>Cola de trabajo: órdenes abiertas puntuadas con <see cref="Domain.ServiceOrders.WorkPrioritizer"/> en este momento.</summary>
     Task<WorkQueueResult> GetWorkQueueAsync(CancellationToken cancellationToken);
 
+    /// <summary>Las <paramref name="take"/> órdenes abiertas de mayor puntuación, de cualquier lista.</summary>
+    Task<IReadOnlyList<PrioritizedOrder>> GetMostUrgentAsync(int take, CancellationToken cancellationToken);
+
     /// <summary>Registra la recepción de un equipo. Si tiene éxito, devuelve el Id de la orden.</summary>
     Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken);
 
-    /// <summary>Asigna o reasigna el técnico responsable (solo técnicos activos).</summary>
-    Task<CommandResult> AssignTechnicianAsync(int id, int? technicianId, int version, CancellationToken cancellationToken);
+    /// <summary>
+    /// Asigna o reasigna el técnico responsable (solo técnicos activos). Queda registrado quién lo hizo, cuándo, el
+    /// técnico anterior y el motivo (opcional, hasta 200 caracteres).
+    /// </summary>
+    Task<CommandResult> AssignTechnicianAsync(int id, int? technicianId, string? note, int version, CancellationToken cancellationToken);
 
     Task<CommandResult> RecordDiagnosisAsync(int id, string? diagnosis, int version, CancellationToken cancellationToken);
 

@@ -16,6 +16,8 @@ namespace FixTrack.Tests.Application;
 /// <summary>Panel y cola de trabajo con repositorios en memoria.</summary>
 public sealed class DashboardServiceTests
 {
+    private readonly FakeAuditLog _audit = new();
+
     private static readonly DateTimeOffset Now = new(2026, 10, 20, 15, 0, 0, TimeSpan.Zero);
 
     private readonly InMemoryStore _store = new();
@@ -32,6 +34,8 @@ public sealed class DashboardServiceTests
             .AddSingleton<ITechnicianRepository>(new FakeTechnicianRepository(_store))
             .AddSingleton<ICustomerRepository>(new FakeCustomerRepository(_store))
             .AddSingleton<IUnitOfWork>(new FakeUnitOfWork(_store))
+            .AddSingleton<ICurrentUser>(FakeCurrentUser.Instance)
+            .AddSingleton<IAuditLog>(_audit)
             .AddSingleton<TimeProvider>(new FixedClock(Now))
             .BuildServiceProvider();
     }
@@ -120,6 +124,29 @@ public sealed class DashboardServiceTests
         Assert.Equal(RecommendedAction.AssignTechnician, queue.Repair[2].Score.Action);
         Assert.False(queue.IsTruncated);
         Assert.Equal(5, queue.Count);
+    }
+
+    [Fact]
+    public async Task Each_list_shows_at_most_its_highest_scores_and_keeps_the_real_total()
+    {
+        var luis = AddTechnician("Luis Pérez");
+        var lowest = Enumerable.Range(0, 3).Select(_ => AddOrder(ServiceOrderPriority.Low, ServiceOrderStatus.Received, 0, null, luis)).ToList();
+        for (var order = 0; order < ServiceOrderService.MaxPerQueue; order++)
+        {
+            AddOrder(ServiceOrderPriority.High, ServiceOrderStatus.Diagnosing, order % 20, null, luis);
+        }
+
+        var parts = AddOrder(ServiceOrderPriority.Low, ServiceOrderStatus.AwaitingParts, 1, null, luis);
+
+        var queue = await _services.GetRequiredService<IServiceOrderService>().GetWorkQueueAsync(Token);
+
+        Assert.Equal(ServiceOrderService.MaxPerQueue, queue.Repair.Count);
+        Assert.Equal(ServiceOrderService.MaxPerQueue + lowest.Count, queue.TotalOf(WorkQueue.Repair));
+        Assert.DoesNotContain(queue.Repair, item => lowest.Any(order => order.Id == item.Order.Id));
+        Assert.Equal([parts.Id], queue.AwaitingParts.Select(item => item.Order.Id));
+        Assert.Equal(1, queue.TotalOf(WorkQueue.AwaitingParts));
+        Assert.Equal(0, queue.TotalOf(WorkQueue.ReadyForPickup));
+        Assert.True(queue.IsTruncated);
     }
 
     [Fact]

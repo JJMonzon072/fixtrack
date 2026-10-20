@@ -372,6 +372,30 @@
         });
     }
 
+    // --- Envío único: un doble clic no manda dos veces el mismo formulario -------
+    // Solo para formularios POST. El servidor también lo controla (por ejemplo, una orden se registra una vez);
+    // esto evita además la espera y el aviso de un segundo envío. Al volver con el botón Atrás se puede reenviar.
+
+    document.addEventListener("submit", (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || event.defaultPrevented || form.method.toLowerCase() !== "post") return;
+
+        if (form.hasAttribute("data-submitting")) {
+            event.preventDefault();
+            return;
+        }
+
+        form.setAttribute("data-submitting", "");
+        form.querySelectorAll("button[type='submit']").forEach((button) => button.setAttribute("aria-disabled", "true"));
+    });
+
+    window.addEventListener("pageshow", () => {
+        document.querySelectorAll("form[data-submitting]").forEach((form) => {
+            form.removeAttribute("data-submitting");
+            form.querySelectorAll("button[aria-disabled='true']").forEach((button) => button.removeAttribute("aria-disabled"));
+        });
+    });
+
     // --- Resumen de errores: recibe el foco para que se anuncie y se vea ------
 
     document.querySelector("[data-error-summary]")?.focus();

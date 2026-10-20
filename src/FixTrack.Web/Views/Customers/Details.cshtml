@@ -244,6 +244,14 @@
                 El cliente dejará de aparecer en el listado de activos. No se elimina ningún dato: su información,
                 equipos e historial se conservan y puedes reactivarlo en cualquier momento.
             </p>
+            @if (Model.Orders.OpenCount > 0)
+            {
+                <p class="dialog__text dialog__text--warning" id="deactivate-open-orders">
+                    <icon name="triangle-alert" />
+                    @(Model.Orders.OpenCount == 1 ? "Tiene 1 orden abierta, que seguirá" : $"Tiene {Model.Orders.OpenCount} órdenes abiertas, que seguirán")
+                    su curso hasta la entrega. Mientras esté inactivo no podrá registrarle órdenes ni equipos nuevos.
+                </p>
+            }
             <div class="dialog__actions">
                 <button class="button button--secondary" type="button" data-dialog-close>Cancelar</button>
                 <button class="button button--danger" type="submit">Desactivar cliente</button>

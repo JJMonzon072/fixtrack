@@ -38,6 +38,12 @@ public sealed class Customer : Entity
 
     public DateTime? UpdatedAtUtc { get; private set; }
 
+    /// <summary>
+    /// Aumenta con cada cambio. Es el token de concurrencia optimista: el formulario de edición envía la versión que vio
+    /// y, si otra persona guardó antes, el cambio se rechaza en lugar de sobrescribir el suyo.
+    /// </summary>
+    public int Version { get; private set; }
+
     /// <summary>Momento de la última desactivación. Es <c>null</c> mientras el cliente está activo.</summary>
     public DateTime? DeactivatedAtUtc { get; private set; }
 
@@ -69,6 +75,7 @@ public sealed class Customer : Entity
     {
         SetDetails(fullName, phone, email, notes);
         UpdatedAtUtc = UtcClock.Ensure(updatedAtUtc, nameof(updatedAtUtc));
+        Version++;
     }
 
     public void Deactivate(DateTime deactivatedAtUtc)
@@ -81,6 +88,7 @@ public sealed class Customer : Entity
         IsActive = false;
         DeactivatedAtUtc = UtcClock.Ensure(deactivatedAtUtc, nameof(deactivatedAtUtc));
         UpdatedAtUtc = DeactivatedAtUtc;
+        Version++;
     }
 
     public void Reactivate(DateTime reactivatedAtUtc)
@@ -93,6 +101,7 @@ public sealed class Customer : Entity
         IsActive = true;
         DeactivatedAtUtc = null;
         UpdatedAtUtc = UtcClock.Ensure(reactivatedAtUtc, nameof(reactivatedAtUtc));
+        Version++;
     }
 
     private void SetDetails(string fullName, string phone, string? email, string? notes)

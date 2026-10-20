@@ -45,11 +45,18 @@ public sealed class Device : Entity
 
     public DateTime? UpdatedAtUtc { get; private set; }
 
+    /// <summary>
+    /// Aumenta con cada cambio. Es el token de concurrencia optimista: el formulario de edición envía la versión que vio
+    /// y, si otra persona guardó antes, el cambio se rechaza en lugar de sobrescribir el suyo.
+    /// </summary>
+    public int Version { get; private set; }
+
     /// <summary>Actualiza los datos técnicos y las observaciones. El propietario no se modifica.</summary>
     public void UpdateDetails(DeviceType type, string brand, string? model, string? serialNumber, string? notes, DateTime updatedAtUtc)
     {
         SetDetails(type, brand, model, serialNumber, notes);
         UpdatedAtUtc = UtcClock.Ensure(updatedAtUtc, nameof(updatedAtUtc));
+        Version++;
     }
 
     private void SetDetails(DeviceType type, string brand, string? model, string? serialNumber, string? notes)

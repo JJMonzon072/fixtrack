@@ -17,7 +17,8 @@ public sealed record ServiceOrderInput(
     int? TechnicianId,
     DateTime? PromisedAtUtc,
     decimal? EstimatedCost,
-    string? IntakeNotes);
+    string? IntakeNotes,
+    Guid? RequestId = null);
 
 /// <summary>Nueva planificación de una orden abierta.</summary>
 public sealed record ServiceOrderPlanInput(ServiceOrderPriority? Priority, DateTime? PromisedAtUtc, decimal? EstimatedCost);
@@ -98,7 +99,28 @@ public sealed record ServiceOrderDeviceInfo(int Id, DeviceType Type, string Bran
 
 public sealed record ServiceOrderTechnicianInfo(int Id, string FullName, string Specialty, bool IsActive, DateTime AssignedAtUtc);
 
-public sealed record ServiceOrderHistoryEntry(ServiceOrderStatus? FromStatus, ServiceOrderStatus ToStatus, DateTime ChangedAtUtc, string? Note);
+/// <param name="ChangedByName">Quién hizo el cambio; <c>null</c> en los registros anteriores a la fase 4.</param>
+public sealed record ServiceOrderHistoryEntry(
+    ServiceOrderStatus? FromStatus,
+    ServiceOrderStatus ToStatus,
+    DateTime ChangedAtUtc,
+    string? Note,
+    string? ChangedByName);
+
+/// <summary>Cambio registrado en la auditoría que no es de estado ni de técnico (planificación, diagnóstico).</summary>
+/// <param name="Summary">Resumen sin el número de la orden.</param>
+public sealed record ServiceOrderActivityEntry(string Action, DateTime OccurredAtUtc, string UserName, string Summary);
+
+/// <summary>Asignación o reasignación de técnico, con los nombres actuales de los técnicos.</summary>
+public sealed record ServiceOrderAssignmentEntry(
+    string? FromTechnicianName,
+    string ToTechnicianName,
+    DateTime AssignedAtUtc,
+    string? AssignedByName,
+    string? Note)
+{
+    public bool IsReassignment => FromTechnicianName is not null;
+}
 
 public sealed record ServiceOrderDetails(
     int Id,
@@ -117,7 +139,9 @@ public sealed record ServiceOrderDetails(
     CustomerOption Customer,
     ServiceOrderDeviceInfo Device,
     ServiceOrderTechnicianInfo? Technician,
-    IReadOnlyList<ServiceOrderHistoryEntry> History)
+    IReadOnlyList<ServiceOrderHistoryEntry> History,
+    IReadOnlyList<ServiceOrderAssignmentEntry> Assignments,
+    IReadOnlyList<ServiceOrderActivityEntry> Activity)
 {
     public string Number => ServiceOrder.FormatNumber(Id);
 

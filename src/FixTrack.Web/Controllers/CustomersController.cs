@@ -98,10 +98,17 @@ public sealed class CustomersController(ICustomerService customers, IDeviceServi
     [HttpPost("{id:int}/editar")]
     public async Task<IActionResult> Edit(int id, CustomerFormModel form, CancellationToken cancellationToken)
     {
-        var result = await customers.UpdateAsync(id, form.ToInput(), cancellationToken);
+        var result = await customers.UpdateAsync(id, form.ToInput(), form.Version, cancellationToken);
         if (result.Status == CommandStatus.NotFound)
         {
             return NotFound();
+        }
+
+        // Otra persona guardó antes: se vuelve a abrir el formulario con los datos actuales en lugar de sobrescribirlos.
+        if (result.Status == CommandStatus.Conflict)
+        {
+            StatusMessage.Warning(TempData, result.Message ?? "No se pudo guardar el cambio.");
+            return RedirectToAction(nameof(Edit), new { id });
         }
 
         if (!result.Succeeded)

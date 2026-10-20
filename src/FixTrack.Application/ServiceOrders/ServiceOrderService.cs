@@ -1,7 +1,10 @@
+using System.Globalization;
 using FixTrack.Application.Common;
 using FixTrack.Application.Devices;
 using FixTrack.Application.Technicians;
+using FixTrack.Domain.Auditing;
 using FixTrack.Domain.Common;
+using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
 using FixTrack.Domain.Technicians;
 
@@ -12,11 +15,14 @@ internal sealed class ServiceOrderService(
     IDeviceRepository devices,
     ITechnicianRepository technicians,
     IUnitOfWork unitOfWork,
+    ICurrentUser currentUser,
+    IAuditLog audit,
     TimeProvider clock) : IServiceOrderService
 {
     internal const string CustomerField = "CustomerId";
     internal const string DeviceField = "DeviceId";
     internal const string TechnicianField = "TechnicianId";
+    internal const string AssignmentNoteField = "Note";
 
     internal const string StaleMessage =
         "Otra persona modificó esta orden mientras la revisabas. Revisa los datos actuales y vuelve a intentarlo.";
@@ -24,8 +30,11 @@ internal sealed class ServiceOrderService(
     internal const string ClosedMessage = "La orden está cerrada (entregada o cancelada) y ya no admite cambios.";
     internal const int RecentCustomerOrders = 10;
 
-    /// <summary>Máximo de órdenes abiertas que se priorizan en una consulta (el trabajo en curso de un taller).</summary>
-    internal const int MaxPrioritizedOrders = 500;
+    /// <summary>
+    /// Máximo de órdenes que muestra cada lista de la cola: las de mayor puntuación, elegidas por la base entre todas las
+    /// órdenes abiertas de la lista.
+    /// </summary>
+    internal const int MaxPerQueue = 100;
 
     private DateTime UtcNow => clock.GetUtcNow().UtcDateTime;
 
@@ -56,35 +65,84 @@ internal sealed class ServiceOrderService(
 
     public async Task<WorkQueueResult> GetWorkQueueAsync(CancellationToken cancellationToken)
     {
-        var now = UtcNow;
-        var open = await orders.ListOpenAsync(MaxPrioritizedOrders + 1, cancellationToken);
-        var scored = open
-            .Take(MaxPrioritizedOrders)
-            .Select(order => (Order: order, Score: WorkPrioritizer.Score(
-                order.Priority, order.Status, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId is not null, now)))
-            .ToList();
+        var now = PrioritizationNow();
+        var counts = await orders.CountOpenByStatusAsync(cancellationToken);
+        var totals = Enum.GetValues<WorkQueue>().ToDictionary(
+            queue => queue,
+            queue => StatusesOf(queue).Sum(status => counts.GetValueOrDefault(status)));
 
-        IReadOnlyList<PrioritizedOrder> Ranked(WorkQueue queue) =>
-        [
-            .. WorkPrioritizer
-                .Rank(
-                    scored.Where(item => item.Score.Queue == queue),
-                    item => item.Score.Total,
-                    item => item.Order.PromisedAtUtc,
-                    item => item.Order.ReceivedAtUtc,
-                    item => item.Order.Id)
-                .Select((item, index) => new PrioritizedOrder(item.Order, item.Score, index + 1)),
-        ];
+        async Task<IReadOnlyList<PrioritizedOrder>> ListAsync(WorkQueue queue) =>
+            totals[queue] == 0
+                ? []
+                : Ranked(await orders.ListMostUrgentAsync(StatusesOf(queue), now, MaxPerQueue, cancellationToken), now);
 
         return new WorkQueueResult(
-            Ranked(WorkQueue.Repair),
-            Ranked(WorkQueue.AwaitingParts),
-            Ranked(WorkQueue.ReadyForPickup),
+            await ListAsync(WorkQueue.Repair),
+            await ListAsync(WorkQueue.AwaitingParts),
+            await ListAsync(WorkQueue.ReadyForPickup),
             now,
-            open.Count > MaxPrioritizedOrders);
+            totals);
     }
 
-    public Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PrioritizedOrder>> GetMostUrgentAsync(int take, CancellationToken cancellationToken)
+    {
+        var now = PrioritizationNow();
+        return Ranked(await orders.ListMostUrgentAsync(ServiceOrderWorkflow.OpenStatuses, now, take, cancellationToken), now);
+    }
+
+    /// <summary>
+    /// Instante del cálculo truncado a milisegundos, la precisión de las columnas: la base y <see cref="WorkPrioritizer"/>
+    /// comparan exactamente los mismos valores.
+    /// </summary>
+    private DateTime PrioritizationNow()
+    {
+        var now = UtcNow;
+        return now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMillisecond));
+    }
+
+    private static ServiceOrderStatus[] StatusesOf(WorkQueue queue) =>
+        [.. ServiceOrderWorkflow.OpenStatuses.Where(status => WorkPrioritizer.QueueFor(status) == queue)];
+
+    /// <summary>Puntúa las órdenes (con su explicación) y las ordena con los desempates del algoritmo.</summary>
+    private static IReadOnlyList<PrioritizedOrder> Ranked(IEnumerable<OpenOrderSnapshot> snapshots, DateTime now) =>
+    [
+        .. WorkPrioritizer
+            .Rank(
+                snapshots.Select(order => (Order: order, Score: WorkPrioritizer.Score(
+                    order.Priority, order.Status, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId is not null, now))),
+                item => item.Score.Total,
+                item => item.Order.PromisedAtUtc,
+                item => item.Order.ReceivedAtUtc,
+                item => item.Order.Id)
+            .Select((item, index) => new PrioritizedOrder(item.Order, item.Score, index + 1)),
+    ];
+
+    public async Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken)
+    {
+        // Un envío repetido del mismo formulario (doble clic, recarga o reintento) devuelve la orden ya registrada.
+        if (input.RequestId is { } requestId && await orders.FindIdByCreationRequestAsync(requestId, cancellationToken) is { } existing)
+        {
+            return CommandResult<int>.Success(existing);
+        }
+
+        try
+        {
+            return await RegisterAsync(input, cancellationToken);
+        }
+        catch (DuplicateValueException) when (input.RequestId is not null)
+        {
+            // Dos envíos simultáneos, o un reintento después de un COMMIT cuya confirmación se perdió: el índice único
+            // aceptó solo uno.
+            if (await orders.FindIdByCreationRequestAsync(input.RequestId.Value, cancellationToken) is { } created)
+            {
+                return CommandResult<int>.Success(created);
+            }
+
+            throw;
+        }
+    }
+
+    private Task<CommandResult<int>> RegisterAsync(ServiceOrderInput input, CancellationToken cancellationToken)
     {
         var receivedAt = UtcNow;
         var issue = Text.CleanMultilineOrNull(input.ReportedIssue);
@@ -131,15 +189,30 @@ internal sealed class ServiceOrderService(
                 }
 
                 var order = new ServiceOrder(
-                    device!, issue, input.Priority!.Value, receivedAt, input.PromisedAtUtc, input.EstimatedCost, notes, technician);
+                    device!,
+                    issue,
+                    input.Priority!.Value,
+                    receivedAt,
+                    input.PromisedAtUtc,
+                    input.EstimatedCost,
+                    notes,
+                    technician,
+                    currentUser.Actor,
+                    input.RequestId);
                 orders.Add(order);
+                await unitOfWork.SaveChangesAsync(token);
+
+                // El número de la orden existe después del primer guardado; el evento se guarda en la misma transacción.
+                Record(order, AuditActions.OrderRegistered, $"registrada para {DeviceTitle(device!)} de " +
+                    $"{device!.Customer!.FullName}, prioridad {AuditText.Priority(order.Priority)}" +
+                    (technician is null ? "." : $", técnico {technician.FullName}."));
                 await unitOfWork.SaveChangesAsync(token);
                 return CommandResult<int>.Success(order.Id);
             },
             cancellationToken);
     }
 
-    public Task<CommandResult> AssignTechnicianAsync(int id, int? technicianId, int version, CancellationToken cancellationToken) =>
+    public Task<CommandResult> AssignTechnicianAsync(int id, int? technicianId, string? note, int version, CancellationToken cancellationToken) =>
         unitOfWork.ExecuteInTransactionAsync(
             async token =>
             {
@@ -159,13 +232,28 @@ internal sealed class ServiceOrderService(
                     errors[TechnicianField] = "La orden ya está asignada a este técnico.";
                 }
 
+                if (Text.CleanOrNull(note) is { Length: > ServiceOrderAssignment.NoteMaxLength })
+                {
+                    errors[AssignmentNoteField] = $"El motivo no puede superar {ServiceOrderAssignment.NoteMaxLength} caracteres.";
+                }
+
                 var technician = errors.Count == 0 ? await FindAssignableTechnicianAsync(technicianId!.Value, errors, token) : null;
                 if (errors.Count > 0)
                 {
                     return CommandResult.Invalid(errors);
                 }
 
-                order.AssignTechnician(technician!, UtcNow);
+                var previous = order.TechnicianId is { } previousId ? (await technicians.FindAsync(previousId, token))?.FullName : null;
+
+                // La asignación y su registro (técnico anterior y nuevo, quién y por qué) se guardan juntos.
+                order.AssignTechnician(technician!, UtcNow, currentUser.Actor, note);
+                var reason = Text.CleanOrNull(note) is { } cleanNote ? $" Motivo: {cleanNote}" : string.Empty;
+                Record(
+                    order,
+                    previous is null ? AuditActions.TechnicianAssigned : AuditActions.TechnicianReassigned,
+                    previous is null
+                        ? $"Técnico asignado: {technician!.FullName}.{reason}"
+                        : $"Reasignada de {previous} a {technician!.FullName}.{reason}");
                 return await SaveAsync(token);
             },
             cancellationToken);
@@ -187,7 +275,9 @@ internal sealed class ServiceOrderService(
             return CommandResult.Invalid(new Dictionary<string, string> { [nameof(ServiceOrder.Diagnosis)] = error });
         }
 
+        var updating = order.Diagnosis is not null;
         order.RecordDiagnosis(cleaned, UtcNow);
+        Record(order, AuditActions.DiagnosisRecorded, updating ? "Diagnóstico actualizado." : "Diagnóstico registrado.");
         return await SaveAsync(cancellationToken);
     }
 
@@ -206,7 +296,13 @@ internal sealed class ServiceOrderService(
             return CommandResult.Invalid(errors);
         }
 
+        var changes = PlanChanges(order, input);
         order.UpdatePlan(input.Priority!.Value, input.PromisedAtUtc, input.EstimatedCost, now);
+        if (changes.Count > 0)
+        {
+            Record(order, AuditActions.PlanChanged, string.Join("; ", changes) + ".");
+        }
+
         return await SaveAsync(cancellationToken);
     }
 
@@ -229,9 +325,10 @@ internal sealed class ServiceOrderService(
             return CommandResult.Invalid(errors);
         }
 
+        var previousStatus = order.Status;
         try
         {
-            order.ChangeStatus(newStatus, UtcNow, input.Note, input.FinalCost);
+            order.ChangeStatus(newStatus, UtcNow, input.Note, input.FinalCost, currentUser.Actor);
         }
         catch (DomainException exception)
         {
@@ -239,7 +336,20 @@ internal sealed class ServiceOrderService(
             return CommandResult.Conflict(exception.Message);
         }
 
-        // El cambio de estado y su registro en el historial se guardan en la misma operación (un solo SaveChanges).
+        Record(order, newStatus switch
+        {
+            ServiceOrderStatus.Cancelled => AuditActions.OrderCancelled,
+            ServiceOrderStatus.Delivered => AuditActions.OrderDelivered,
+            _ => AuditActions.StatusChanged,
+        }, newStatus switch
+        {
+            ServiceOrderStatus.Cancelled => $"Cancelada desde {AuditText.Status(previousStatus)}. Motivo: {Text.CleanOrNull(input.Note)}",
+            ServiceOrderStatus.Delivered =>
+                $"Entregada con costo final {AuditText.Money(order.FinalCost)} (estimado: {AuditText.Money(order.EstimatedCost)}).",
+            _ => $"{AuditText.Status(previousStatus)} → {AuditText.Status(newStatus)}.",
+        });
+
+        // El cambio de estado, su registro en el historial y el evento de auditoría se guardan juntos (un solo SaveChanges).
         return await SaveAsync(cancellationToken);
     }
 
@@ -289,6 +399,38 @@ internal sealed class ServiceOrderService(
         {
             return CommandResult.Conflict(StaleMessage);
         }
+    }
+
+    private void Record(ServiceOrder order, string action, string summary) =>
+        audit.Record(action, AuditActions.Order, order.Id.ToString(CultureInfo.InvariantCulture), $"{order.Number}: {summary}");
+
+    private static string DeviceTitle(Device device) => device.Model is { } model ? $"{device.Brand} {model}" : device.Brand;
+
+    /// <summary>Qué cambia en la planificación, con el valor anterior y el nuevo.</summary>
+    private static List<string> PlanChanges(ServiceOrder order, ServiceOrderPlanInput input)
+    {
+        var changes = new List<string>();
+        if (input.Priority is { } priority && priority != order.Priority)
+        {
+            changes.Add($"prioridad {AuditText.Priority(order.Priority)} → {AuditText.Priority(priority)}");
+        }
+
+        if (input.PromisedAtUtc != order.PromisedAtUtc)
+        {
+            changes.Add($"entrega comprometida {AuditText.Date(order.PromisedAtUtc)} → {AuditText.Date(input.PromisedAtUtc)}");
+        }
+
+        if (input.EstimatedCost != order.EstimatedCost)
+        {
+            changes.Add($"costo estimado {AuditText.Money(order.EstimatedCost)} → {AuditText.Money(input.EstimatedCost)}");
+        }
+
+        if (changes.Count > 0)
+        {
+            changes[0] = char.ToUpperInvariant(changes[0][0]) + changes[0][1..];
+        }
+
+        return changes;
     }
 
     private static bool BelongsTo(ServiceOrderView view, ServiceOrderStatus status) => view switch

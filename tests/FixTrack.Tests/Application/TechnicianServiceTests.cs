@@ -9,6 +9,8 @@ namespace FixTrack.Tests.Application;
 /// <summary>Casos de uso de técnicos con un repositorio en memoria: sin base de datos.</summary>
 public sealed class TechnicianServiceTests
 {
+    private readonly FakeAuditLog _audit = new();
+
     private static readonly DateTimeOffset Now = new(2026, 10, 19, 15, 0, 0, TimeSpan.Zero);
 
     private readonly InMemoryStore _store = new();
@@ -24,6 +26,7 @@ public sealed class TechnicianServiceTests
             .AddApplication()
             .AddSingleton<ITechnicianRepository>(_technicians)
             .AddSingleton<IUnitOfWork>(_unitOfWork)
+            .AddSingleton<IAuditLog>(_audit)
             .AddSingleton<TimeProvider>(new FixedClock(Now))
             .BuildServiceProvider()
             .GetRequiredService<ITechnicianService>();
@@ -74,11 +77,24 @@ public sealed class TechnicianServiceTests
     }
 
     [Fact]
+    public async Task A_stale_edit_is_rejected_without_changes()
+    {
+        var id = await CreateAsync();
+        Assert.True((await _service.UpdateAsync(id, new TechnicianInput("Luis Alberto Pérez", "Redes", null, null), version: 0, Token)).Succeeded);
+
+        var stale = await _service.UpdateAsync(id, new TechnicianInput("Luis Desactualizado", "Impresoras", null, null), version: 0, Token);
+
+        Assert.Equal(CommandStatus.Conflict, stale.Status);
+        Assert.Equal(TechnicianService.StaleMessage, stale.Message);
+        Assert.Equal(("Luis Alberto Pérez", 1), (_store.Technicians[0].FullName, _store.Technicians[0].Version));
+    }
+
+    [Fact]
     public async Task Edits_and_persists_changes()
     {
         var id = await CreateAsync(email: "luis@example.com");
 
-        var result = await _service.UpdateAsync(id, new TechnicianInput("Luis Alberto Pérez", "Redes", "5555-0101", "luis@example.com"), Token);
+        var result = await _service.UpdateAsync(id, new TechnicianInput("Luis Alberto Pérez", "Redes", "5555-0101", "luis@example.com"), version: 0, Token);
 
         Assert.True(result.Succeeded);
         Assert.Equal("Redes", _store.Technicians[0].Specialty);
@@ -98,6 +114,12 @@ public sealed class TechnicianServiceTests
         Assert.True(_store.Technicians[0].IsActive);
         Assert.Equal(CommandStatus.Conflict, (await _service.ReactivateAsync(id, Token)).Status);
         Assert.Single(_store.Technicians);
+
+        // Solo los cambios realizados quedan en la auditoría, no los intentos rechazados.
+        Assert.Equal(
+            [("tecnico.desactivado", id.ToString()), ("tecnico.reactivado", id.ToString())],
+            _audit.Events.Select(entry => (entry.Action, entry.EntityId)));
+        Assert.All(_audit.Events, entry => Assert.Equal("tecnico", entry.EntityType));
     }
 
     [Fact]
@@ -148,7 +170,7 @@ public sealed class TechnicianServiceTests
     [Fact]
     public async Task Unknown_technicians_are_reported_as_not_found()
     {
-        Assert.Equal(CommandStatus.NotFound, (await _service.UpdateAsync(9, new TechnicianInput("Luis Pérez", "Redes", null, null), Token)).Status);
+        Assert.Equal(CommandStatus.NotFound, (await _service.UpdateAsync(9, new TechnicianInput("Luis Pérez", "Redes", null, null), version: 0, Token)).Status);
         Assert.Equal(CommandStatus.NotFound, (await _service.DeactivateAsync(9, Token)).Status);
         Assert.Equal(CommandStatus.NotFound, (await _service.ReactivateAsync(-1, Token)).Status);
     }

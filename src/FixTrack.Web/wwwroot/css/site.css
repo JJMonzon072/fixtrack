@@ -1192,6 +1192,12 @@ button {
     text-align: center;
 }
 
+.error-page--standalone {
+    justify-content: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
 .error-page__code {
     font-size: var(--text-xs);
     color: var(--color-text-tertiary);
@@ -1796,6 +1802,25 @@ fieldset.field > legend {
     color: var(--color-text-secondary);
 }
 
+.dialog__text--warning {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-start;
+    margin-top: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--status-parts) 10%, var(--color-surface));
+    color: var(--color-text);
+}
+
+.dialog__text--warning .icon {
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.125rem;
+    color: var(--status-parts);
+}
+
 .dialog__actions {
     display: flex;
     justify-content: flex-end;
@@ -2148,6 +2173,8 @@ fieldset.field > legend {
 [data-status="ready"] { --status-color: var(--status-ready); }
 [data-status="delivered"] { --status-color: var(--status-delivered); }
 [data-status="cancelled"] { --status-color: var(--status-cancelled); }
+[data-status="assignment"] { --status-color: var(--color-accent); }
+[data-status="note"] { --status-color: var(--color-text-tertiary); }
 
 /* Prioridad: ícono y texto con un tono según la urgencia */
 .priority {
@@ -2910,10 +2937,17 @@ fieldset.field > legend {
     color: var(--color-text-tertiary);
 }
 
-.timeline__time {
-    display: block;
+.timeline__meta {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--space-1);
     font-size: var(--text-xs);
     color: var(--color-text-tertiary);
+}
+
+.timeline__author::before {
+    content: "·";
+    margin-right: var(--space-1);
 }
 
 .timeline__note {
@@ -2924,6 +2958,36 @@ fieldset.field > legend {
     font-size: var(--text-sm);
     color: var(--color-text-secondary);
     overflow-wrap: anywhere;
+}
+
+/* Registro de auditoría */
+.audit-date {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.audit-action {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.audit-action .icon {
+    width: 1rem;
+    height: 1rem;
+    color: var(--color-text-tertiary);
+}
+
+.audit-summary {
+    max-width: 48rem;
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.audit-link {
+    font-size: var(--text-xs);
 }
 
 /* Siguientes pasos de una orden abierta */
@@ -4027,6 +4091,43 @@ fieldset.field > legend {
 @media (max-width: 639.98px) {
     .data-table--stack td[data-span] {
         grid-column: 1 / -1;
+    }
+
+    /* Auditoría en tarjetas: operación y fecha en la primera línea; el detalle y el autor debajo, a todo el ancho. */
+    .audit-table tbody tr {
+        grid-template-areas:
+            "action date"
+            "detail detail"
+            "author author";
+    }
+
+    .audit-table td:nth-child(1) {
+        grid-area: date;
+        justify-self: end;
+        font-size: var(--text-xs);
+        color: var(--color-text-tertiary);
+    }
+
+    .audit-table td:nth-child(2) {
+        grid-area: action;
+    }
+
+    .audit-table td:nth-child(3) {
+        grid-area: detail;
+    }
+
+    .audit-table td:nth-child(4) {
+        grid-area: author;
+        font-size: var(--text-xs);
+        color: var(--color-text-secondary);
+    }
+
+    .audit-table td:nth-child(4)::before {
+        content: "Por ";
+    }
+
+    .audit-action {
+        white-space: normal;
     }
 
     .data-table--stack td[data-align-end] {

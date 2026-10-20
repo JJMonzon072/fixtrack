@@ -2,10 +2,11 @@ using FixTrack.Domain.Customers;
 using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
 using FixTrack.Domain.Technicians;
+using FixTrack.Infrastructure.Persistence;
 
 namespace FixTrack.Tests.Infrastructure;
 
-/// <summary>Órdenes de ejemplo compartidas por las pruebas de consultas (SQLite en memoria).</summary>
+/// <summary>Órdenes de ejemplo compartidas por las pruebas de consultas (SQLite en memoria y SQL Server desechable).</summary>
 internal static class ServiceOrderSeed
 {
     /// <summary>
@@ -16,9 +17,13 @@ internal static class ServiceOrderSeed
     /// 4 Mario · HP · Urgente · Luis · Cancelada;
     /// 5 Ana · Lenovo · Urgente · Luis · En diagnóstico · entrega en 5 días.
     /// </summary>
-    public static async Task SeedAsync(SqliteTestDatabase database, DateTime now, CancellationToken token)
+    public static Task SeedAsync(SqliteTestDatabase database, DateTime now, CancellationToken token) =>
+        SeedAsync(database.CreateContext, now, token);
+
+    /// <inheritdoc cref="SeedAsync(SqliteTestDatabase, DateTime, CancellationToken)"/>
+    public static async Task SeedAsync(Func<FixTrackDbContext> createContext, DateTime now, CancellationToken token)
     {
-        await using var context = database.CreateContext();
+        await using var context = createContext();
         var ana = new Customer("Ana Morales", "5555-0001", null, null, now.AddDays(-60));
         var mario = new Customer("Mario Castillo", "5555-0002", null, null, now.AddDays(-60));
         var carla = new Technician("Carla Ruiz", "Laptops", null, null, now.AddDays(-90));

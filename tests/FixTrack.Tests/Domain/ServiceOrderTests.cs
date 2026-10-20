@@ -155,6 +155,67 @@ public sealed class ServiceOrderTests
     }
 
     [Fact]
+    public void Every_assignment_is_recorded_with_the_previous_technician_the_author_and_the_reason()
+    {
+        var reception = new Actor("cuenta-1", "Rosa Recepción");
+        var supervisor = new Actor("cuenta-2", "Mario Supervisor");
+        var first = ActiveTechnician(1, "Luis Pérez");
+        var second = ActiveTechnician(2, "Andrea Castillo");
+        var order = new ServiceOrder(NewDevice(), "No enciende", ServiceOrderPriority.Normal, Received, null, null, null, first, reception);
+
+        order.AssignTechnician(second, Received.AddHours(3), supervisor, "  Luis está de vacaciones  ");
+
+        Assert.Collection(
+            order.Assignments,
+            initial =>
+            {
+                Assert.Equal((null, 1, Received), (initial.FromTechnicianId, initial.ToTechnicianId, initial.AssignedAtUtc));
+                Assert.Equal(("cuenta-1", "Rosa Recepción", null), (initial.AssignedByUserId, initial.AssignedByName, initial.Note));
+            },
+            reassignment =>
+            {
+                Assert.Equal((1, 2, Received.AddHours(3)), (reassignment.FromTechnicianId, reassignment.ToTechnicianId, reassignment.AssignedAtUtc));
+                Assert.Equal(("cuenta-2", "Mario Supervisor", "Luis está de vacaciones"), (reassignment.AssignedByUserId, reassignment.AssignedByName, reassignment.Note));
+            });
+
+        // Una reasignación no cambia el estado: el historial de estados sigue con su único registro.
+        Assert.Single(order.StatusHistory);
+    }
+
+    [Fact]
+    public void Status_changes_record_who_made_them()
+    {
+        var author = new Actor("cuenta-3", "Luis Pérez");
+        var order = NewOrder(ActiveTechnician());
+
+        order.ChangeStatus(ServiceOrderStatus.Diagnosing, Received.AddHours(1), changedBy: author);
+
+        var change = order.StatusHistory.Last();
+        Assert.Equal(("cuenta-3", "Luis Pérez"), (change.ChangedByUserId, change.ChangedByName));
+    }
+
+    [Fact]
+    public void An_overlong_assignment_reason_is_rejected_without_changing_the_technician()
+    {
+        var order = NewOrder(ActiveTechnician(1));
+
+        var error = Assert.Throws<DomainException>(() =>
+            order.AssignTechnician(ActiveTechnician(2, "Andrea Castillo"), Received.AddHours(1), note: new string('x', ServiceOrderAssignment.NoteMaxLength + 1)));
+
+        Assert.Contains("200", error.Message);
+        Assert.Equal(1, order.TechnicianId);
+        Assert.Single(order.Assignments);
+    }
+
+    [Fact]
+    public void The_author_of_a_change_needs_a_name()
+    {
+        Assert.Throws<DomainException>(() => new Actor("cuenta", "   "));
+        Assert.Equal(new string('a', Actor.NameMaxLength), new Actor(null, new string('a', Actor.NameMaxLength + 20)).Name);
+        Assert.Null(Actor.System.UserId);
+    }
+
+    [Fact]
     public void Assigning_the_current_technician_again_is_rejected()
     {
         var technician = ActiveTechnician();

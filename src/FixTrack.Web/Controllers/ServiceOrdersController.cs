@@ -58,7 +58,7 @@ public sealed class ServiceOrdersController(
         [FromQuery(Name = "equipo")] int? deviceId,
         CancellationToken cancellationToken)
     {
-        var form = new ServiceOrderFormModel { Priority = ServiceOrderPriority.Normal };
+        var form = new ServiceOrderFormModel { Priority = ServiceOrderPriority.Normal, RequestId = Guid.NewGuid() };
         CustomerOption? customer = null;
         if (deviceId is > 0 && await devices.GetAsync(deviceId.Value, cancellationToken) is { } device)
         {
@@ -102,7 +102,8 @@ public sealed class ServiceOrdersController(
                     form.TechnicianId,
                     promisedAt,
                     estimatedCost,
-                    form.IntakeNotes),
+                    form.IntakeNotes,
+                    form.RequestId),
                 cancellationToken);
             if (result.Succeeded)
             {
@@ -174,10 +175,11 @@ public sealed class ServiceOrdersController(
     public async Task<IActionResult> Assign(
         int id,
         [FromForm] int? technicianId,
+        [FromForm] string? note,
         [FromForm] int version,
         CancellationToken cancellationToken)
     {
-        var result = await orders.AssignTechnicianAsync(id, technicianId, version, cancellationToken);
+        var result = await orders.AssignTechnicianAsync(id, technicianId, note, version, cancellationToken);
         if (Completed(result, id, "Técnico asignado correctamente.") is { } done)
         {
             return done;
@@ -185,7 +187,7 @@ public sealed class ServiceOrdersController(
 
         AddErrors(result.Errors);
         return await WithOpenOrderAsync(id, cancellationToken, async order =>
-            View("Assign", new ServiceOrderAssignViewModel(order, await ActiveTechniciansAsync(cancellationToken), technicianId, version)));
+            View("Assign", new ServiceOrderAssignViewModel(order, await ActiveTechniciansAsync(cancellationToken), technicianId, version, note)));
     }
 
     [HttpGet("{id:int}/diagnostico")]

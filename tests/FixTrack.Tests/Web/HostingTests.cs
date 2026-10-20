@@ -1,13 +1,18 @@
+using System.Collections.Concurrent;
 using System.Net;
+using System.Text.RegularExpressions;
 using FixTrack.Infrastructure.Persistence;
+using FixTrack.Tests.Application;
 using FixTrack.Web.Hosting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging;
 
 namespace FixTrack.Tests.Web;
 
@@ -19,15 +24,16 @@ public sealed class HostingTests(FixTrackWebApplicationFactory factory)
 
     private static readonly WebApplicationFactoryClientOptions NoRedirects = new() { AllowAutoRedirect = false };
 
+    /// <summary>Como el navegador detrás del proxy: HTTPS, para que las cookies Secure viajen.</summary>
+    private static readonly WebApplicationFactoryClientOptions Https = new() { AllowAutoRedirect = false, BaseAddress = new Uri("https://localhost") };
+
     /// <summary>Producción con el proxy confiable configurado y la conexión simulada desde <paramref name="remoteIp"/>.</summary>
-    private WebApplicationFactory<Program> BehindProxy(string remoteIp, bool trustProxy = true) =>
+    private WebApplicationFactory<Program> BehindProxy(string remoteIp, bool trustProxy = true, Action<IWebHostBuilder>? configure = null) =>
         factory.WithWebHostBuilder(builder =>
         {
+            configure?.Invoke(builder);
             builder.UseEnvironment("Production").UseSetting("https_port", "443");
-            if (trustProxy)
-            {
-                builder.UseSetting("ReverseProxy:KnownNetworks:0", "10.0.0.0/8");
-            }
+            builder.UseSetting(trustProxy ? "ReverseProxy:KnownNetworks:0" : "ReverseProxy:IgnoreForwardedHeaders", trustProxy ? "10.0.0.0/8" : "true");
 
             builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(new RemoteAddressFilter(IPAddress.Parse(remoteIp))));
         });
@@ -71,7 +77,7 @@ public sealed class HostingTests(FixTrackWebApplicationFactory factory)
             .UseSqlite("Data Source=/ruta/inexistente/fixtrack.db;Mode=ReadOnly")
             .Options);
 
-        var result = await new DatabaseHealthCheck(context).CheckHealthAsync(new HealthCheckContext(), Token);
+        var result = await new DatabaseHealthCheck(context, new DatabaseHealthCache(TimeProvider.System)).CheckHealthAsync(new HealthCheckContext(), Token);
 
         Assert.Equal(HealthStatus.Unhealthy, result.Status);
     }
@@ -80,7 +86,10 @@ public sealed class HostingTests(FixTrackWebApplicationFactory factory)
     public async Task In_production_health_checks_are_not_redirected_to_https_but_pages_are()
     {
         using var client = factory
-            .WithWebHostBuilder(builder => builder.UseEnvironment("Production").UseSetting("https_port", "443"))
+            .WithWebHostBuilder(builder => builder
+                .UseEnvironment("Production")
+                .UseSetting("https_port", "443")
+                .UseSetting("ReverseProxy:IgnoreForwardedHeaders", "true"))
             .CreateClient(NoRedirects);
 
         using var health = await client.GetAsync("/salud", Token);
@@ -117,6 +126,202 @@ public sealed class HostingTests(FixTrackWebApplicationFactory factory)
         using var response = await client.SendAsync(request, Token);
 
         Assert.Equal(HttpStatusCode.TemporaryRedirect, response.StatusCode);
+    }
+
+    [Fact]
+    public void Production_does_not_start_without_deciding_which_proxy_to_trust()
+    {
+        var production = factory.WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
+
+        var error = Assert.ThrowsAny<Exception>(() => production.CreateClient());
+
+        Assert.Contains("ReverseProxy__KnownNetworks__0", MessagesOf(error));
+        Assert.Contains("ReverseProxy__IgnoreForwardedHeaders=true", MessagesOf(error));
+    }
+
+    [Theory]
+    [InlineData("ReverseProxy:KnownNetworks:0", "10.0.0.0/33", "contiene un valor no válido")]
+    [InlineData("ReverseProxy:KnownProxies:0", "no-es-una-ip", "contiene un valor no válido")]
+    public void Invalid_proxy_addresses_stop_the_application(string key, string value, string expected)
+    {
+        var invalid = factory.WithWebHostBuilder(builder => builder.UseSetting(key, value));
+
+        Assert.Contains(expected, MessagesOf(Assert.ThrowsAny<Exception>(() => invalid.CreateClient())));
+    }
+
+    [Fact]
+    public void Trusting_a_proxy_and_ignoring_forwarded_headers_at_once_is_rejected()
+    {
+        var contradictory = factory.WithWebHostBuilder(builder => builder
+            .UseSetting("ReverseProxy:KnownProxies:0", "10.1.2.3")
+            .UseSetting("ReverseProxy:IgnoreForwardedHeaders", "true"));
+
+        Assert.Contains("no puede combinarse", MessagesOf(Assert.ThrowsAny<Exception>(() => contradictory.CreateClient())));
+    }
+
+    [Fact]
+    public async Task Behind_a_trusted_proxy_each_client_gets_its_own_login_quota_and_spoofed_entries_are_ignored()
+    {
+        using var client = BehindProxy("10.20.30.40", configure: builder => builder.UseSetting("Security:LoginAttemptsPerMinute", "2"))
+            .CreateClient(Https);
+
+        // El cliente cambia la parte izquierda de X-Forwarded-For en cada intento; el proxy agrega su IP real al final.
+        var first = await LoginStatusesAsync(client, "X-Forwarded-For", "198.51.100.1, 203.0.113.7", "198.51.100.2, 203.0.113.7", "198.51.100.3, 203.0.113.7");
+        var other = await LoginStatusesAsync(client, "X-Forwarded-For", "203.0.113.8");
+
+        Assert.Equal([HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.TooManyRequests], first);
+        Assert.Equal([HttpStatusCode.OK], other);
+    }
+
+    [Fact]
+    public async Task A_single_value_client_ip_header_from_the_edge_can_be_used_instead()
+    {
+        using var client = BehindProxy(
+                "10.20.30.40",
+                configure: builder => builder
+                    .UseSetting("Security:LoginAttemptsPerMinute", "1")
+                    .UseSetting("ReverseProxy:ClientIpHeader", "True-Client-IP"))
+            .CreateClient(Https);
+
+        var first = await LoginStatusesAsync(client, "True-Client-IP", "203.0.113.20", "203.0.113.20");
+        var other = await LoginStatusesAsync(client, "True-Client-IP", "203.0.113.21");
+
+        Assert.Equal([HttpStatusCode.OK, HttpStatusCode.TooManyRequests], first);
+        Assert.Equal([HttpStatusCode.OK], other);
+    }
+
+    [Fact]
+    public async Task Forwarded_headers_from_an_untrusted_address_are_logged_once_without_their_values()
+    {
+        var logs = new LogCapture();
+        using var client = BehindProxy(
+                "10.99.0.7",
+                trustProxy: false,
+                configure: builder => builder.ConfigureLogging(logging => logging.AddProvider(logs)))
+            .CreateClient(NoRedirects);
+
+        foreach (var _ in Enumerable.Range(0, 3))
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/salud");
+            request.Headers.Add("X-Forwarded-For", "203.0.113.50");
+            request.Headers.Add("X-Forwarded-Proto", "https");
+            using var response = await client.SendAsync(request, Token);
+        }
+
+        var warnings = logs.Messages.Where(message => message.Contains("Se ignoraron encabezados reenviados", StringComparison.Ordinal)).ToList();
+        Assert.Single(warnings);
+        Assert.Contains("10.99.0.7", warnings[0]);
+        Assert.DoesNotContain("203.0.113.50", warnings[0]);
+    }
+
+    [Fact]
+    public async Task The_database_status_is_reused_for_a_few_seconds_so_the_endpoint_cannot_flood_the_database()
+    {
+        var clock = new FixedClock(DateTimeOffset.UtcNow);
+        var cache = new DatabaseHealthCache(clock);
+        var checks = 0;
+        Task<HealthCheckResult> Check(CancellationToken _)
+        {
+            Interlocked.Increment(ref checks);
+            return Task.FromResult(HealthCheckResult.Healthy());
+        }
+
+        await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => cache.GetAsync(Check, Token)));
+        clock.Advance(DatabaseHealthCache.Lifetime - TimeSpan.FromSeconds(1));
+        await cache.GetAsync(Check, Token);
+        var withinLifetime = checks;
+        clock.Advance(TimeSpan.FromSeconds(2));
+        await cache.GetAsync(Check, Token);
+
+        Assert.Equal(1, withinLifetime);
+        Assert.Equal(2, checks);
+    }
+
+    [Fact]
+    public async Task The_database_check_runs_a_real_query()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var check = new DatabaseHealthCheck(scope.ServiceProvider.GetRequiredService<FixTrackDbContext>(), new DatabaseHealthCache(TimeProvider.System));
+
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), Token);
+
+        Assert.Equal(HealthStatus.Healthy, result.Status);
+    }
+
+    [Fact]
+    public void Production_does_not_log_every_sql_command()
+    {
+        using var production = factory.WithWebHostBuilder(builder => builder
+            .UseEnvironment("Production")
+            .UseSetting("ReverseProxy:IgnoreForwardedHeaders", "true"));
+
+        var configuration = production.Services.GetRequiredService<IConfiguration>();
+
+        Assert.Equal("Warning", configuration["Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command"]);
+    }
+
+    private static async Task<List<HttpStatusCode>> LoginStatusesAsync(HttpClient client, string header, params string[] values)
+    {
+        var statuses = new List<HttpStatusCode>();
+        foreach (var value in values)
+        {
+            // Un intento real: el formulario con su token. Sin token, la antifalsificación responde 400 antes de contar.
+            using var page = new HttpRequestMessage(HttpMethod.Get, "/cuenta/iniciar-sesion");
+            page.Headers.Add(header, value);
+            using var pageResponse = await client.SendAsync(page, Token);
+            var html = await pageResponse.Content.ReadAsStringAsync(Token);
+            var token = Regex.Match(html, "name=\"__RequestVerificationToken\" type=\"hidden\" value=\"(?<token>[^\"]+)\"").Groups["token"].Value;
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/cuenta/iniciar-sesion")
+            {
+                Content = new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["Email"] = "nadie@fixtrack.test",
+                    ["Password"] = "Cualquier1234",
+                    ["__RequestVerificationToken"] = token,
+                }),
+            };
+            request.Headers.Add(header, value);
+            using var response = await client.SendAsync(request, Token);
+            statuses.Add(response.StatusCode);
+        }
+
+        return statuses;
+    }
+
+    private static string MessagesOf(Exception error)
+    {
+        var messages = new List<string>();
+        for (var current = error; current is not null; current = current.InnerException)
+        {
+            messages.Add(current.Message);
+        }
+
+        return string.Join(" | ", messages);
+    }
+
+    private sealed class LogCapture : ILoggerProvider
+    {
+        private readonly ConcurrentQueue<string> _messages = new();
+
+        public IReadOnlyCollection<string> Messages => _messages;
+
+        public ILogger CreateLogger(string categoryName) => new Logger(_messages);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class Logger(ConcurrentQueue<string> messages) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+                messages.Enqueue(formatter(state, exception));
+        }
     }
 
     /// <summary>Simula la dirección del extremo que abre la conexión (en TestServer no existe).</summary>

@@ -24,7 +24,7 @@ public sealed class MigrationTests
 
         Assert.False(
             context.Database.HasPendingModelChanges(),
-            "El modelo cambió sin una migración. Ejecuta: dotnet ef migrations add <Nombre> --project src/FixTrack.Infrastructure --startup-project src/FixTrack.Web");
+            "El modelo cambió sin una migración. Ejecuta: dotnet ef migrations add <Nombre> --context FixTrackDbContext --project src/FixTrack.Infrastructure --startup-project src/FixTrack.Web");
     }
 
     [Fact]
@@ -33,12 +33,14 @@ public sealed class MigrationTests
         using var context = CreateSqlServerContext();
         var script = context.GetService<IMigrator>().GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
 
-        foreach (var table in new[] { "Customers", "Devices", "Technicians", "ServiceOrders", "ServiceOrderStatusHistory" })
+        foreach (var table in new[] { "Customers", "Devices", "Technicians", "ServiceOrders", "ServiceOrderStatusHistory", "ServiceOrderAssignments" })
         {
             Assert.Contains($"CREATE TABLE [{table}]", script);
         }
 
         Assert.Contains("TR_ServiceOrderStatusHistory_AppendOnly", script);
+        Assert.Contains("TR_ServiceOrderAssignments_AppendOnly", script);
+        Assert.Contains("INSERT INTO [ServiceOrderAssignments]", script);
 
         foreach (var forbidden in new[] { "DROP TABLE", "DROP COLUMN", "DROP INDEX", "TRUNCATE", "DELETE FROM", "UPDATE [" })
         {
@@ -92,6 +94,95 @@ public sealed class MigrationTests
         Assert.Contains("CK_ServiceOrders_TechnicianAssignment", script);
         Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ALTER COLUMN", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void The_phase_4_assignments_migration_only_adds_authors_and_an_append_only_table()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: "20261020071400_IdentityAndDataProtectionKeys",
+            toMigration: "20261020162649_ServiceOrderAuthorsAndAssignments");
+
+        // Columnas nuevas que admiten NULL: los registros de historial existentes no se modifican.
+        Assert.Contains("ALTER TABLE [ServiceOrderStatusHistory] ADD [ChangedByName] nvarchar(150) NULL", script);
+        Assert.Contains("ALTER TABLE [ServiceOrderStatusHistory] ADD [ChangedByUserId] nvarchar(450) NULL", script);
+        Assert.Contains("CREATE TABLE [ServiceOrderAssignments]", script);
+        Assert.Contains("CK_ServiceOrderAssignments_DifferentTechnician", script);
+        Assert.Contains("TR_ServiceOrderAssignments_AppendOnly", script);
+        Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ALTER COLUMN", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE [", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void The_phase_4_audit_migration_only_adds_an_append_only_table()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: "20261020162649_ServiceOrderAuthorsAndAssignments",
+            toMigration: "20261020164604_AuditEvents");
+
+        Assert.Contains("CREATE TABLE [AuditEvents]", script);
+        Assert.Contains("TR_AuditEvents_AppendOnly", script);
+        Assert.Contains("CREATE INDEX [IX_AuditEvents_OccurredAtUtc]", script);
+        Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ALTER TABLE [", script.Replace("ALTER TABLE [AuditEvents]", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_phase_4_versions_migration_only_adds_columns_with_a_default()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: "20261020164604_AuditEvents",
+            toMigration: MigrationId("RecordVersions"));
+
+        foreach (var table in new[] { "Customers", "Devices", "Technicians" })
+        {
+            Assert.Contains($"ALTER TABLE [{table}] ADD [Version] int NOT NULL DEFAULT 0", script);
+        }
+
+        Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE [", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void The_phase_4_creation_request_migration_only_adds_a_nullable_column_and_its_index()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: MigrationId("RecordVersions"),
+            toMigration: MigrationId("OrderCreationRequests"));
+
+        Assert.Contains("ALTER TABLE [ServiceOrders] ADD [CreationRequestId] uniqueidentifier NULL", script);
+        Assert.Contains("CREATE UNIQUE INDEX [UX_ServiceOrders_CreationRequestId]", script);
+        Assert.Contains("WHERE [CreationRequestId] IS NOT NULL", script);
+        Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void The_phase_4_backfill_only_inserts_the_current_assignment_of_orders_without_records()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: MigrationId("OrderCreationRequests"),
+            toMigration: MigrationId("BackfillCurrentAssignments"));
+
+        Assert.Contains("INSERT INTO [ServiceOrderAssignments]", script);
+        Assert.Contains("o.[TechnicianAssignedAtUtc]", script);
+        Assert.Contains("NOT EXISTS (SELECT 1 FROM [ServiceOrderAssignments]", script);
+        Assert.Contains("ORDER BY o.[Id]", script);
+        foreach (var forbidden in new[] { "DROP", "ALTER", "UPDATE", "DELETE", "TRUNCATE" })
+        {
+            Assert.DoesNotContain(forbidden, script, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private static string MigrationId(string name)
+    {
+        using var context = CreateSqlServerContext();
+        return context.Database.GetMigrations().Single(id => id.EndsWith("_" + name, StringComparison.Ordinal));
     }
 
     [Fact]

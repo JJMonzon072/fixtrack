@@ -9,6 +9,8 @@ namespace FixTrack.Tests.Application;
 /// <summary>Casos de uso de clientes con un repositorio en memoria: sin base de datos.</summary>
 public sealed class CustomerServiceTests
 {
+    private readonly FakeAuditLog _audit = new();
+
     private static readonly DateTimeOffset Now = new(2026, 10, 19, 15, 0, 0, TimeSpan.Zero);
 
     private readonly InMemoryStore _store = new();
@@ -24,6 +26,7 @@ public sealed class CustomerServiceTests
             .AddApplication()
             .AddSingleton<ICustomerRepository>(_repository)
             .AddSingleton<IUnitOfWork>(_unitOfWork)
+            .AddSingleton<IAuditLog>(_audit)
             .AddSingleton<TimeProvider>(new FixedClock(Now))
             .BuildServiceProvider()
             .GetRequiredService<ICustomerService>();
@@ -74,7 +77,7 @@ public sealed class CustomerServiceTests
     {
         var created = await _service.CreateAsync(new("Ana López", "5555-1234", "ana@example.com", null), Token);
 
-        var result = await _service.UpdateAsync(created.Value, new("Ana María López", "5555-1234", "ana@example.com", "Cliente frecuente"), Token);
+        var result = await _service.UpdateAsync(created.Value, new("Ana María López", "5555-1234", "ana@example.com", "Cliente frecuente"), version: 0, Token);
 
         Assert.True(result.Succeeded);
         Assert.Equal("Ana María López", _store.Customers[0].FullName);
@@ -93,6 +96,19 @@ public sealed class CustomerServiceTests
     }
 
     [Fact]
+    public async Task A_stale_edit_is_rejected_without_changes()
+    {
+        var created = await _service.CreateAsync(new("Ana López", "5555-1234", null, null), Token);
+        Assert.True((await _service.UpdateAsync(created.Value, new("Ana María López", "5555-1234", null, null), version: 0, Token)).Succeeded);
+
+        var stale = await _service.UpdateAsync(created.Value, new("Ana Desactualizada", "5555-9999", null, null), version: 0, Token);
+
+        Assert.Equal(CommandStatus.Conflict, stale.Status);
+        Assert.Equal(CustomerService.StaleMessage, stale.Message);
+        Assert.Equal("Ana María López", _store.Customers.Single().FullName);
+    }
+
+    [Fact]
     public async Task Deactivates_and_reactivates_without_deleting()
     {
         var created = await _service.CreateAsync(new("Ana López", "5555-1234", null, null), Token);
@@ -104,12 +120,13 @@ public sealed class CustomerServiceTests
         Assert.True((await _service.ReactivateAsync(created.Value, Token)).Succeeded);
         Assert.True(_store.Customers[0].IsActive);
         Assert.Single(_store.Customers);
+        Assert.Equal(["cliente.desactivado", "cliente.reactivado"], _audit.Events.Select(entry => entry.Action));
     }
 
     [Fact]
     public async Task Unknown_customers_are_reported_as_not_found()
     {
-        Assert.Equal(CommandStatus.NotFound, (await _service.UpdateAsync(99, new("Ana López", "5555-1234", null, null), Token)).Status);
+        Assert.Equal(CommandStatus.NotFound, (await _service.UpdateAsync(99, new("Ana López", "5555-1234", null, null), version: 0, Token)).Status);
         Assert.Equal(CommandStatus.NotFound, (await _service.DeactivateAsync(99, Token)).Status);
         Assert.Equal(CommandStatus.NotFound, (await _service.ReactivateAsync(0, Token)).Status);
         Assert.Null(await _service.GetAsync(-1, Token));

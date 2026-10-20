@@ -66,4 +66,5 @@ public sealed record DeviceDetails(
     DateTime CreatedAtUtc,
     DateTime? UpdatedAtUtc,
     CustomerOption Owner,
-    IReadOnlyList<ServiceOrderSummary> ServiceOrders);
+    IReadOnlyList<ServiceOrderSummary> ServiceOrders,
+    int Version);

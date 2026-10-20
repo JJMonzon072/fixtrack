@@ -63,14 +63,25 @@ internal sealed class ServiceOrderConfiguration : IEntityTypeConfiguration<Servi
             .HasForeignKey(change => change.ServiceOrderId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasMany(order => order.Assignments)
+            .WithOne()
+            .HasForeignKey(assignment => assignment.ServiceOrderId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(order => order.DeviceId).HasDatabaseName("IX_ServiceOrders_DeviceId");
         builder.HasIndex(order => order.TechnicianId).HasDatabaseName("IX_ServiceOrders_TechnicianId");
 
-        // Consulta principal de la priorización: órdenes por estado ordenadas por fecha comprometida.
+        // Cola de trabajo, panel y conteos: filtran por estado. La puntuación se calcula sobre las órdenes de esos estados.
         builder.HasIndex(order => new { order.Status, order.PromisedAtUtc })
             .HasDatabaseName("IX_ServiceOrders_Status_PromisedAtUtc");
 
         // Orden predeterminado del listado y de las órdenes recibidas recientemente.
         builder.HasIndex(order => order.ReceivedAtUtc).HasDatabaseName("IX_ServiceOrders_ReceivedAtUtc");
+
+        // Un mismo envío del formulario no puede registrar dos órdenes (doble clic o reintento tras un fallo de red).
+        builder.HasIndex(order => order.CreationRequestId)
+            .IsUnique()
+            .HasFilter("[CreationRequestId] IS NOT NULL")
+            .HasDatabaseName("UX_ServiceOrders_CreationRequestId");
     }
 }

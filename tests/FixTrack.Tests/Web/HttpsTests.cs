@@ -78,7 +78,8 @@ public sealed class HttpsTests(FixTrackWebApplicationFactory factory)
         using var client = factory
             .WithWebHostBuilder(builder => builder
                 .UseEnvironment("Production")
-                .UseSetting("https_port", "443"))
+                .UseSetting("https_port", "443")
+                .UseSetting("ReverseProxy:IgnoreForwardedHeaders", "true"))
             .CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
         using var response = await client.GetAsync("/clientes", CancellationToken);

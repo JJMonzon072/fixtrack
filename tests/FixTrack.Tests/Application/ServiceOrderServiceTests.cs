@@ -4,6 +4,7 @@ using FixTrack.Application.Customers;
 using FixTrack.Application.Devices;
 using FixTrack.Application.ServiceOrders;
 using FixTrack.Application.Technicians;
+using FixTrack.Domain.Auditing;
 using FixTrack.Domain.Customers;
 using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
@@ -15,6 +16,8 @@ namespace FixTrack.Tests.Application;
 /// <summary>Casos de uso de órdenes de servicio con repositorios en memoria: sin base de datos.</summary>
 public sealed class ServiceOrderServiceTests
 {
+    private readonly FakeAuditLog _audit = new();
+
     private static readonly DateTimeOffset Now = new(2026, 10, 19, 15, 0, 0, TimeSpan.Zero);
 
     private readonly InMemoryStore _store = new();
@@ -36,6 +39,8 @@ public sealed class ServiceOrderServiceTests
             .AddSingleton<ITechnicianRepository>(new FakeTechnicianRepository(_store))
             .AddSingleton<ICustomerRepository>(new FakeCustomerRepository(_store))
             .AddSingleton<IUnitOfWork>(_unitOfWork)
+            .AddSingleton<ICurrentUser>(FakeCurrentUser.Instance)
+            .AddSingleton<IAuditLog>(_audit)
             .AddSingleton<TimeProvider>(new FixedClock(Now))
             .BuildServiceProvider()
             .GetRequiredService<IServiceOrderService>();
@@ -167,8 +172,8 @@ public sealed class ServiceOrderServiceTests
         var order = await CreateOrderAsync();
         var second = AddTechnician("Andrea Castillo");
 
-        var first = await _service.AssignTechnicianAsync(order.Id, _technician.Id, version: 0, Token);
-        var reassigned = await _service.AssignTechnicianAsync(order.Id, second.Id, version: 1, Token);
+        var first = await _service.AssignTechnicianAsync(order.Id, _technician.Id, null, version: 0, Token);
+        var reassigned = await _service.AssignTechnicianAsync(order.Id, second.Id, null, version: 1, Token);
 
         Assert.True(first.Succeeded);
         Assert.True(reassigned.Succeeded);
@@ -178,14 +183,43 @@ public sealed class ServiceOrderServiceTests
     }
 
     [Fact]
+    public async Task A_reassignment_records_who_made_it_and_why()
+    {
+        var order = await CreateOrderAsync(_technician.Id);
+        var second = AddTechnician("Andrea Castillo");
+
+        var result = await _service.AssignTechnicianAsync(order.Id, second.Id, "Luis tiene demasiadas órdenes", order.Version, Token);
+
+        Assert.True(result.Succeeded);
+        var reassignment = order.Assignments.Last();
+        Assert.Equal((_technician.Id, second.Id), (reassignment.FromTechnicianId, reassignment.ToTechnicianId));
+        Assert.Equal((FakeCurrentUser.Instance.Actor.UserId, "Ana Recepción"), (reassignment.AssignedByUserId, reassignment.AssignedByName));
+        Assert.Equal("Luis tiene demasiadas órdenes", reassignment.Note);
+        Assert.Equal("Ana Recepción", order.StatusHistory.First().ChangedByName);
+    }
+
+    [Fact]
+    public async Task An_overlong_reassignment_reason_is_reported_on_its_field()
+    {
+        var order = await CreateOrderAsync(_technician.Id);
+        var second = AddTechnician("Andrea Castillo");
+
+        var result = await _service.AssignTechnicianAsync(order.Id, second.Id, new string('x', 201), order.Version, Token);
+
+        Assert.Equal(CommandStatus.Invalid, result.Status);
+        Assert.Contains("200", result.Errors["Note"]);
+        Assert.Same(_technician, order.Technician);
+    }
+
+    [Fact]
     public async Task Rejects_inactive_and_already_assigned_technicians()
     {
         var order = await CreateOrderAsync(_technician.Id);
         var inactive = AddTechnician("Marco Reyes", active: false);
 
-        var same = await _service.AssignTechnicianAsync(order.Id, _technician.Id, order.Version, Token);
-        var notActive = await _service.AssignTechnicianAsync(order.Id, inactive.Id, order.Version, Token);
-        var missing = await _service.AssignTechnicianAsync(order.Id, null, order.Version, Token);
+        var same = await _service.AssignTechnicianAsync(order.Id, _technician.Id, null, order.Version, Token);
+        var notActive = await _service.AssignTechnicianAsync(order.Id, inactive.Id, null, order.Version, Token);
+        var missing = await _service.AssignTechnicianAsync(order.Id, null, null, order.Version, Token);
 
         Assert.Equal("La orden ya está asignada a este técnico.", same.Errors["TechnicianId"]);
         Assert.Contains("inactivo", notActive.Errors["TechnicianId"]);
@@ -199,7 +233,7 @@ public sealed class ServiceOrderServiceTests
         var order = await CreateOrderAsync();
         await _service.UpdatePlanAsync(order.Id, new(ServiceOrderPriority.Urgent, null, null), version: 0, Token);
 
-        var result = await _service.AssignTechnicianAsync(order.Id, _technician.Id, version: 0, Token);
+        var result = await _service.AssignTechnicianAsync(order.Id, _technician.Id, null, version: 0, Token);
 
         Assert.Equal(CommandStatus.Conflict, result.Status);
         Assert.Equal(ServiceOrderService.StaleMessage, result.Message);
@@ -221,7 +255,7 @@ public sealed class ServiceOrderServiceTests
     [Fact]
     public async Task Unknown_orders_are_not_found()
     {
-        Assert.Equal(CommandStatus.NotFound, (await _service.AssignTechnicianAsync(42, _technician.Id, 0, Token)).Status);
+        Assert.Equal(CommandStatus.NotFound, (await _service.AssignTechnicianAsync(42, _technician.Id, null, 0, Token)).Status);
         Assert.Equal(CommandStatus.NotFound, (await _service.RecordDiagnosisAsync(42, "x", 0, Token)).Status);
         Assert.Equal(CommandStatus.NotFound, (await _service.ChangeStatusAsync(0, new(ServiceOrderStatus.Diagnosing, null, null), 0, Token)).Status);
         Assert.Null(await _service.GetAsync(0, Token));
@@ -288,6 +322,79 @@ public sealed class ServiceOrderServiceTests
         Assert.Equal(380m, order.FinalCost);
         Assert.Equal(29.50m, order.CostVariance);
         Assert.Equal(ServiceOrderStatus.Delivered, order.StatusHistory.Last().ToStatus);
+    }
+
+    [Fact]
+    public async Task Each_important_operation_leaves_one_audit_event()
+    {
+        var order = await CreateOrderAsync();
+        var second = AddTechnician("Andrea Castillo");
+        await _service.AssignTechnicianAsync(order.Id, _technician.Id, null, order.Version, Token);
+        await _service.AssignTechnicianAsync(order.Id, second.Id, "Luis está de vacaciones", order.Version, Token);
+        await _service.UpdatePlanAsync(order.Id, new(ServiceOrderPriority.Urgent, order.PromisedAtUtc, 500m), order.Version, Token);
+        await _service.ChangeStatusAsync(order.Id, new(ServiceOrderStatus.Diagnosing, null, null), order.Version, Token);
+        await _service.RecordDiagnosisAsync(order.Id, "Fuente dañada", order.Version, Token);
+        await _service.ChangeStatusAsync(order.Id, new(ServiceOrderStatus.Cancelled, "El cliente desistió", null), order.Version, Token);
+
+        Assert.All(_audit.Events, entry => Assert.Equal(("orden", order.Id.ToString()), (entry.EntityType, entry.EntityId)));
+        Assert.Equal(
+            [
+                AuditActions.OrderRegistered,
+                AuditActions.TechnicianAssigned,
+                AuditActions.TechnicianReassigned,
+                AuditActions.PlanChanged,
+                AuditActions.StatusChanged,
+                AuditActions.DiagnosisRecorded,
+                AuditActions.OrderCancelled,
+            ],
+            _audit.Events.Select(entry => entry.Action));
+        var summaries = _audit.Events.Select(entry => entry.Summary).ToList();
+        Assert.StartsWith($"{order.Number}: registrada para Dell", summaries[0]);
+        Assert.Contains("Reasignada de Luis Pérez a Andrea Castillo. Motivo: Luis está de vacaciones", summaries[2]);
+        Assert.Contains("Prioridad Alta → Urgente; costo estimado Q 350.50 → Q 500.00", summaries[3]);
+        Assert.Contains("Recibida → En diagnóstico.", summaries[4]);
+        Assert.Contains("Cancelada desde En diagnóstico. Motivo: El cliente desistió", summaries[6]);
+    }
+
+    [Fact]
+    public async Task A_delivery_records_the_final_and_estimated_cost()
+    {
+        var order = await DiagnosedOrderAsync();
+        await _service.ChangeStatusAsync(order.Id, new(ServiceOrderStatus.ReadyForPickup, null, null), order.Version, Token);
+
+        await _service.ChangeStatusAsync(order.Id, new(ServiceOrderStatus.Delivered, null, 380m), order.Version, Token);
+
+        var delivery = _audit.Events.Last();
+        Assert.Equal(AuditActions.OrderDelivered, delivery.Action);
+        Assert.Contains("Entregada con costo final Q 380.00 (estimado: Q 350.50)", delivery.Summary);
+    }
+
+    [Fact]
+    public async Task Rejected_or_unchanged_operations_leave_no_audit_event()
+    {
+        var order = await CreateOrderAsync();
+        var before = _audit.Events.Count;
+
+        await _service.ChangeStatusAsync(order.Id, new(ServiceOrderStatus.Delivered, null, 100m), order.Version, Token);
+        await _service.AssignTechnicianAsync(order.Id, null, null, order.Version, Token);
+        await _service.UpdatePlanAsync(order.Id, new(order.Priority, order.PromisedAtUtc, order.EstimatedCost), order.Version, Token);
+        await _service.UpdatePlanAsync(order.Id, new(ServiceOrderPriority.Urgent, null, null), version: 99, Token);
+
+        Assert.Equal(before, _audit.Events.Count);
+    }
+
+    [Fact]
+    public async Task Submitting_the_same_form_twice_registers_one_order()
+    {
+        var input = Input(null) with { RequestId = Guid.NewGuid() };
+
+        var first = await _service.CreateAsync(input, Token);
+        var again = await _service.CreateAsync(input, Token);
+
+        Assert.True(again.Succeeded);
+        Assert.Equal(first.Value, again.Value);
+        Assert.Single(_store.ServiceOrders);
+        Assert.Single(_audit.Events, entry => entry.Action == AuditActions.OrderRegistered);
     }
 
     [Fact]

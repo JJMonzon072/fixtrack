@@ -11,10 +11,31 @@ using FixTrack.Domain.Technicians;
 
 namespace FixTrack.Tests.Application;
 
-/// <summary>Reloj fijo para pruebas deterministas.</summary>
+/// <summary>Registro de auditoría en memoria: guarda los eventos para comprobarlos.</summary>
+public sealed class FakeAuditLog : IAuditLog
+{
+    public List<(string Action, string EntityType, string EntityId, string Summary)> Events { get; } = [];
+
+    public void Record(string action, string entityType, string entityId, string summary) =>
+        Events.Add((action, entityType, entityId, summary));
+}
+
+/// <summary>Usuario fijo que hace las operaciones en las pruebas de casos de uso.</summary>
+public sealed class FakeCurrentUser : ICurrentUser
+{
+    public static FakeCurrentUser Instance { get; } = new();
+
+    public Actor Actor { get; } = new("cuenta-de-prueba", "Ana Recepción");
+}
+
+/// <summary>Reloj fijo para pruebas deterministas; solo avanza cuando la prueba lo indica.</summary>
 public sealed class FixedClock(DateTimeOffset now) : TimeProvider
 {
-    public override DateTimeOffset GetUtcNow() => now;
+    private DateTimeOffset _now = now;
+
+    public override DateTimeOffset GetUtcNow() => _now;
+
+    public void Advance(TimeSpan time) => _now += time;
 }
 
 /// <summary>
@@ -140,7 +161,7 @@ public sealed class FakeCustomerRepository(InMemoryStore store) : ICustomerRepos
 
     public Task<CustomerDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken) =>
         Task.FromResult(store.Customers.Where(c => c.Id == id)
-            .Select(c => new CustomerDetails(c.Id, c.FullName, c.Phone, c.Email, c.Notes, c.IsActive, 0, c.CreatedAtUtc, c.UpdatedAtUtc, c.DeactivatedAtUtc))
+            .Select(c => new CustomerDetails(c.Id, c.FullName, c.Phone, c.Email, c.Notes, c.IsActive, 0, c.CreatedAtUtc, c.UpdatedAtUtc, c.DeactivatedAtUtc, c.Version))
             .SingleOrDefault());
 
     public Task<Customer?> FindAsync(int id, CancellationToken cancellationToken) =>
@@ -258,14 +279,32 @@ public sealed class FakeServiceOrderRepository(InMemoryStore store) : IServiceOr
     public Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, int take, CancellationToken cancellationToken) =>
         Task.FromResult(new CustomerServiceOrders(0, 0, []));
 
-    public Task<IReadOnlyList<OpenOrderSnapshot>> ListOpenAsync(int limit, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<OpenOrderSnapshot>>([.. store.ServiceOrders
-            .Where(order => !order.IsClosed)
-            .OrderBy(order => order.ReceivedAtUtc)
-            .Take(limit)
+    /// <summary>Mismo orden que la consulta real, calculado en memoria con <see cref="WorkPrioritizer"/>.</summary>
+    public Task<IReadOnlyList<OpenOrderSnapshot>> ListMostUrgentAsync(
+        IReadOnlyCollection<ServiceOrderStatus> statuses,
+        DateTime nowUtc,
+        int take,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OpenOrderSnapshot>>([.. WorkPrioritizer
+            .Rank(
+                store.ServiceOrders.Where(order => !order.IsClosed && statuses.Contains(order.Status)),
+                order => WorkPrioritizer.Score(order.Priority, order.Status, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId is not null, nowUtc).Total,
+                order => order.PromisedAtUtc,
+                order => order.ReceivedAtUtc,
+                order => order.Id)
+            .Take(take)
             .Select(order => new OpenOrderSnapshot(
                 order.Id, order.Status, order.Priority, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId,
                 order.Technician?.FullName, order.Device!.Customer!.FullName, order.Device.Type, order.Device.Brand, order.Device.Model))]);
+
+    public Task<IReadOnlyDictionary<ServiceOrderStatus, int>> CountOpenByStatusAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<ServiceOrderStatus, int>>(store.ServiceOrders
+            .Where(order => !order.IsClosed)
+            .GroupBy(order => order.Status)
+            .ToDictionary(group => group.Key, group => group.Count()));
+
+    public Task<int?> FindIdByCreationRequestAsync(Guid requestId, CancellationToken cancellationToken) =>
+        Task.FromResult(store.ServiceOrders.FirstOrDefault(order => order.CreationRequestId == requestId)?.Id);
 
     public Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken) =>
         Task.FromResult(store.ServiceOrders.SingleOrDefault(order => order.Id == id));

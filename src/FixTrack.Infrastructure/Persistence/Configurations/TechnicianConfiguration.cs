@@ -21,6 +21,9 @@ internal sealed class TechnicianConfiguration : IEntityTypeConfiguration<Technic
 
         builder.HasKey(technician => technician.Id);
 
+        // Concurrencia optimista: el UPDATE incluye "WHERE Version = <versión leída>" (ver ServiceOrderConfiguration).
+        builder.Property(technician => technician.Version).IsConcurrencyToken();
+
         builder.Property(technician => technician.FullName)
             .HasMaxLength(ContactRules.NameMaxLength)
             .UseCollation(Collations.SpanishAccentInsensitive);

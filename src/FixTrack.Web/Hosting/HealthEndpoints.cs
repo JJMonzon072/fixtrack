@@ -6,7 +6,8 @@ namespace FixTrack.Web.Hosting;
 /// Puntos de comprobación públicos y sin datos sensibles: solo responden "Healthy" o "Unhealthy".
 /// <list type="bullet">
 /// <item><c>/salud</c>: la aplicación está en ejecución (para el health check de Render).</item>
-/// <item><c>/salud/bd</c>: además, la base de datos responde.</item>
+/// <item><c>/salud/bd</c>: además, la base de datos responde a una consulta (preparación). El resultado se reutiliza
+/// durante 10 segundos.</item>
 /// </list>
 /// </summary>
 public static class HealthEndpoints
@@ -17,6 +18,7 @@ public static class HealthEndpoints
 
     public static IServiceCollection AddHealthEndpoints(this IServiceCollection services)
     {
+        services.AddSingleton<DatabaseHealthCache>();
         services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("base-de-datos", tags: [DatabaseTag]);
         return services;
     }

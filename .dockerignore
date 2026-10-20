@@ -21,3 +21,5 @@ tests/
 **/*.key
 Dockerfile
 .dockerignore
+**/fixtrack-respaldo-*.zip
+**/*.zip.parcial

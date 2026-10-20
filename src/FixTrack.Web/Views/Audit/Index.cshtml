@@ -1,0 +1,89 @@
+@using FixTrack.Application.Auditing
+@using FixTrack.Web.Models.Audit
+@using FixTrack.Web.Services
+@model AuditIndexViewModel
+@inject DateDisplay Dates
+@{
+    ViewData["Title"] = "Auditoría";
+    var paging = Model.Result.Page;
+
+    string AreaUrl(AuditArea area, int page = 1) => Url.Action("Index", new
+    {
+        area = area == AuditArea.All ? null : AuditDisplay.Slug(area),
+        pagina = page > 1 ? page : (int?)null,
+    })!;
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">Auditoría</h1>
+        <p class="page-description">
+            Quién hizo cada operación importante y cuándo. Los registros no pueden modificarse ni eliminarse y nunca incluyen contraseñas.
+        </p>
+    </div>
+</header>
+
+<section class="table-card section" aria-labelledby="audit-title">
+    <h2 class="visually-hidden" id="audit-title">Operaciones registradas</h2>
+    <div class="toolbar">
+        <nav class="tabs" aria-label="Filtrar por área">
+            @foreach (var (area, label) in AuditDisplay.Areas)
+            {
+                <a class="tabs__item" aria-current="@(area == Model.Area ? "page" : null)" href="@AreaUrl(area)">
+                    @label
+                    <span class="tabs__count">@Model.Result.Counts[area]</span>
+                </a>
+            }
+        </nav>
+    </div>
+
+    @if (paging.TotalCount == 0)
+    {
+        <div class="empty-state empty-state--compact">
+            <div class="empty-state__icon"><icon name="scroll-text" /></div>
+            <h3 class="empty-state__title">@(Model.Area == AuditArea.All ? "Todavía no hay operaciones registradas" : "No hay operaciones registradas en esta área")</h3>
+            <p class="empty-state__text">
+                Aquí aparecerán los registros de órdenes, asignaciones, cambios de estado y costos, la desactivación de técnicos y clientes, y los cambios de cuentas.
+            </p>
+        </div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table data-table--stack audit-table">
+                <caption class="visually-hidden">Operaciones registradas, de la más reciente a la más antigua</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Fecha</th>
+                        <th scope="col">Operación</th>
+                        <th scope="col">Detalle</th>
+                        <th scope="col">Realizada por</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in paging.Items)
+                    {
+                        var target = AuditDisplay.Target(entry);
+                        <tr>
+                            <td data-label="Fecha" class="audit-date">
+                                <time datetime="@DateDisplay.Iso(entry.OccurredAtUtc)">@Dates.ShortWithTime(entry.OccurredAtUtc)</time>
+                            </td>
+                            <td data-label="Operación">
+                                <span class="audit-action">
+                                    <icon name="@AuditDisplay.Icon(entry.EntityType)" />
+                                    @AuditDisplay.ActionName(entry.Action)
+                                </span>
+                            </td>
+                            <td data-label="Detalle">
+                                <p class="audit-summary">@entry.Summary</p>
+                                <a class="link audit-link" asp-controller="@target.Controller" asp-action="@target.Action" asp-all-route-data="@(new Dictionary<string, string> { ["id"] = entry.EntityId })">@target.Text</a>
+                            </td>
+                            <td data-label="Realizada por">@entry.UserName</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <partial name="_Pagination" model="new PaginationViewModel(paging, page => AreaUrl(Model.Area, page))" />
+    }
+</section>

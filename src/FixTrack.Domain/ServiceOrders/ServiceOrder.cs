@@ -6,15 +6,19 @@ namespace FixTrack.Domain.ServiceOrders;
 
 /// <summary>
 /// Orden de servicio sobre un equipo. Toda orden nace en estado <see cref="ServiceOrderStatus.Received"/>
-/// y cada cambio de estado queda registrado en <see cref="StatusHistory"/>. Los cambios se hacen
+/// y cada cambio de estado queda registrado en <see cref="StatusHistory"/>; cada asignación o reasignación de técnico,
+/// en <see cref="Assignments"/>. Ambos registros guardan quién hizo el cambio (<see cref="Actor"/>). Los cambios se hacen
 /// exclusivamente con los métodos de esta clase, que aplican el flujo de <see cref="ServiceOrderWorkflow"/>.
 /// </summary>
 public sealed class ServiceOrder : Entity
 {
     private readonly List<ServiceOrderStatusChange> _statusHistory = [];
+    private readonly List<ServiceOrderAssignment> _assignments = [];
 
     /// <summary>Registra la recepción de un equipo. El propietario del equipo debe estar cargado y activo.</summary>
     /// <param name="technician">Técnico responsable desde la recepción; puede asignarse después.</param>
+    /// <param name="registeredBy">Quién registra la orden (queda en el historial).</param>
+    /// <param name="creationRequestId">Identificador del formulario que la registró: evita duplicarla si se envía dos veces.</param>
     public ServiceOrder(
         Device device,
         string? reportedIssue,
@@ -23,7 +27,9 @@ public sealed class ServiceOrder : Entity
         DateTime? promisedAtUtc,
         decimal? estimatedCost,
         string? intakeNotes,
-        Technician? technician = null)
+        Technician? technician = null,
+        Actor? registeredBy = null,
+        Guid? creationRequestId = null)
     {
         ArgumentNullException.ThrowIfNull(device);
         var owner = device.Customer
@@ -53,11 +59,12 @@ public sealed class ServiceOrder : Entity
         EstimatedCost = estimatedCost;
         Status = ServiceOrderStatus.Received;
         CreatedAtUtc = ReceivedAtUtc;
-        _statusHistory.Add(new ServiceOrderStatusChange(null, ServiceOrderStatus.Received, ReceivedAtUtc, "Orden registrada."));
+        CreationRequestId = creationRequestId is { } requestId && requestId != Guid.Empty ? requestId : null;
+        _statusHistory.Add(new ServiceOrderStatusChange(null, ServiceOrderStatus.Received, ReceivedAtUtc, "Orden registrada.", registeredBy));
 
         if (technician is not null)
         {
-            SetTechnician(technician, ReceivedAtUtc);
+            SetTechnician(technician, ReceivedAtUtc, registeredBy, null);
         }
     }
 
@@ -114,7 +121,16 @@ public sealed class ServiceOrder : Entity
     /// </summary>
     public int Version { get; private set; }
 
+    /// <summary>
+    /// Identificador del envío del formulario que creó la orden (único si existe). Un segundo envío o un reintento con el
+    /// mismo identificador devuelve la orden ya creada en lugar de registrar otra.
+    /// </summary>
+    public Guid? CreationRequestId { get; private set; }
+
     public IReadOnlyCollection<ServiceOrderStatusChange> StatusHistory => _statusHistory;
+
+    /// <summary>Asignaciones y reasignaciones de técnico, de solo inserción.</summary>
+    public IReadOnlyCollection<ServiceOrderAssignment> Assignments => _assignments;
 
     /// <summary>Una orden entregada o cancelada ya no admite cambios.</summary>
     public bool IsClosed => ServiceOrderWorkflow.IsClosed(Status);
@@ -125,7 +141,9 @@ public sealed class ServiceOrder : Entity
     public static string FormatNumber(int id) => $"OS-{id:D6}";
 
     /// <summary>Asigna o reasigna el técnico responsable. Solo los técnicos activos pueden recibir asignaciones.</summary>
-    public void AssignTechnician(Technician technician, DateTime assignedAtUtc)
+    /// <param name="assignedBy">Quién asigna (queda en el registro de asignaciones).</param>
+    /// <param name="note">Motivo u observación, por ejemplo, de una reasignación.</param>
+    public void AssignTechnician(Technician technician, DateTime assignedAtUtc, Actor? assignedBy = null, string? note = null)
     {
         ArgumentNullException.ThrowIfNull(technician);
         EnsureOpen();
@@ -134,7 +152,7 @@ public sealed class ServiceOrder : Entity
             throw new DomainException("La orden ya está asignada a este técnico.");
         }
 
-        SetTechnician(technician, assignedAtUtc);
+        SetTechnician(technician, assignedAtUtc, assignedBy, note);
         Touch(assignedAtUtc);
     }
 
@@ -203,7 +221,7 @@ public sealed class ServiceOrder : Entity
     /// Cambia el estado siguiendo <see cref="ServiceOrderWorkflow"/> y agrega el registro al historial.
     /// Entregar exige el costo final; cancelar y esperar repuestos exigen una nota.
     /// </summary>
-    public void ChangeStatus(ServiceOrderStatus newStatus, DateTime changedAtUtc, string? note = null, decimal? finalCost = null)
+    public void ChangeStatus(ServiceOrderStatus newStatus, DateTime changedAtUtc, string? note = null, decimal? finalCost = null, Actor? changedBy = null)
     {
         ThrowIfInvalid(ValidateStatusChange(newStatus, note, finalCost));
 
@@ -213,7 +231,7 @@ public sealed class ServiceOrder : Entity
             throw new DomainException("El cambio de estado no puede ser anterior al último cambio registrado en la orden.");
         }
 
-        _statusHistory.Add(new ServiceOrderStatusChange(Status, newStatus, changedAt, Text.CleanOrNull(note)));
+        _statusHistory.Add(new ServiceOrderStatusChange(Status, newStatus, changedAt, Text.CleanOrNull(note), changedBy));
         Status = newStatus;
         if (newStatus == ServiceOrderStatus.Delivered)
         {
@@ -271,13 +289,14 @@ public sealed class ServiceOrder : Entity
     private string? StatusError(ServiceOrderStatus newStatus) =>
         ServiceOrderWorkflow.TransitionBlocker(Status, newStatus, TechnicianId is not null, Diagnosis is not null);
 
-    private void SetTechnician(Technician technician, DateTime assignedAtUtc)
+    private void SetTechnician(Technician technician, DateTime assignedAtUtc, Actor? assignedBy, string? note)
     {
         if (!technician.IsActive)
         {
             throw new DomainException("No se puede asignar un técnico inactivo.");
         }
 
+        _assignments.Add(new ServiceOrderAssignment(TechnicianId, technician, assignedAtUtc, assignedBy, note));
         Technician = technician;
         TechnicianId = technician.Id;
         TechnicianAssignedAtUtc = UtcClock.Ensure(assignedAtUtc, nameof(assignedAtUtc));

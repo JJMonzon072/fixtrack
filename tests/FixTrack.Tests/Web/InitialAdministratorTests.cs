@@ -14,6 +14,7 @@ public sealed class InitialAdministratorTests
     [Theory]
     [InlineData(new[] { "crear-administrador" }, true)]
     [InlineData(new[] { "aplicar-migraciones" }, true)]
+    [InlineData(new[] { "proteger-claves", "--revocar-sin-cifrar" }, true)]
     [InlineData(new[] { "--urls", "http://localhost:5104" }, false)]
     [InlineData(new string[0], false)]
     public void Only_the_explicit_commands_replace_the_web_server(string[] args, bool expected) =>
