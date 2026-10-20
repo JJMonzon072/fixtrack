@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,7 +21,8 @@ namespace FixTrack.Tests.Web;
 /// </summary>
 public sealed class FixTrackWebApplicationFactory : WebApplicationFactory<Program>
 {
-    private readonly SqliteConnection _connection = SqliteTestDatabase.CreateOpenConnection();
+    // El esquema se crea antes de iniciar la aplicación: Data Protection lee sus claves de la base al arrancar.
+    private readonly SqliteTestDatabase _database = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -38,7 +38,7 @@ public sealed class FixTrackWebApplicationFactory : WebApplicationFactory<Progra
             services.RemoveAll<DbContextOptions>();
             services.RemoveAll<IDbContextOptionsConfiguration<FixTrackDbContext>>();
             services.RemoveAll<FixTrackDbContext>();
-            services.AddDbContext<FixTrackDbContext>(options => options.UseSqlite(_connection));
+            services.AddDbContext<FixTrackDbContext>(options => options.UseSqlite(_database.Connection));
         });
     }
 
@@ -46,7 +46,6 @@ public sealed class FixTrackWebApplicationFactory : WebApplicationFactory<Progra
     {
         var host = base.CreateHost(builder);
         using var scope = host.Services.CreateScope();
-        scope.ServiceProvider.GetRequiredService<FixTrackDbContext>().Database.EnsureCreated();
         SeedAccountsAsync(scope.ServiceProvider.GetRequiredService<UserManager<FixTrackUser>>()).GetAwaiter().GetResult();
         return host;
     }
@@ -56,7 +55,7 @@ public sealed class FixTrackWebApplicationFactory : WebApplicationFactory<Progra
         base.Dispose(disposing);
         if (disposing)
         {
-            _connection.Dispose();
+            _database.Dispose();
         }
     }
 
