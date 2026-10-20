@@ -40,6 +40,7 @@ public sealed class MigrationTests
 
         Assert.Contains("TR_ServiceOrderStatusHistory_AppendOnly", script);
         Assert.Contains("TR_ServiceOrderAssignments_AppendOnly", script);
+        Assert.Contains("INSERT INTO [ServiceOrderAssignments]", script);
 
         foreach (var forbidden in new[] { "DROP TABLE", "DROP COLUMN", "DROP INDEX", "TRUNCATE", "DELETE FROM", "UPDATE [" })
         {
@@ -158,6 +159,23 @@ public sealed class MigrationTests
         Assert.Contains("CREATE UNIQUE INDEX [UX_ServiceOrders_CreationRequestId]", script);
         Assert.Contains("WHERE [CreationRequestId] IS NOT NULL", script);
         Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void The_phase_4_backfill_only_inserts_the_current_assignment_of_orders_without_records()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: MigrationId("OrderCreationRequests"),
+            toMigration: MigrationId("BackfillCurrentAssignments"));
+
+        Assert.Contains("INSERT INTO [ServiceOrderAssignments]", script);
+        Assert.Contains("o.[TechnicianAssignedAtUtc]", script);
+        Assert.Contains("NOT EXISTS (SELECT 1 FROM [ServiceOrderAssignments]", script);
+        foreach (var forbidden in new[] { "DROP", "ALTER", "UPDATE", "DELETE", "TRUNCATE" })
+        {
+            Assert.DoesNotContain(forbidden, script, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private static string MigrationId(string name)
