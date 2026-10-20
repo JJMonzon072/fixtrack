@@ -19,17 +19,20 @@ El desarrollo avanza por fases y cada entrega pasa por una revisión de QA.
 | 1 | Estructura de la solución, arquitectura por capas, sistema de diseño, navegación y páginas base | Aprobada e integrada a `main` (PR #1) |
 | 2A | SQL Server con Entity Framework Core, modelo de datos inicial y módulo **Clientes** | Aprobada e integrada a `main` (PR #2) |
 | 2B | Módulos **Equipos** y **Técnicos** e integración de equipos en el detalle del cliente | Aprobada e integrada a `main` (PR #3) |
-| 3 | **Órdenes de servicio** completas, **algoritmo de priorización** y cola de trabajo, **panel con indicadores reales**, **autenticación y roles**, preparación para **despliegue con Docker** | **Entregada para revisión** |
+| 3 | **Órdenes de servicio** completas, **algoritmo de priorización** y cola de trabajo, **panel con indicadores reales**, **autenticación y roles**, preparación para **despliegue con Docker** | Aprobada e integrada a `main` (PR #4) |
+| 4 | **Endurecimiento y preparación para producción:** claves de sesión cifradas con certificado, inicio de sesión sin enumeración de cuentas, concurrencia en cuentas, clientes, equipos y técnicos, proxy explícito, **historial de asignaciones y auditoría**, resiliencia ante fallos de la base, cola calculada en SQL, **respaldos** y procedimiento de despliegue en Render | **Entregada para revisión** |
 
-La aplicación guarda sus datos en **SQL Server** (FixTrackDB, alojada en Somee). Todavía **no está publicada** en internet.
+La aplicación guarda sus datos en **SQL Server** (FixTrackDB, alojada en Somee), con las nueve migraciones aplicadas. Todavía **no está publicada** en internet.
 
 ### Funciones
 
-- **Órdenes de servicio:** recepción con cliente, equipo, problema reportado, prioridad, técnico opcional, entrega comprometida, costo estimado y observaciones. Asignación y reasignación de técnicos, diagnóstico, planificación, cambios de estado con reglas explícitas, costo final al entregar e historial de solo inserción. Listado con búsqueda, vistas (abiertas, vencidas, cerradas, todas), filtros por estado, prioridad y técnico (incluido "sin asignar") y paginación.
-- **Cola de trabajo:** las órdenes abiertas ordenadas por un algoritmo determinista y explicable, separadas en reparaciones, en espera de repuestos y listas para entrega, cada una con su acción recomendada.
+- **Órdenes de servicio:** recepción con cliente, equipo, problema reportado, prioridad, técnico opcional, entrega comprometida, costo estimado y observaciones. Asignación y reasignación de técnicos con motivo, diagnóstico, planificación, cambios de estado con reglas explícitas y costo final al entregar. La **línea de tiempo** une estados, asignaciones, planificación y diagnóstico, cada uno con su autor, y nada de eso se puede editar ni borrar. Un mismo formulario no registra dos órdenes. Listado con búsqueda, vistas (abiertas, vencidas, cerradas, todas), filtros por estado, prioridad y técnico (incluido "sin asignar") y paginación.
+- **Cola de trabajo:** las órdenes abiertas ordenadas por un algoritmo determinista y explicable, separadas en reparaciones, en espera de repuestos y listas para entrega, cada una con su acción recomendada. La base de datos calcula la puntuación y devuelve las 100 primeras de cada lista.
 - **Panel:** indicadores calculados en SQL (abiertas, en reparación, listas, vencidas, sin asignar, recientes), distribución por estado y prioridad, acciones recomendadas, próximas entregas, órdenes recientes y carga por técnico. Con la base vacía muestra ceros, no datos de ejemplo.
-- **Clientes, Equipos y Técnicos:** registro, búsqueda, edición y desactivación. Sus detalles muestran las órdenes relacionadas. No se puede desactivar a un técnico con órdenes abiertas.
-- **Cuentas de acceso:** inicio de sesión, roles Administrador y Operador, administración de cuentas y cambio de contraseña.
+- **Clientes, Equipos y Técnicos:** registro, búsqueda, edición y desactivación, con aviso si otra persona modificó el registro mientras se editaba. Sus detalles muestran las órdenes relacionadas. No se puede desactivar a un técnico con órdenes abiertas; al desactivar un cliente, el sistema avisa cuántas tiene.
+- **Cuentas de acceso:** inicio de sesión, roles Administrador y Operador, administración de cuentas (incluido el desbloqueo) y cambio de contraseña.
+- **Auditoría:** el administrador consulta quién hizo cada operación importante y cuándo (`/auditoria`).
+- **Operación:** página 503 clara si la base no responde, comprobaciones de salud, respaldo y restauración de la base con comandos.
 
 Documentación detallada:
 
@@ -46,8 +49,8 @@ Documentación detallada:
 - macOS, Windows o Linux. El desarrollo se hace en macOS con Apple Silicon (M4).
 - Un navegador moderno: Chrome, Edge, Safari o Firefox en una versión reciente.
 - **Para ejecutar la aplicación:** una base SQL Server 2022 (Express o superior) con las migraciones aplicadas, su cadena de conexión y una cuenta de administrador. Consulta [Configurar la base de datos](#configurar-la-base-de-datos) y [Primer administrador](#primer-administrador).
-- **Para compilar y ejecutar las pruebas no se necesita base de datos:** las pruebas usan SQLite en memoria.
-- **Docker** solo si quieres construir la imagen de producción. No hace falta Node.js.
+- **Para compilar y ejecutar las pruebas no se necesita base de datos:** casi todas usan SQLite en memoria. Las 23 que necesitan SQL Server real se omiten si no se configura uno (ver [Pruebas](#pruebas)).
+- **Docker** solo para construir la imagen de producción o levantar un SQL Server local para esas pruebas. No hace falta Node.js.
 
 Para comprobar la versión instalada:
 
@@ -77,7 +80,7 @@ Abre **http://localhost:5104**. La aplicación pide iniciar sesión. Si la base 
 | Recargar automáticamente al editar | `dotnet watch --project src/FixTrack.Web` |
 | Ejecutar con HTTPS | `dotnet dev-certs https --trust` (solo la primera vez) y después `dotnet run --project src/FixTrack.Web --launch-profile https` → https://localhost:7171 |
 | Ejecutar la compilación Release | `dotnet run --project src/FixTrack.Web -c Release` |
-| Ejecutar la imagen Docker | Consulta [Despliegue con Docker](#despliegue-con-docker-render) |
+| Ejecutar la imagen Docker | Consulta [Despliegue con Docker](#despliegue-en-render) |
 
 ### HTTPS por entorno
 
@@ -86,7 +89,7 @@ Abre **http://localhost:5104**. La aplicación pide iniciar sesión. Si la base 
 | Desarrollo con el perfil `http` (predeterminado) | No: el perfil no expone un puerto HTTPS | No | Sin `Secure`, para funcionar en `http://localhost` |
 | Desarrollo con el perfil `https` | Sí: `http://localhost:5104` → `https://localhost:7171` | No | `Secure` si la solicitud es HTTPS |
 | Producción con un puerto HTTPS configurado | Sí | Sí | Siempre `Secure` |
-| Producción en el contenedor detrás de Render | La hace el balanceador de Render; la aplicación reconoce HTTPS por el encabezado del proxy confiable | Sí | Siempre `Secure` |
+| Producción en el contenedor detrás de Render | La hace el balanceador de Render | Sí, cuando el proxy de Render está configurado como confiable (la aplicación reconoce HTTPS por su encabezado) | Siempre `Secure` |
 
 La redirección se activa cuando `HttpsEndpoint.IsConfigured` encuentra un puerto HTTPS en las mismas fuentes que usa Kestrel (`ASPNETCORE_URLS`, `--urls`, `HTTPS_PORTS`, `HTTPS_PORT` o la sección `Kestrel:Endpoints`). Sin ese dato no hay a dónde redirigir y el middleware solo registraría una advertencia. Las comprobaciones de salud nunca se redirigen.
 
@@ -119,11 +122,22 @@ ASP.NET Core lee la misma configuración desde user-secrets o desde variables de
 | --- | --- | --- |
 | `ConnectionStrings__FixTrack` | Cadena de conexión a SQL Server. **Secreto** | Ninguno: es obligatoria |
 | `ASPNETCORE_ENVIRONMENT` | Entorno | `Production` en la imagen Docker |
-| `PORT` | Puerto HTTP (lo define Render) | 8080 en la imagen |
-| `ReverseProxy__KnownNetworks__0`, `__1`… | Redes (CIDR) desde las que se aceptan `X-Forwarded-For` y `X-Forwarded-Proto` | `10.0.0.0/8` en la imagen; ninguna fuera de ella |
-| `Security__LoginAttemptsPerMinute` | Intentos de inicio de sesión por minuto y dirección IP | 10 |
+| `PORT` | Puerto HTTP. Render lo define (10000) | 8080 en la imagen |
+| `DataProtection__Certificate__Base64` y `DataProtection__Certificate__Password` | Certificado PFX (en base64) y su contraseña, que cifran las claves de sesión guardadas en la base. **Secretos.** Obligatorios fuera de Desarrollo | Ninguno |
+| `DataProtection__Certificate__Path` | Alternativa a `Base64`: ruta de un archivo PFX (por ejemplo, un *Secret File* de Render) | Ninguna |
+| `DataProtection__PreviousCertificates__0__Base64` / `__Password` | Certificado anterior, solo para descifrar durante una rotación | Ninguno |
+| `DataProtection__KeyStore` | `Database` (tabla `DataProtectionKeys`) o `Local` (perfil del usuario) | `Local` en Desarrollo, `Database` en los demás |
+| `DataProtection__AllowUnprotectedKeys` | `true` permite guardar las claves sin cifrar fuera de Desarrollo. No se recomienda | `false` |
+| `ReverseProxy__KnownProxies__0`, `__1`… | Direcciones IP exactas de los proxies confiables | Ninguna |
+| `ReverseProxy__KnownNetworks__0`, `__1`… | Redes (CIDR) de los proxies confiables | Ninguna |
+| `ReverseProxy__IgnoreForwardedHeaders` | `true` declara que no hay proxy confiable. En producción hay que definir esta variable o alguna de las dos anteriores | `false` |
+| `ReverseProxy__ClientIpHeader` | Encabezado con la IP del cliente | `X-Forwarded-For` |
+| `Security__LoginAttemptsPerMinute` | Intentos de inicio de sesión (y de cambio de contraseña) por minuto y dirección IP | 10 |
+| `Security__FailedLoginMinimumMilliseconds` | Duración mínima de un inicio de sesión fallido, para no revelar si el correo existe | 500 |
 | `TZ` | Zona horaria para mostrar fechas (se guardan en UTC) | `America/Guatemala` en la imagen |
 | `InitialAdmin__Email`, `InitialAdmin__FullName`, `InitialAdmin__Password` | Solo para el comando `crear-administrador`. La contraseña es un **secreto** y es opcional: si falta, el comando la pide | Ninguno |
+
+Si falta una variable obligatoria (la cadena de conexión, el certificado o la decisión sobre el proxy), la aplicación no arranca y el mensaje dice qué falta.
 
 ### Migraciones
 
@@ -132,26 +146,30 @@ El esquema se crea y modifica **solo con migraciones** versionadas en `src/FixTr
 ```bash
 dotnet tool restore    # instala dotnet-ef 10.0.13 (dotnet-tools.json)
 
-# Crear una migración después de cambiar el modelo
-dotnet ef migrations add <Nombre> --project src/FixTrack.Infrastructure --startup-project src/FixTrack.Web --output-dir Persistence/Migrations
+# Hay dos contextos (el del taller y el de las claves de Data Protection): indica siempre --context FixTrackDbContext
 
-# Revisar el SQL antes de aplicarlo (script idempotente)
-dotnet ef migrations script --idempotent --project src/FixTrack.Infrastructure --startup-project src/FixTrack.Web -o migracion.sql
+# Crear una migración después de cambiar el modelo
+dotnet ef migrations add <Nombre> --context FixTrackDbContext --project src/FixTrack.Infrastructure --startup-project src/FixTrack.Web --output-dir Persistence/Migrations
+
+# Revisar el SQL de las migraciones pendientes antes de aplicarlas (desde la última aplicada)
+dotnet ef migrations script <ÚltimaAplicada> --context FixTrackDbContext --project src/FixTrack.Infrastructure --startup-project src/FixTrack.Web -o migracion.sql
 
 # Aplicar las migraciones pendientes a la base configurada (cualquiera de las dos formas)
-dotnet ef database update --project src/FixTrack.Infrastructure --startup-project src/FixTrack.Web
+dotnet ef database update --context FixTrackDbContext --project src/FixTrack.Infrastructure --startup-project src/FixTrack.Web
 dotnet run --project src/FixTrack.Web -- aplicar-migraciones
 ```
 
 `aplicar-migraciones` es un comando de la propia aplicación: lista las migraciones pendientes, las aplica y termina, sin iniciar el servidor web. Sirve también con la imagen Docker, donde no está `dotnet-ef`.
 
-Las migraciones reproducen el esquema completo desde cero en cualquier base SQL Server 2022 compatible, incluida la edición Express. FixTrackDB ya tiene aplicadas las cuatro migraciones existentes.
+Las migraciones reproducen el esquema completo desde cero en cualquier base SQL Server 2022 compatible, incluida la edición Express. Ninguna borra ni modifica datos existentes (una prueba lo comprueba en el script completo). FixTrackDB tiene aplicadas las nueve migraciones.
+
+Procedimiento seguido para aplicar las de la fase 4 a FixTrackDB, recomendado para las siguientes: (1) `exportar-respaldo` de la base real; (2) revisar el script SQL; (3) restaurar el respaldo en una base vacía local (`restaurar-respaldo`) y aplicar ahí las migraciones; (4) aplicarlas a la base real; (5) exportar de nuevo y comparar tabla por tabla con el ensayo.
 
 ## Primer administrador
 
 No hay registro público ni cuentas predeterminadas. La primera cuenta de administrador se crea con un comando explícito, que solo funciona mientras **no exista ningún administrador habilitado**. Después, las demás cuentas se crean desde **Administración → Usuarios** (`/usuarios`).
 
-**Pendiente para el propietario:** FixTrackDB todavía no tiene un administrador definitivo. Para crearlo desde tu equipo, con la cadena de conexión ya configurada en user-secrets:
+FixTrackDB ya tiene su administrador: lo creó el propietario con este comando. Para una base nueva, desde un equipo con la cadena de conexión configurada en user-secrets:
 
 ```bash
 dotnet user-secrets set --project src/FixTrack.Web "InitialAdmin:Email" "tu-correo@ejemplo.com"
@@ -170,40 +188,111 @@ El comando pide la contraseña dos veces sin mostrarla. Debe tener al menos 12 c
 
 Con la imagen Docker: `docker run --rm -it -e ConnectionStrings__FixTrack -e InitialAdmin__Email -e InitialAdmin__FullName fixtrack crear-administrador` (las variables se toman del entorno de tu terminal; no escribas sus valores en el comando).
 
-## Despliegue con Docker (Render)
+## Respaldos y recuperación
 
-> La aplicación **no está publicada**. Estos son los pasos previstos; no se han ejecutado en Render.
+La cuenta de Somee no puede ejecutar `BACKUP DATABASE`. Hay dos mecanismos complementarios:
+
+1. **Copias de Somee.** Según la [ayuda de Somee](https://somee.com/doka/Help/Article/129), el sistema hace una copia diaria de cada base en el almacenamiento de respaldos de la cuenta, y su panel permite crear una copia (`.bak`), descargarla y restaurarla con "Upload and restore" ([artículo 75](https://somee.com/Doka/Help/Article/75)). **Una base gratuita sin consultas durante 30 días se elimina;** sus copias se conservan y se pueden restaurar en una base nueva. Conviene revisar en el panel que las copias existan y descargar una de vez en cuando.
+2. **Respaldo lógico propio,** independiente de Somee:
+
+```bash
+# Desde un equipo con la cadena de conexión en user-secrets. La carpeta debe estar FUERA del repositorio.
+dotnet run --project src/FixTrack.Web -c Release -- exportar-respaldo ~/FixTrack-respaldos
+
+# Comprobar un archivo (hashes y filas) sin conectarse a ninguna base
+dotnet run --project src/FixTrack.Web -c Release -- verificar-respaldo ~/FixTrack-respaldos/fixtrack-respaldo-AAAAMMDD-HHMMSSZ.zip
+
+# Restaurar en una base VACÍA (la de la cadena de conexión configurada)
+dotnet run --project src/FixTrack.Web -c Release -- restaurar-respaldo ~/FixTrack-respaldos/fixtrack-respaldo-AAAAMMDD-HHMMSSZ.zip
+```
+
+- `exportar-respaldo` **solo lee.** Lee todas las tablas en una transacción (instantánea si la base la permite; si no, serializable, que hace esperar a las escrituras durante unos segundos), así que el respaldo es consistente. Genera un ZIP con `manifiesto.json` (migraciones aplicadas, columnas, filas y SHA-256 de cada tabla) y una línea JSON por fila. Imprime el SHA-256 del archivo.
+- `restaurar-respaldo` solo carga en una base **vacía**: si no tiene migraciones, le aplica exactamente las del respaldo; carga todo en una transacción con las restricciones activas y, antes de confirmar, vuelve a leer cada tabla y exige el mismo hash. Si la base de destino ya tiene datos distintos, no modifica nada. Si el respaldo es de una versión anterior, después se ejecuta `aplicar-migraciones`.
+- **El archivo es tan sensible como la base:** contiene datos personales, hashes de contraseñas y las claves de Data Protection. El comando lo crea con permisos solo para el dueño y **rechaza carpetas dentro de un repositorio Git**; `.gitignore` y `.dockerignore` excluyen los archivos de respaldo. Guárdalo cifrado (por ejemplo, en una imagen de disco cifrada o un gestor de archivos cifrado) y nunca en GitHub.
+- Probado de extremo a extremo: se exportó FixTrackDB, se restauró en un SQL Server local, se le aplicaron las migraciones de la fase 4 y el resultado coincidió tabla por tabla con FixTrackDB después de migrarla.
+
+**Recuperación ante la pérdida de la base:** crear una base nueva vacía (en Somee o en otro SQL Server 2022), restaurar la copia `.bak` de Somee o ejecutar `restaurar-respaldo` con el último respaldo lógico, ejecutar `aplicar-migraciones` y actualizar `ConnectionStrings__FixTrack` si cambió el servidor. Las sesiones siguen siendo válidas si se conservan el certificado de Data Protection y la tabla `DataProtectionKeys`.
+
+## Despliegue en Render
+
+> La aplicación **no está publicada**. Estos son los pasos preparados; no se han ejecutado en Render.
 
 La imagen se construye con el `Dockerfile` de la raíz:
 
 ```bash
 docker build -t fixtrack .
-
-# Prueba local: la cadena se toma de la variable del entorno actual, no se escribe en el comando
-read -rs ConnectionStrings__FixTrack && export ConnectionStrings__FixTrack
-docker run --rm -p 8080:8080 -e ConnectionStrings__FixTrack fixtrack
 ```
 
-Características de la imagen: compilación multietapa con el SDK de .NET 10; imagen final `aspnet:10.0-noble-chiseled-extra` (sin shell, con ICU y zonas horarias), unos 255 MB; usuario sin privilegios (UID 1654); puerto 8080 o el de `PORT`; sin secretos (`.dockerignore` excluye configuraciones locales, pruebas, documentos y evidencias). GitHub Actions construye la imagen y comprueba que arranca, que `/salud` responde y que las páginas exigen sesión.
+Características de la imagen: compilación multietapa con el SDK de .NET 10; imagen final `aspnet:10.0-noble-chiseled-extra` (sin shell, con ICU y zonas horarias), unos 255 MB; usuario sin privilegios (UID 1654); puerto 8080 o el de `PORT`; sin secretos ni certificados (`.dockerignore` excluye configuraciones locales, certificados, respaldos, pruebas, documentos y evidencias). Con la base inalcanzable, el contenedor escucha a los 7 segundos, responde 503 en milisegundos y usa unos 80 MiB de memoria. GitHub Actions construye la imagen y comprueba que arranca sin privilegios, que `/salud` responde, que las páginas exigen sesión, que sin base responde la página 503 sin inundar la bitácora y que sin certificado termina con un error.
 
-Pasos previstos para Render (plan gratuito, sin servicios de pago):
+### Plan gratuito de Render: qué implica
 
-1. Antes del primer despliegue, desde un equipo de desarrollo: revisar el script de migraciones, aplicarlas (`aplicar-migraciones`) y crear el primer administrador (`crear-administrador`).
-2. Crear un **Web Service** conectado al repositorio de GitHub, con entorno **Docker** y la rama `main` (después de la aprobación de QA).
-3. Definir `ConnectionStrings__FixTrack` como variable secreta del servicio. Las demás variables ya tienen valor en la imagen.
-4. Configurar el **Health Check Path** como `/salud`. `/salud/bd` sirve para diagnosticar la conexión a la base, pero no conviene como comprobación de vida: una falla temporal de Somee reiniciaría el servicio sin necesidad.
-5. Después del primer despliegue, verificar que la respuesta HTTPS de `/cuenta/iniciar-sesion` incluya `Strict-Transport-Security`. Si falta, el proxy no está llegando desde `10.0.0.0/8` y hay que ajustar `ReverseProxy__KnownNetworks__0` con la red que use Render.
+Según la [documentación de Render](https://render.com/docs/free): el servicio se suspende tras 15 minutos sin visitas y tarda alrededor de un minuto en volver; hay 750 horas gratuitas al mes por espacio de trabajo; **no hay disco persistente, consola (shell) ni tareas puntuales**. Por eso las claves de sesión viven en la base y los comandos (`aplicar-migraciones`, `proteger-claves`, `crear-administrador`, `exportar-respaldo`) se ejecutan desde un equipo del equipo de desarrollo contra la misma base, no en Render. Render termina TLS en su balanceador y reenvía la solicitud por HTTP al puerto `PORT` (10000 por defecto).
 
-En el plan gratuito, Render suspende el servicio tras un periodo sin visitas y la primera solicitud siguiente tarda más en responder.
+### 1. Preparar el certificado de Data Protection (una vez)
+
+Con OpenSSL 3 (`openssl version`), en una carpeta **fuera del repositorio**:
+
+```bash
+read -rs DP_PASSWORD && export DP_PASSWORD        # contraseña del PFX; no se muestra
+openssl req -x509 -newkey rsa:3072 -nodes -keyout dp.key -out dp.crt -days 1825 -subj "/CN=FixTrack Data Protection"
+openssl pkcs12 -export -inkey dp.key -in dp.crt -out fixtrack-dataprotection.pfx -passout env:DP_PASSWORD
+rm dp.key dp.crt
+base64 < fixtrack-dataprotection.pfx | tr -d '\n' > fixtrack-dataprotection.b64   # valor de DataProtection__Certificate__Base64
+```
+
+Guarda el PFX y su contraseña en un gestor de contraseñas. **Si se pierden,** las claves cifradas no se pueden leer: se genera un certificado nuevo, se ejecuta `proteger-claves --revocar-sin-cifrar` con él y los usuarios vuelven a iniciar sesión; no se pierden datos del taller.
+
+### 2. Antes del primer despliegue, desde un equipo de desarrollo
+
+```bash
+dotnet run --project src/FixTrack.Web -c Release -- exportar-respaldo ~/FixTrack-respaldos     # respaldo previo
+dotnet run --project src/FixTrack.Web -c Release -- aplicar-migraciones                         # si hay pendientes
+
+# Cifrar las claves de sesión con el certificado. En Desarrollo las claves son locales: se indica que use la base.
+export DataProtection__KeyStore=Database
+export DataProtection__Certificate__Base64="$(cat fixtrack-dataprotection.b64)"
+export DataProtection__Certificate__Password="$DP_PASSWORD"
+dotnet run --project src/FixTrack.Web -c Release -- proteger-claves --revocar-sin-cifrar
+unset DataProtection__Certificate__Base64 DataProtection__Certificate__Password DP_PASSWORD
+```
+
+`proteger-claves` crea una clave cifrada con el certificado y, con `--revocar-sin-cifrar`, revoca las claves que estaban sin cifrar (agrega una revocación, no borra filas): la clave cifrada se usa de inmediato. Las sesiones abiertas con las claves revocadas tienen que iniciarse de nuevo; antes del primer despliegue no hay ninguna que conservar. Sin `--revocar-sin-cifrar`, la clave cifrada empieza a usarse cuando termina su periodo de propagación (48 horas) y después se ejecuta otra vez con la opción. El comando muestra el estado de cada clave, sin su material.
+
+### 3. Crear el servicio en Render
+
+1. **New → Web Service**, conectado al repositorio de GitHub, rama `main` (después de la aprobación de QA), entorno **Docker**, plan **Free**.
+2. Variables del servicio (las tres primeras como secretas):
+   - `ConnectionStrings__FixTrack`
+   - `DataProtection__Certificate__Base64` (el contenido de `fixtrack-dataprotection.b64`) y `DataProtection__Certificate__Password`. Alternativa: subir el PFX como *Secret File* y usar `DataProtection__Certificate__Path`.
+   - `ReverseProxy__IgnoreForwardedHeaders=true` para el primer despliegue (ver el paso 5).
+3. **Health Check Path:** `/salud`. Render da por sana una respuesta 2xx o 3xx en 5 segundos y reinicia la instancia tras 60 segundos de fallos seguidos ([documentación](https://render.com/docs/health-checks)). Por eso **no** se usa `/salud/bd`: una caída temporal de Somee reiniciaría el servicio sin resolver nada.
+4. Desplegar y comprobar: `/salud` responde `Healthy`, `/salud/bd` responde `Healthy`, el inicio de sesión funciona con la cuenta del administrador y la bitácora no muestra errores de configuración.
+
+### 4. Comprobaciones después del primer despliegue
+
+- `curl -sI https://<servicio>.onrender.com/cuenta/iniciar-sesion` responde 200 con `Content-Security-Policy` y `Cache-Control: no-store`.
+- `http://` redirige a `https://` (lo hace Render).
+- La cookie `FixTrack.Sesion` es `Secure`, `HttpOnly` y `SameSite=Lax`.
+- Un Operador recibe 403 en `/usuarios` y `/auditoria`.
+- La página de una orden muestra la línea de tiempo con los autores.
+
+### 5. Configurar el proxy de Render como confiable
+
+FixTrack no inventa las direcciones del proxy de Render ni confía en rangos amplios por omisión. Con `ReverseProxy__IgnoreForwardedHeaders=true`, la aplicación funciona, pero no sabe que la solicitud original era HTTPS (no envía HSTS) y ve la dirección del proxy en lugar de la del cliente, así que el límite de 10 intentos de inicio de sesión por minuto se comparte entre todos los usuarios. Para corregirlo:
+
+1. En la bitácora de Render, busca la advertencia `Se ignoraron encabezados reenviados (X-Forwarded-*) recibidos desde <dirección>`. Se registra como máximo una vez cada 15 minutos; revisa varias para ver si la dirección cambia.
+2. Reemplaza `ReverseProxy__IgnoreForwardedHeaders` por `ReverseProxy__KnownProxies__0=<dirección>` (o `ReverseProxy__KnownNetworks__0=<red>/<prefijo>`, la más estrecha que cubra las direcciones observadas) y vuelve a desplegar.
+3. Comprueba que la respuesta HTTPS incluye `Strict-Transport-Security` y que la advertencia ya no aparece. Si Render cambia sus direcciones, la advertencia vuelve a aparecer y la aplicación sigue funcionando sin confiar en ellas.
 
 ### Comprobaciones de salud
 
 | Ruta | Responde | Uso |
 | --- | --- | --- |
 | `/salud` | `Healthy` (200) mientras el proceso responde | Comprobación de vida para la plataforma |
-| `/salud/bd` | `Healthy` (200) si la base responde en 4 segundos; `Unhealthy` (503) si no | Diagnóstico de la conexión |
+| `/salud/bd` | `Healthy` (200) si la base responde a `SELECT 1` en 4 segundos; `Unhealthy` (503) si no. El resultado se reutiliza 10 segundos | Diagnóstico de la conexión |
 
-Ninguna exige sesión, ninguna muestra detalles (ni el servidor ni el error) y ninguna se guarda en caché.
+Ninguna exige sesión, ninguna muestra detalles (ni el servidor ni el error) y ninguna se guarda en caché del navegador. Si la base no responde, las páginas muestran "Servicio temporalmente no disponible" (503, con `Retry-After`) y cada solicitud se corta a los 30 segundos como máximo.
 
 ## Rutas disponibles
 
@@ -228,7 +317,8 @@ Todas exigen iniciar sesión, salvo el inicio de sesión, las páginas de error,
 | `/tecnicos`, `/tecnicos/{id}` | Técnicos: listado con carga de trabajo y detalle con órdenes abiertas | Administrador, Operador |
 | `/tecnicos/nuevo`, `/tecnicos/{id}/editar`, `/tecnicos/{id}/desactivar`, `/tecnicos/{id}/reactivar` | Registrar, editar y cambiar el estado de técnicos | Administrador |
 | `/usuarios`, `/usuarios/nueva`, `/usuarios/{id}/editar`, `/usuarios/{id}/contrasena` | Cuentas de acceso: listado, alta, nombre y rol, restablecer contraseña | Administrador |
-| `/usuarios/{id}/deshabilitar`, `/usuarios/{id}/habilitar` | Cambiar el estado de una cuenta (solo POST) | Administrador |
+| `/usuarios/{id}/deshabilitar`, `/usuarios/{id}/habilitar`, `/usuarios/{id}/desbloquear` | Cambiar el estado de una cuenta o quitar un bloqueo por intentos fallidos (solo POST) | Administrador |
+| `/auditoria` | Operaciones registradas: `?area=ordenes\|tecnicos\|clientes\|cuentas`, `?pagina=` | Administrador |
 | `/salud`, `/salud/bd` | Comprobaciones de salud | Público |
 | Cualquier otra | Página 404 con enlace al panel | — |
 
@@ -249,18 +339,18 @@ fixtrack/
 ├── src/
 │   ├── FixTrack.Domain/         Entidades, reglas, flujo de estados y algoritmo de priorización
 │   ├── FixTrack.Application/    Casos de uso y contratos
-│   ├── FixTrack.Infrastructure/ EF Core, SQL Server, repositorios, migraciones y cuentas (Identity)
-│   └── FixTrack.Web/            Controladores, vistas, seguridad, alojamiento, estilos y scripts
+│   ├── FixTrack.Infrastructure/ EF Core, SQL Server, repositorios, migraciones, cuentas (Identity), disyuntor y respaldos
+│   └── FixTrack.Web/            Controladores, vistas, seguridad, Data Protection, alojamiento, estilos y scripts
 └── tests/
-    └── FixTrack.Tests/          Pruebas unitarias, de integración y opcionales contra SQL Server
+    └── FixTrack.Tests/          Pruebas unitarias, de integración y contra SQL Server real
 ```
 
 | Capa lógica | Proyecto | Contenido principal |
 | --- | --- | --- |
 | Presentación | `FixTrack.Web` | Controladores y vistas de todos los módulos, políticas de autorización, encabezados de seguridad, salud, proxy y comandos de consola. Es la **raíz de composición** |
-| Negocio | `FixTrack.Application` | `ICustomerService`, `IDeviceService`, `ITechnicianService`, `IServiceOrderService`, `IDashboardService`; contratos de repositorios, `IUnitOfWork` e `IUserAccountService` |
-| Datos | `FixTrack.Infrastructure` | `FixTrackDbContext`, configuraciones, migraciones, repositorios, `EfUnitOfWork`, cuentas con ASP.NET Core Identity |
-| Dominio | `FixTrack.Domain` | `Customer`, `Device`, `Technician`, `ServiceOrder`, `ServiceOrderStatusChange`; `ServiceOrderWorkflow`, `ServiceOrderRules`, `WorkPrioritizer` |
+| Negocio | `FixTrack.Application` | `ICustomerService`, `IDeviceService`, `ITechnicianService`, `IServiceOrderService`, `IDashboardService`; contratos de repositorios, `IUnitOfWork`, `IUserAccountService`, `ICurrentUser`, `IAuditLog` |
+| Datos | `FixTrack.Infrastructure` | `FixTrackDbContext`, configuraciones, migraciones, repositorios, `EfUnitOfWork`, `EfAuditLog`, cuentas con ASP.NET Core Identity, disyuntor de la base y respaldos |
+| Dominio | `FixTrack.Domain` | `Customer`, `Device`, `Technician`, `ServiceOrder`, `ServiceOrderStatusChange`, `ServiceOrderAssignment`, `AuditEvent`; `ServiceOrderWorkflow`, `ServiceOrderRules`, `WorkPrioritizer` |
 
 ```mermaid
 flowchart LR
@@ -279,7 +369,8 @@ builder.Services
     .AddInfrastructure(builder.Configuration)            // EF Core, repositorios, Identity
     .AddPresentation()                                   // MVC, vistas, localización
     .AddSecurity(builder.Configuration, builder.Environment)  // cookies, políticas, límite de intentos
-    .AddReverseProxySupport(builder.Configuration)       // encabezados de un proxy confiable
+    .AddReverseProxySupport(builder.Configuration, builder.Environment)  // solo proxies declarados
+    .AddRequestResilience()                              // página 503 y tiempo máximo por solicitud
     .AddHealthEndpoints();                               // /salud y /salud/bd
 ```
 
@@ -290,20 +381,22 @@ builder.Services
 - **Código en inglés, interfaz en español.** Los identificadores de C# siguen las convenciones de .NET. Las rutas (`/ordenes`, `/clientes`…), los textos y los comentarios están en español.
 - **Cultura `es`** configurada con `RequestLocalization`: las fechas se muestran como "Lunes, 19 de octubre de 2026" y los montos en quetzales ("Q 1,250.00").
 - **Reglas en el dominio.** Las transiciones de estado, las validaciones y el algoritmo de priorización son código del dominio sin dependencias, probado de forma aislada. La interfaz consulta esas mismas reglas para mostrar qué pasos están disponibles.
-- **Concurrencia:** optimista por versión en las órdenes y un bloqueo breve de fila (`UPDLOCK`) en el técnico al asignar o desactivar. Funciona en SQL Server Express y en Somee. Se explica en [docs/flujo-de-ordenes.md](docs/flujo-de-ordenes.md#4-concurrencia-dos-personas-sobre-la-misma-orden).
-- **Indicadores calculados en SQL:** el panel cuenta todo en una sola consulta de agregación y ninguna página hace consultas por fila.
-- **Seguridad por defecto:** una política de autorización de respaldo protege cualquier ruta nueva; CSP con nonce por solicitud; cookies `HttpOnly`, `SameSite=Lax` y `Secure` en producción; límite de intentos de inicio de sesión por IP; bloqueo de cuentas; claves de Data Protection persistidas en la base.
-- **Sin Bootstrap ni jQuery.** Los estilos son CSS propio con variables (tokens). El JavaScript (unas 380 líneas, sin dependencias) se limita a mejoras: menú móvil, tema, buscadores con sugerencias, formulario dependiente de cliente y equipo, y menú de usuario.
+- **Concurrencia:** optimista por versión en órdenes, clientes, equipos y técnicos; un bloqueo breve de fila (`UPDLOCK`) en el técnico al asignar o desactivar; un bloqueo de aplicación (`sp_getapplock`) en los cambios de cuentas; un identificador por formulario para no registrar dos veces la misma orden. Funciona en SQL Server Express y en Somee. Se explica en [docs/arquitectura.md](docs/arquitectura.md#concurrencia).
+- **Trazabilidad:** historial de estados, historial de asignaciones y auditoría de solo inserción (triggers que rechazan `UPDATE` y `DELETE`), con autor, guardados en la misma transacción que el cambio.
+- **Consultas en SQL:** el panel cuenta todo en una sola consulta de agregación, la cola de trabajo calcula la puntuación en la base y ninguna página hace consultas por fila (entre 1 y 5 consultas por página).
+- **Seguridad por defecto:** una política de autorización de respaldo protege cualquier ruta nueva; CSP con nonce por solicitud; cookies `HttpOnly`, `SameSite=Lax` y `Secure` en producción; inicio de sesión sin enumeración de cuentas; límite de intentos por IP; bloqueo de cuentas; claves de Data Protection en la base, cifradas con un certificado en producción; ningún proxy confiable por omisión.
+- **Resiliencia:** tiempos de conexión y de comando acotados, reintentos limitados, disyuntor ante una base caída y página 503 sin detalles técnicos. Se explica en [docs/arquitectura.md](docs/arquitectura.md#resiliencia-ante-fallos-de-la-base).
+- **Sin Bootstrap ni jQuery.** Los estilos son CSS propio con variables (tokens). El JavaScript (unas 400 líneas, sin dependencias) se limita a mejoras: menú móvil, tema, buscadores con sugerencias, formulario dependiente de cliente y equipo, envío único de formularios y menú de usuario.
 - **Gráficos sin bibliotecas:** las barras del panel son SVG generado en el servidor, compatibles con la política de contenido.
 - **Recursos servidos localmente**, sin CDN: fuentes, íconos y estilos funcionan sin conexión. `MapStaticAssets` añade compresión y huellas de versión para la caché.
-- **Páginas de error propias** para 403, 404, 429 y las excepciones, integradas en el diseño.
+- **Páginas de error propias** para 403, 404, 429 y las excepciones, integradas en el diseño, y una página 503 estática para cuando la base no responde.
 - **Pruebas con xUnit v3 sobre Microsoft.Testing.Platform**, el runner recomendado para `dotnet test` desde el SDK de .NET 10 (se activa en `global.json`).
 - **Entity Framework Core 10 con SQL Server** y migraciones explícitas; nunca `EnsureCreated` ni migraciones automáticas al iniciar.
 - **Fechas en UTC** en toda la base (`datetime2(3)`); la interfaz las convierte a la hora local y convierte a UTC las fechas que se escriben en los formularios.
 - **Búsqueda sin distinguir tildes ni mayúsculas:** los nombres usan la intercalación `Modern_Spanish_100_CI_AI` ("jose" encuentra "José"). La búsqueda usa `LIKE` parametrizado con los comodines escapados.
 - **Validación en el servidor** con mensajes en español (los formularios usan `novalidate`), protección antifalsificación global y codificación HTML de todo el contenido ingresado.
 - **Dependencias auditadas:** NuGet Audit bloqueó `System.Security.Cryptography.Pkcs 9.0.11` (CVE-2026-84008 y CVE-2026-70162), que llegaba a través de `Microsoft.Data.SqlClient`. Se fijó la versión corregida 10.0.13 con *transitive pinning*.
-- **Integración continua con GitHub Actions** (`.github/workflows/ci.yml`). Se ejecuta en cada push a `JJ` y en cada pull request hacia `main`: compila en Release, ejecuta las pruebas y construye y prueba la imagen Docker. Usa permisos de solo lectura, no necesita secretos, no se conecta a Somee y fija las acciones por SHA.
+- **Integración continua con GitHub Actions** (`.github/workflows/ci.yml`). Se ejecuta en cada push a `JJ` y en cada pull request hacia `main`, con tres trabajos: compilar en Release y ejecutar las pruebas; ejecutar las pruebas de SQL Server contra un SQL Server 2022 efímero (imagen fijada por digest, contraseña aleatoria por ejecución); y construir y probar la imagen Docker. Usa permisos de solo lectura, no necesita secretos, no se conecta a Somee y fija las acciones por SHA.
 
 ## Sistema de diseño
 
@@ -312,8 +405,8 @@ Toda la interfaz se construye desde `src/FixTrack.Web/wwwroot/css/site.css`, org
 - **Tipografía:** IBM Plex Sans (variable) para la interfaz e IBM Plex Mono para datos técnicos como números de orden y montos.
 - **Color:** grises neutros con un único acento verde petróleo (`--color-accent`) y colores propios para cada estado de orden y prioridad, en tema claro y oscuro. Se aplica el tema del sistema operativo y el usuario puede cambiarlo con el botón de la barra superior.
 - **Tokens:** espaciado en múltiplos de 4 px, escala tipográfica, radios, sombras sutiles y duraciones de animación definidos como variables CSS.
-- **Íconos:** sprite SVG con 67 íconos de [Lucide](https://lucide.dev). En las vistas se usan así: `<icon name="wrench" />`.
-- **Componentes:** botones, etiquetas de estado y prioridad, tarjetas, tablas con búsqueda, filtros y paginación (en móvil se convierten en tarjetas), formularios con resumen de errores, avisos, diálogos de confirmación nativos, estados vacíos, buscador con sugerencias (patrón *combobox* de ARIA), línea de tiempo del historial, desglose de puntuación, barras de distribución, menú de usuario y página de inicio de sesión.
+- **Íconos:** sprite SVG con 71 íconos de [Lucide](https://lucide.dev). En las vistas se usan así: `<icon name="wrench" />`.
+- **Componentes:** botones, etiquetas de estado y prioridad, tarjetas, tablas con búsqueda, filtros y paginación (en móvil se convierten en tarjetas), formularios con resumen de errores, avisos, diálogos de confirmación nativos, estados vacíos, buscador con sugerencias (patrón *combobox* de ARIA), línea de tiempo con autores, desglose de puntuación, barras de distribución, registro de auditoría, menú de usuario, página de inicio de sesión y página 503.
 - **Responsive:** en escritorio (≥ 1024 px), menú lateral fijo. En tableta y móvil, el menú es un panel deslizable con fondo, foco atrapado, cierre con Escape y bloqueo del desplazamiento. Ninguna página tiene desplazamiento horizontal a 375 px.
 - **Accesibilidad:** enlace "Saltar al contenido", foco visible, `aria-current` en la navegación, textos alternativos en los gráficos, contraste AA y respeto de `prefers-reduced-motion`.
 
@@ -323,7 +416,7 @@ Toda la interfaz se construye desde `src/FixTrack.Web/wwwroot/css/site.css`, org
 dotnet test -c Release
 ```
 
-Hay **480 casos** en `tests/FixTrack.Tests`. En una ejecución normal pasan **473** y se omiten **7**: las pruebas contra SQL Server real, que solo se ejecutan si se configuran (ver más abajo). Las demás usan **SQLite en memoria** y funcionan igual en GitHub Actions, sin credenciales.
+Hay **594 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan **571** y se omiten **23**: las que necesitan SQL Server real (ver más abajo). Con un SQL Server local desechable pasan los **594**. Las demás usan **SQLite en memoria** y funcionan igual en GitHub Actions, sin credenciales.
 
 | Grupo | Archivo | Casos | Qué verifica |
 | --- | --- | --- | --- |
@@ -332,58 +425,64 @@ Hay **480 casos** en `tests/FixTrack.Tests`. En una ejecución normal pasan **47
 | Dominio | `Domain/CustomerTests.cs` | 7 | Registro, edición, desactivación y reactivación de clientes |
 | Dominio | `Domain/DeviceTests.cs` | 12 | Registro solo para clientes activos, normalización, edición sin cambio de propietario |
 | Dominio | `Domain/TechnicianTests.cs` | 5 | Especialidad obligatoria, contacto opcional válido, desactivación y reactivación |
-| Dominio | `Domain/ServiceOrderTests.cs` | 39 | Recepción, cliente inactivo, fechas y montos, asignación, diagnóstico, planificación, cada transición y sus requisitos, órdenes cerradas inmutables, flujo completo |
+| Dominio | `Domain/ServiceOrderTests.cs` | 43 | Recepción, cliente inactivo, fechas y montos, asignación y reasignación con autor y motivo, diagnóstico, planificación, cada transición y sus requisitos, órdenes cerradas inmutables, flujo completo |
 | Dominio | `Domain/ServiceOrderWorkflowTests.cs` | 21 | Tabla de transiciones permitidas y prohibidas, estados abiertos y cerrados, explicaciones de bloqueo |
 | Dominio | `Domain/WorkPrioritizerTests.cs` | 32 | Puntos por prioridad, bonos de fecha excluyentes, antigüedad con tope, el estado decide la lista y la acción, desempates estables |
 | Aplicación | `Application/ModuleCatalogTests.cs` | 8 | Catálogo de módulos |
-| Aplicación | `Application/CustomerServiceTests.cs` | 8 | Casos de uso de clientes con repositorios en memoria (`InMemoryFakes.cs`) |
-| Aplicación | `Application/DeviceServiceTests.cs` | 12 | Propietario inexistente o inactivo, serie duplicada por marca, edición |
-| Aplicación | `Application/TechnicianServiceTests.cs` | 10 | Registro, correo duplicado, desactivación bloqueada con órdenes abiertas y con el técnico bloqueado en una transacción, carga de trabajo |
-| Aplicación | `Application/ServiceOrderServiceTests.cs` | 21 | Registro en transacción, equipo de otro cliente, técnicos inactivos, versión desactualizada, conflictos, transiciones rechazadas, entrega |
-| Aplicación | `Application/DashboardServiceTests.cs` | 3 | Cola separada en tres listas, acciones recomendadas, panel vacío |
-| Infraestructura | `Infrastructure/PersistenceModelTests.cs` | 15 | Claves foráneas, índices únicos, restricciones CHECK (incluidas las de costo final y asignación), fechas UTC, concurrencia de órdenes |
+| Aplicación | `Application/CustomerServiceTests.cs` | 9 | Casos de uso de clientes con repositorios en memoria (`InMemoryFakes.cs`), duplicados detectados por la base, versión desactualizada |
+| Aplicación | `Application/DeviceServiceTests.cs` | 13 | Propietario inexistente o inactivo, serie duplicada por marca, edición, versión desactualizada |
+| Aplicación | `Application/TechnicianServiceTests.cs` | 11 | Registro, correo duplicado, desactivación bloqueada con órdenes abiertas y con el técnico bloqueado en una transacción, carga de trabajo, versión desactualizada |
+| Aplicación | `Application/ServiceOrderServiceTests.cs` | 27 | Registro en transacción, envío repetido, equipo de otro cliente, técnicos inactivos, versión desactualizada, conflictos, transiciones rechazadas, entrega, autores y auditoría |
+| Aplicación | `Application/DashboardServiceTests.cs` | 4 | Cola separada en tres listas, máximo por lista con su total real, acciones recomendadas, panel vacío |
+| Infraestructura | `Infrastructure/PersistenceModelTests.cs` | 16 | Claves foráneas, índices únicos, restricciones CHECK, fechas UTC, tokens de concurrencia |
 | Infraestructura | `Infrastructure/CustomerRepositoryTests.cs` | 9 | Búsqueda, comodines literales, filtro por estado, paginación |
 | Infraestructura | `Infrastructure/DeviceRepositoryTests.cs` | 11 | Búsqueda, filtro por tipo, paginación en SQL, órdenes del equipo |
 | Infraestructura | `Infrastructure/TechnicianRepositoryTests.cs` | 8 | Búsqueda, filtros y conteo de órdenes abiertas |
-| Infraestructura | `Infrastructure/ServiceOrderRepositoryTests.cs` | 21 | Búsqueda por número, cliente, equipo o técnico; vistas y filtros; orden; conteos; detalle con historial; carga por técnico |
+| Infraestructura | `Infrastructure/ServiceOrderRepositoryTests.cs` | 23 | Búsqueda, vistas, filtros, orden, conteos, detalle con historial; la puntuación en SQL ordena exactamente como el algoritmo y sus umbrales son parámetros |
 | Infraestructura | `Infrastructure/DashboardRepositoryTests.cs` | 3 | Todos los indicadores en una agregación, próximas entregas y recientes, base vacía |
 | Infraestructura | `Infrastructure/UnitOfWorkTests.cs` | 6 | Transacciones confirmadas y revertidas, bloqueo del técnico solo dentro de una transacción, conflictos de concurrencia |
-| Infraestructura | `Infrastructure/MigrationTests.cs` | 5 | Migraciones sincronizadas con el modelo, sin operaciones destructivas; las de la fase 3 solo agregan |
+| Infraestructura | `Infrastructure/MigrationTests.cs` | 10 | Migraciones sincronizadas con el modelo, sin operaciones destructivas; cada migración de las fases 3 y 4 solo agrega |
+| Infraestructura | `Infrastructure/BackupFileTests.cs` | 5 | Respaldos nunca dentro de un repositorio Git; archivos dañados, incompletos o ajenos se rechazan |
 | Web | `Web/PageTests.cs` | 19 | Rutas principales, menú activo, panel con números reales, 404 y recursos estáticos |
 | Web | `Web/PresentationTests.cs` | 30 | Montos en quetzales, fechas locales y UTC, parámetros de las listas |
-| Web | `Web/CustomersPageTests.cs` | 10 | Módulo Clientes completo |
+| Web | `Web/CustomersPageTests.cs` | 11 | Módulo Clientes completo, aviso de órdenes abiertas al desactivar |
 | Web | `Web/DevicesPageTests.cs` | 11 | Módulo Equipos e integración con Clientes |
 | Web | `Web/TechniciansPageTests.cs` | 9 | Módulo Técnicos |
-| Web | `Web/ServiceOrdersPageTests.cs` | 24 | Módulo Órdenes: registro, validaciones, flujo completo hasta el cierre, formulario desactualizado, vencidas, integración con clientes, equipos y técnicos |
+| Web | `Web/ServiceOrdersPageTests.cs` | 28 | Módulo Órdenes: registro, validaciones, flujo completo, formulario desactualizado, envío repetido, línea de tiempo con asignaciones y autores |
 | Web | `Web/DashboardPageTests.cs` | 4 | Panel y cola de trabajo con datos reales y sin datos |
-| Web | `Web/SecurityTests.cs` | 39 | Acceso anónimo, cookies, cierre de sesión, bloqueo, límite por IP, permisos por rol, CSRF, encabezados y CSP, contraseñas fuera de registros, sin registro público |
-| Web | `Web/UsersPageTests.cs` | 10 | Cuentas: alta, validaciones, roles, deshabilitar, restablecer y cambiar contraseña, último administrador |
-| Web | `Web/InitialAdministratorTests.cs` | 6 | Comando del primer administrador y comandos explícitos |
-| Web | `Web/HostingTests.cs` | 8 | Salud sin detalles, proxy confiable y encabezados falsificados, redirección a HTTPS |
+| Web | `Web/SecurityTests.cs` (y `.Login.cs`, `.Administration.cs`) | 44 | Acceso anónimo, cookies, bloqueo, límite por IP, permisos por rol, **todos los POST de administración rechazados a un Operador**, CSRF, encabezados y CSP, inicio de sesión sin enumeración (mismo mensaje y tiempo), contraseñas fuera de registros |
+| Web | `Web/UsersPageTests.cs` | 9 | Cuentas: alta, validaciones, roles, deshabilitar, restablecer y cambiar contraseña, último administrador |
+| Web | `Web/AccountAdministrationTests.cs` | 11 | Desbloqueo, edición concurrente de cuentas, cambio de la propia contraseña, auditoría de cuentas sin contraseñas, Operador sin acceso por solicitudes manuales |
+| Web | `Web/AuditPageTests.cs` | 3 | Auditoría solo para administradores, con autor y filtros por área; la planificación aparece en la línea de tiempo de la orden |
+| Web | `Web/DataProtectionTests.cs` | 11 | Claves cifradas con certificado, arranque rechazado sin certificado, rotación sin perder sesiones, revocación de claves sin cifrar |
+| Web | `Web/ResilienceTests.cs` | 16 | Disyuntor, tiempos y reintentos acotados, página 503 y recuperación, una línea de bitácora por solicitud rechazada |
+| Web | `Web/InitialAdministratorTests.cs` | 7 | Comando del primer administrador y comandos explícitos |
+| Web | `Web/HostingTests.cs` | 18 | Salud sin detalles y con caché, proxy solo si se declara, encabezados falsificados, advertencia acotada, error claro con la configuración incompleta |
 | Web | `Web/HttpsTests.cs` | 11 | Detección del puerto HTTPS y redirección por entorno |
 | Web | `Web/CompositionTests.cs` | 3 | Servicios de las capas, reloj inyectado y aislamiento de la base real |
-| SQL Server | `SqlServer/SqlServerBehaviorTests.cs` | 7 | Ver la sección siguiente. Se omiten si no se configuran |
+| SQL Server | `SqlServer/SqlServerBehaviorTests.cs` | 12 | Triggers de solo inserción (historial, asignaciones y auditoría), bloqueos `UPDLOCK`, concurrencia optimista, intercalación española, indicadores del panel, puntuación de la cola en SQL |
+| SQL Server | `SqlServer/AccountConcurrencyTests.cs` | 6 | Administradores que actúan a la vez: nunca quedan sin administrador habilitado, cambios de Identity atómicos |
+| SQL Server | `SqlServer/OrderCreationConcurrencyTests.cs` | 1 | Dos envíos simultáneos del mismo formulario registran una sola orden |
+| SQL Server | `SqlServer/BackupTests.cs` | 4 | Respaldo y restauración idénticos, rechazo sobre datos existentes, respaldo de la fase 3 restaurado y migrado |
+| SQL Server | `SqlServer/DisposableSqlServerDatabaseTests.cs` | 10 | La base desechable solo acepta servidores locales: nunca Somee ni otro servidor remoto (no necesitan SQL Server) |
 
-Las pruebas web levantan la aplicación en memoria con `WebApplicationFactory` e inician sesión con el formulario real. Las cuentas de prueba solo existen en la base SQLite de cada ejecución y sus contraseñas son aleatorias. Las políticas de seguridad no se relajan para las pruebas: solo se eleva el límite de intentos por IP, que tiene su propia prueba.
+Las pruebas web levantan la aplicación en memoria con `WebApplicationFactory` e inician sesión con el formulario real. Las cuentas de prueba solo existen en la base SQLite de cada ejecución y sus contraseñas son aleatorias. Las políticas de seguridad no se relajan para las pruebas: solo se eleva el límite de intentos por IP y se quita la espera mínima de los inicios fallidos, cada una con su propia prueba.
 
-### Pruebas contra SQL Server real (opcionales)
+### Pruebas contra SQL Server real
 
-SQLite no reproduce todo el comportamiento de SQL Server. Por eso hay 7 pruebas que se conectan a una base SQL Server **solo** si existe la variable `FIXTRACK_TEST_SQLSERVER`:
+SQLite no reproduce todo el comportamiento de SQL Server (triggers, bloqueos, intercalación, transacciones concurrentes). Las pruebas de `SqlServer/` crean una **base desechable** con nombre único (`FixTrackPrueba_…`), le aplican las migraciones, cargan datos ficticios y la eliminan al terminar. Solo aceptan un servidor **local**: nunca se conectan a Somee. En GitHub Actions se ejecutan contra un SQL Server 2022 efímero.
 
-- el trigger del historial rechaza `UPDATE` y `DELETE`;
-- el bloqueo del técnico hace esperar a una segunda transacción, pero no a las consultas normales;
-- una desactivación espera a una asignación simultánea y ve su resultado;
-- la concurrencia optimista detecta una versión desactualizada;
-- la búsqueda no distingue tildes ni mayúsculas con la intercalación española;
-- los indicadores del panel coinciden con conteos directos en SQL.
-
-Cada prueba trabaja **dentro de una transacción que se revierte**: no deja datos ni modifica los existentes. En GitHub Actions no se define la variable y las pruebas se omiten.
+Para ejecutarlas en tu equipo (en Apple Silicon, Docker Desktop emula la imagen con Rosetta):
 
 ```bash
-read -rs FIXTRACK_TEST_SQLSERVER && export FIXTRACK_TEST_SQLSERVER   # pega la cadena de conexión; no se muestra
+read -rs MSSQL_SA_PASSWORD && export MSSQL_SA_PASSWORD     # contraseña fuerte; no se muestra
+docker run -d --name fixtrack-sqltest --platform linux/amd64 -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD \
+  -p 127.0.0.1:14333:1433 mcr.microsoft.com/mssql/server:2022-latest
+export FIXTRACK_TEST_SQLSERVER_SERVER="Server=127.0.0.1,14333;User ID=sa;Password=$MSSQL_SA_PASSWORD;Encrypt=True;TrustServerCertificate=True;"
 dotnet test -c Release
-unset FIXTRACK_TEST_SQLSERVER
 ```
+
+`SqlServerBehaviorTests` también acepta `FIXTRACK_TEST_SQLSERVER` con la cadena de una base ya migrada: en ese caso trabaja **dentro de transacciones que se revierten**, sin dejar ni modificar datos.
 
 ## Comprobación visual manual
 
@@ -393,13 +492,15 @@ Con la aplicación en ejecución y una cuenta de administrador:
 2. **Panel:** muestra los indicadores reales, la distribución por estado, las acciones recomendadas, las próximas entregas y la carga por técnico.
 3. **Nueva orden:** elige un cliente en el buscador; el selector de equipos muestra solo los suyos. Deja el problema vacío o escribe una fecha comprometida anterior a hoy: aparecen los errores en español.
 4. **Flujo de la orden:** desde el detalle, inicia el diagnóstico (pide técnico si no hay), registra el diagnóstico, pasa a reparación, a espera de repuestos (pide la nota), a lista para entrega y a entregada (pide el costo final). La línea de tiempo muestra cada paso y la orden cerrada ya no ofrece formularios.
-5. **Concurrencia:** abre la misma orden en dos pestañas, cambia algo en una y envía la otra: aparece el aviso de que otra persona la modificó.
+5. **Concurrencia:** abre la misma orden (o el mismo cliente, equipo o técnico) en dos pestañas, cambia algo en una y envía la otra: aparece el aviso de que otra persona lo modificó.
 6. **Listado:** prueba las vistas Abiertas, Vencidas, Cerradas y Todas, los filtros y la búsqueda por número (`OS-000001` o `1`).
 7. **Cola de trabajo:** las órdenes aparecen en tres listas con su puntuación desglosada y su acción recomendada.
-8. **Técnicos:** intenta desactivar a un técnico con órdenes abiertas: el diálogo explica que primero hay que reasignarlas.
-9. **Cuentas:** crea una cuenta Operador, inicia sesión con ella en otra ventana privada y comprueba que no ve Administración ni los botones de técnicos, y que `/usuarios` responde 403. Deshabilítala desde la cuenta de administrador: su sesión termina en menos de un minuto.
-10. **Tema, responsive y teclado:** cambia entre tema claro y oscuro, reduce la ventana a 375 px (sin desplazamiento horizontal) y recorre la página con Tab.
-11. **Cerrar sesión** desde el menú de usuario.
+8. **Técnicos:** intenta desactivar a un técnico con órdenes abiertas: el diálogo explica que primero hay que reasignarlas. Reasigna una orden con un motivo: la línea de tiempo muestra el técnico anterior, el nuevo, el motivo y quién lo hizo.
+9. **Clientes:** abre el diálogo para desactivar un cliente con órdenes abiertas: avisa cuántas tiene.
+10. **Cuentas:** crea una cuenta Operador, inicia sesión con ella en otra ventana privada y comprueba que no ve Administración ni los botones de técnicos, y que `/usuarios` y `/auditoria` responden 403. Equivoca su contraseña 5 veces: el mensaje es el mismo que con un correo inexistente; como administrador, desbloquéala desde su editor. Deshabilítala: su sesión termina en menos de un minuto.
+11. **Auditoría:** `/auditoria` muestra cada operación anterior con su autor; prueba los filtros por área.
+12. **Tema, responsive y teclado:** cambia entre tema claro y oscuro, reduce la ventana a 375 px (sin desplazamiento horizontal) y recorre la página con Tab.
+13. **Cerrar sesión** desde el menú de usuario.
 
 ## Limitaciones conocidas de Somee
 
@@ -407,23 +508,25 @@ La base de desarrollo está en el plan gratuito de Somee. Detectamos lo siguient
 
 | Limitación | Efecto en FixTrack |
 | --- | --- |
-| **30 MB para datos y 30 MB para el log** | Se evitan datos de prueba masivos. Con las tablas de la fase 3 y las órdenes ficticias se usan unos 5.8 MB de datos y 1.3 MB de log. |
+| **30 MB para datos y 30 MB para el log** | Se evitan datos de prueba masivos. Con las tablas de la fase 4 y las órdenes ficticias se usan unos 6 MB de datos. La auditoría crece con el uso: conviene revisar el espacio en el panel. |
+| **Una base gratuita sin consultas durante 30 días se elimina** | Somee conserva sus copias diarias y permite restaurarlas. Con la aplicación publicada y en uso, las consultas mantienen la base activa; además existe el respaldo lógico propio ([Respaldos y recuperación](#respaldos-y-recuperación)). |
+| No se puede ejecutar `BACKUP DATABASE` | Las copias se hacen desde el panel de Somee o con `exportar-respaldo`. |
 | El certificado TLS es del servidor compartido (`vb4300.mgmt.somee.com`), no del alias de la base | Se usa `HostNameInCertificate` para validar el certificado sin desactivar la verificación. Si Somee cambia de servidor, hay que actualizar ese valor. |
 | El servidor reporta **SQL Server 2022 Web Edition** (16.0.1000.6, RTM sin actualizaciones acumulativas), no Express | El esquema solo usa características disponibles también en Express: tablas, índices filtrados, restricciones CHECK, un trigger, intercalaciones estándar y bloqueos de fila. |
-| `READ_COMMITTED_SNAPSHOT` está desactivado | La estrategia de concurrencia no depende de instantáneas: usa versiones y `UPDLOCK`. |
+| `READ_COMMITTED_SNAPSHOT` está desactivado | La estrategia de concurrencia no depende de instantáneas: usa versiones, `UPDLOCK` y `sp_getapplock`. El respaldo lógico lee con aislamiento serializable. |
 | El usuario es `db_owner` de su base, pero no tiene permisos de servidor (`VIEW SERVER STATE`) | No se pueden consultar vistas de servidor como `sys.dm_exec_connections`; no afecta a la aplicación. |
-| Servidor remoto compartido | La primera consulta tras un periodo de inactividad tarda alrededor de 1 segundo (conexión TLS); las siguientes usan el pool de conexiones. EF Core reintenta automáticamente ante fallos transitorios. |
+| Servidor remoto compartido | La primera consulta tras un periodo de inactividad tarda alrededor de 1 segundo (conexión TLS); las siguientes usan el pool de conexiones. A veces deja de responder unos segundos: EF Core reintenta, el disyuntor evita insistir y el usuario ve la página 503. |
 
-Para desarrollar sin Somee se puede usar cualquier SQL Server 2022 compatible y aplicar las migraciones. En Apple Silicon no hay imagen oficial de SQL Server para contenedores, así que conviene una instancia en Windows, una máquina virtual o un servicio en la nube.
+Para desarrollar sin Somee se puede usar cualquier SQL Server 2022 compatible y aplicar las migraciones, incluido el contenedor oficial (en Apple Silicon, con la emulación de Docker Desktop; ver [Pruebas contra SQL Server real](#pruebas-contra-sql-server-real)).
 
 ## Limitaciones conocidas de la aplicación
 
 - **No hay rol Técnico.** Solo existen Administrador y Operador. Un rol Técnico correcto exige autorización por registro (cada técnico limitado a sus órdenes). El diseño propuesto está en [docs/arquitectura.md](docs/arquitectura.md#autorización).
-- **El historial registra cambios de estado, no reasignaciones.** La orden guarda el técnico actual y la fecha de su última asignación, pero no la lista de técnicos anteriores.
-- **Si la base no responde al iniciar,** la aplicación tarda unos 20 segundos en empezar a escuchar (Data Protection reintenta leer sus claves). Mientras la base no responda, `/salud` sigue en `Healthy`, `/salud/bd` informa `Unhealthy` y la página de inicio de sesión muestra el error genérico, porque el token antifalsificación necesita esas claves.
-- **Las claves de Data Protection se guardan sin cifrar** en la tabla `DataProtectionKeys`. Quien tenga acceso de escritura a la base ya podría modificar cualquier dato, así que el riesgo depende de proteger la cadena de conexión. Una mejora futura es cifrarlas con un certificado.
-- **La regla "siempre queda un administrador habilitado" se verifica en la aplicación**, sin bloqueo. Si dos administradores se deshabilitan entre sí en el mismo instante, podrían quedar ambos deshabilitados. En ese caso, el comando `crear-administrador` vuelve a funcionar porque no queda ningún administrador habilitado.
-- **El aviso de cuenta bloqueada** confirma, tras 5 intentos fallidos, que el correo tiene una cuenta. Es el comportamiento estándar de Identity y se mantuvo para que el personal entienda por qué no puede entrar.
+- **La clave de Data Protection actual de FixTrackDB todavía está sin cifrar.** El cifrado con certificado está implementado y probado, pero proteger la clave existente requiere el certificado definitivo, que el propietario genera y guarda. Se hace en el paso 2 del [despliegue](#2-antes-del-primer-despliegue-desde-un-equipo-de-desarrollo), antes de publicar.
+- **El proxy de Render no está configurado como confiable** hasta conocer su dirección real después del primer despliegue (paso 5). Mientras tanto no se envía HSTS y el límite de intentos de inicio de sesión por IP se comparte entre todos los usuarios.
+- **Las reasignaciones anteriores a la fase 4 no se conocen:** esas órdenes muestran solo su asignación vigente, con la nota correspondiente. Los cambios de estado anteriores no tienen autor.
+- **La auditoría no registra las ediciones de datos de contacto** de clientes, equipos y técnicos (sí su desactivación y reactivación): son frecuentes y guardarían copias de datos personales.
+- **Los respaldos lógicos no se programan solos:** se ejecutan a mano (o con una tarea programada en el equipo del propietario). Somee hace además sus copias diarias.
 - **Cada lista de la cola muestra como máximo 100 órdenes:** la base calcula la puntuación de todas las órdenes abiertas de la lista y devuelve las 100 más altas. La página indica el total y dónde ver las demás.
 - **Los buscadores con sugerencias y el selector de equipos de una nueva orden requieren JavaScript.** Sin JavaScript, se puede registrar desde el detalle del cliente o del equipo, que preseleccionan los datos.
 - **Un POST a una ruta inexistente responde 405** en lugar de 404.
