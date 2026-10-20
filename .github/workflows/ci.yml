@@ -147,6 +147,22 @@ jobs:
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/salud/bd)" = "503"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/clientes)" = "302"
 
+      - name: Un contenedor mal configurado termina con error
+        run: |
+          # Sin certificado de Data Protection, producción no arranca. Como PID 1, el proceso debe salir con un código
+          # de error (y no quedar colgado), para que la plataforma muestre el fallo.
+          docker run --detach --name sin-certificado \
+            --env ReverseProxy__IgnoreForwardedHeaders=true \
+            --env ConnectionStrings__FixTrack="Server=no-existe.invalid;Database=NoUsar;Encrypt=True;" \
+            fixtrack:ci
+          for _ in $(seq 1 30); do
+            test "$(docker inspect --format '{{.State.Status}}' sin-certificado)" = "exited" && break
+            sleep 1
+          done
+          test "$(docker inspect --format '{{.State.Status}}' sin-certificado)" = "exited"
+          test "$(docker inspect --format '{{.State.ExitCode}}' sin-certificado)" = "1"
+          docker logs sin-certificado 2>&1 | grep -q "DataProtection__Certificate__Base64"
+
       - name: Registro del contenedor
         if: always()
         run: docker logs fixtrack 2>&1 | tail -n 40 || true
