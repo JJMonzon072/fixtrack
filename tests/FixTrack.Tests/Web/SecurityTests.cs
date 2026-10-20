@@ -319,6 +319,7 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
         var policy = first.Headers.GetValues("Content-Security-Policy").Single();
         var nonce = Regex.Match(policy, "'nonce-(?<value>[^']+)'").Groups["value"].Value;
 
+        Assert.Matches("^[A-Za-z0-9_-]{22}$", nonce);
         Assert.Contains("default-src 'self'", policy);
         Assert.Contains("frame-ancestors 'none'", policy);
         Assert.DoesNotContain("unsafe-inline", policy);

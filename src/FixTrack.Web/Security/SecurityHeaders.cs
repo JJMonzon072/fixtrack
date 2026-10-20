@@ -1,3 +1,4 @@
+using System.Buffers.Text;
 using System.Security.Cryptography;
 
 namespace FixTrack.Web.Security;
@@ -13,7 +14,8 @@ public static class SecurityHeaders
     public static IApplicationBuilder UseSecurityHeaders(this IApplicationBuilder app) =>
         app.Use(async (context, next) =>
         {
-            var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
+            // Base64 URL sin relleno: válido en CSP y sin caracteres que Razor codifique (como "+") en el atributo.
+            var nonce = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16));
             context.Items[NonceKey] = nonce;
 
             var headers = context.Response.Headers;
