@@ -1740,6 +1740,116 @@ button {
     margin-top: var(--space-6);
 }
 
+/* 8c. Equipos y técnicos ----------------------------------------------------- */
+
+.toolbar__filters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+/* Lista desplegable con la misma apariencia que los campos de texto */
+.select {
+    position: relative;
+}
+
+.select__control {
+    padding-right: 2.25rem;
+    cursor: pointer;
+    appearance: none;
+}
+
+.select__icon {
+    position: absolute;
+    top: calc(50% + 0.125rem);
+    right: 0.75rem;
+    color: var(--color-text-tertiary);
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.select--compact .select__control {
+    height: 2rem;
+    margin-top: 0;
+    font-size: var(--text-sm);
+}
+
+.select--compact .select__icon {
+    top: 50%;
+}
+
+/* Buscador de clientes (combobox accesible) */
+.combobox {
+    position: relative;
+}
+
+.combobox__control {
+    position: relative;
+}
+
+.combobox__icon {
+    position: absolute;
+    top: calc(50% + 0.125rem);
+    left: 0.75rem;
+    color: var(--color-text-tertiary);
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.combobox__input {
+    padding-left: 2.25rem;
+}
+
+.combobox__list {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    z-index: 30;
+    max-height: 18rem;
+    margin: var(--space-1) 0 0;
+    padding: var(--space-1);
+    overflow-y: auto;
+    list-style: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-lg);
+}
+
+.combobox__option {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.combobox__option[aria-selected="true"] {
+    background: var(--color-surface-hover);
+}
+
+.combobox__option-name {
+    font-size: var(--text-sm);
+    font-weight: 500;
+}
+
+.combobox__option-meta,
+.combobox__empty {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+}
+
+.combobox__empty {
+    padding: var(--space-3);
+}
+
+.combobox__selected {
+    margin-top: var(--space-1);
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+}
+
 /* 9. Utilidades ------------------------------------------------------------ */
 
 .mono {
