@@ -1,3 +1,4 @@
+using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Application.Devices;
 using FixTrack.Application.ServiceOrders;
@@ -10,7 +11,11 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace FixTrack.Web.Controllers;
 
-/// <summary>Módulo Órdenes de servicio: listado, registro y detalle con historial.</summary>
+/// <summary>
+/// Módulo Órdenes de servicio: listado, registro, detalle con historial y las acciones sobre una orden abierta
+/// (asignar técnico, diagnóstico, planificación y cambio de estado). Cada acción tiene su propia página para que
+/// los errores de validación se muestren junto al formulario sin perder lo escrito.
+/// </summary>
 [Route("ordenes")]
 public sealed class ServiceOrdersController(
     IServiceOrderService orders,
@@ -115,6 +120,179 @@ public sealed class ServiceOrdersController(
     {
         var order = await orders.GetAsync(id, cancellationToken);
         return order is null ? NotFound() : View(new ServiceOrderDetailsViewModel(order, UtcNow));
+    }
+
+    /// <param name="next">Estado sugerido (por ejemplo, desde un botón del detalle).</param>
+    [HttpGet("{id:int}/estado")]
+    public Task<IActionResult> ChangeStatus(int id, [FromQuery(Name = "a")] string? next, CancellationToken cancellationToken) =>
+        WithOpenOrderAsync(id, cancellationToken, order =>
+        {
+            var suggested = DomainDisplay.ParseStatus(next);
+            var form = new ServiceOrderStatusFormModel
+            {
+                Status = order.NextSteps.Any(step => step.Status == suggested && step.IsAvailable) ? suggested : null,
+                FinalCost = Money.InputValue(order.EstimatedCost),
+                Version = order.Version,
+            };
+            return View("Status", new ServiceOrderStatusViewModel(order, form));
+        });
+
+    [HttpPost("{id:int}/estado")]
+    public async Task<IActionResult> ChangeStatus(int id, ServiceOrderStatusFormModel form, CancellationToken cancellationToken)
+    {
+        var errors = new Dictionary<string, string>();
+        var finalCost = form.Status == ServiceOrderStatus.Delivered
+            ? ParseMoney(form.FinalCost, nameof(ServiceOrder.FinalCost), errors)
+            : null;
+
+        if (errors.Count == 0)
+        {
+            var result = await orders.ChangeStatusAsync(id, new ServiceOrderStatusInput(form.Status, form.Note, finalCost), form.Version, cancellationToken);
+            if (Completed(result, id, $"La orden pasó a «{(form.Status is { } status ? DomainDisplay.Name(status) : string.Empty)}».") is { } done)
+            {
+                return done;
+            }
+
+            errors = new Dictionary<string, string>(result.Errors);
+        }
+
+        AddErrors(errors);
+        return await WithOpenOrderAsync(id, cancellationToken, order =>
+            View("Status", new ServiceOrderStatusViewModel(order, form)));
+    }
+
+    [HttpGet("{id:int}/asignar")]
+    public Task<IActionResult> Assign(int id, CancellationToken cancellationToken) =>
+        WithOpenOrderAsync(id, cancellationToken, async order =>
+            View("Assign", new ServiceOrderAssignViewModel(
+                order, await ActiveTechniciansAsync(cancellationToken), null, order.Version)));
+
+    [HttpPost("{id:int}/asignar")]
+    public async Task<IActionResult> Assign(
+        int id,
+        [FromForm] int? technicianId,
+        [FromForm] int version,
+        CancellationToken cancellationToken)
+    {
+        var result = await orders.AssignTechnicianAsync(id, technicianId, version, cancellationToken);
+        if (Completed(result, id, "Técnico asignado correctamente.") is { } done)
+        {
+            return done;
+        }
+
+        AddErrors(result.Errors);
+        return await WithOpenOrderAsync(id, cancellationToken, async order =>
+            View("Assign", new ServiceOrderAssignViewModel(order, await ActiveTechniciansAsync(cancellationToken), technicianId, version)));
+    }
+
+    [HttpGet("{id:int}/diagnostico")]
+    public Task<IActionResult> Diagnosis(int id, CancellationToken cancellationToken) =>
+        WithOpenOrderAsync(id, cancellationToken, order =>
+        {
+            if (!order.CanRecordDiagnosis)
+            {
+                StatusMessage.Warning(TempData, "El diagnóstico se registra mientras la orden está en diagnóstico, en reparación o en espera de repuestos.");
+                return RedirectToAction(nameof(Details), new { id });
+            }
+
+            return View("Diagnosis", new ServiceOrderDiagnosisViewModel(order, order.Diagnosis, order.Version));
+        });
+
+    [HttpPost("{id:int}/diagnostico")]
+    public async Task<IActionResult> Diagnosis(
+        int id,
+        [FromForm] string? diagnosis,
+        [FromForm] int version,
+        CancellationToken cancellationToken)
+    {
+        var result = await orders.RecordDiagnosisAsync(id, diagnosis, version, cancellationToken);
+        if (Completed(result, id, "Diagnóstico guardado.") is { } done)
+        {
+            return done;
+        }
+
+        AddErrors(result.Errors);
+        return await WithOpenOrderAsync(id, cancellationToken, order =>
+            View("Diagnosis", new ServiceOrderDiagnosisViewModel(order, diagnosis, version)));
+    }
+
+    [HttpGet("{id:int}/planificacion")]
+    public Task<IActionResult> Plan(int id, CancellationToken cancellationToken) =>
+        WithOpenOrderAsync(id, cancellationToken, order =>
+            View("Plan", new ServiceOrderPlanViewModel(order, new ServiceOrderPlanFormModel
+            {
+                Priority = order.Priority,
+                PromisedAt = dates.InputValue(order.PromisedAtUtc),
+                EstimatedCost = Money.InputValue(order.EstimatedCost),
+                Version = order.Version,
+            })));
+
+    [HttpPost("{id:int}/planificacion")]
+    public async Task<IActionResult> Plan(int id, ServiceOrderPlanFormModel form, CancellationToken cancellationToken)
+    {
+        var errors = new Dictionary<string, string>();
+        var promisedAt = ParseDate(form.PromisedAt, nameof(ServiceOrder.PromisedAtUtc), errors);
+        var estimatedCost = ParseMoney(form.EstimatedCost, nameof(ServiceOrder.EstimatedCost), errors);
+
+        if (errors.Count == 0)
+        {
+            var result = await orders.UpdatePlanAsync(id, new ServiceOrderPlanInput(form.Priority, promisedAt, estimatedCost), form.Version, cancellationToken);
+            if (Completed(result, id, "Planificación actualizada.") is { } done)
+            {
+                return done;
+            }
+
+            errors = new Dictionary<string, string>(result.Errors);
+        }
+
+        AddErrors(errors);
+        return await WithOpenOrderAsync(id, cancellationToken, order => View("Plan", new ServiceOrderPlanViewModel(order, form)));
+    }
+
+    /// <summary>
+    /// Resultado de una acción que terminó: éxito (vuelve al detalle con el mensaje), orden inexistente (404) o
+    /// conflicto (vuelve al detalle con el aviso para que se vean los datos actuales). Si los datos no son válidos,
+    /// devuelve <c>null</c> y la acción vuelve a mostrar su formulario.
+    /// </summary>
+    private IActionResult? Completed(CommandResult result, int id, string successMessage)
+    {
+        switch (result.Status)
+        {
+            case CommandStatus.Succeeded:
+                StatusMessage.Success(TempData, successMessage);
+                return RedirectToAction(nameof(Details), new { id });
+            case CommandStatus.NotFound:
+                return NotFound();
+            case CommandStatus.Conflict:
+                StatusMessage.Warning(TempData, result.Message ?? "No se pudo completar la operación.");
+                return RedirectToAction(nameof(Details), new { id });
+            default:
+                return null;
+        }
+    }
+
+    private Task<IActionResult> WithOpenOrderAsync(int id, CancellationToken cancellationToken, Func<ServiceOrderDetails, IActionResult> render) =>
+        WithOpenOrderAsync(id, cancellationToken, order => Task.FromResult(render(order)));
+
+    /// <summary>Carga la orden y comprueba que siga abierta antes de mostrar uno de sus formularios.</summary>
+    private async Task<IActionResult> WithOpenOrderAsync(
+        int id,
+        CancellationToken cancellationToken,
+        Func<ServiceOrderDetails, Task<IActionResult>> render)
+    {
+        var order = await orders.GetAsync(id, cancellationToken);
+        if (order is null)
+        {
+            return NotFound();
+        }
+
+        if (order.IsClosed)
+        {
+            StatusMessage.Warning(TempData, "La orden está cerrada (entregada o cancelada) y ya no admite cambios.");
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        return await render(order);
     }
 
     private async Task<ServiceOrderEditorViewModel> EditorAsync(

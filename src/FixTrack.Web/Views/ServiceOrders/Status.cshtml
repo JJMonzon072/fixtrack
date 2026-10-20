@@ -1,0 +1,92 @@
+@using FixTrack.Domain.ServiceOrders
+@using FixTrack.Web.Models.Forms
+@using FixTrack.Web.Models.ServiceOrders
+@model ServiceOrderStatusViewModel
+@{
+    var order = Model.Order;
+    var form = Model.Form;
+    ViewData["Title"] = "Cambiar estado";
+    ViewData["ParentTitle"] = order.Number;
+    ViewData["ParentUrl"] = Url.Action("Details", new { id = order.Id });
+
+    var errors = FormErrors.From(ViewData.ModelState,
+        (nameof(form.Status), "Nuevo estado", "status-options"),
+        (nameof(form.Note), "Nota", null),
+        (nameof(form.FinalCost), "Costo final", null));
+    var statusError = errors.For(nameof(form.Status));
+    var deliveredValue = ((int)ServiceOrderStatus.Delivered).ToString();
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">Cambiar estado</h1>
+        <p class="page-description">
+            Solo aparecen los estados permitidos desde «@DomainDisplay.Name(order.Status)». El cambio queda registrado en el historial de la orden.
+        </p>
+    </div>
+</header>
+
+<div class="form-layout">
+    <form class="form-card" method="post" novalidate asp-action="ChangeStatus" asp-route-id="@order.Id" asp-antiforgery="true" data-status-form>
+        <partial name="_OrderContext" model="order" />
+        <partial name="_ErrorSummary" model="errors" />
+
+        <div class="form-grid">
+            <fieldset class="field field--wide" aria-describedby="@(statusError is null ? null : "Status-error")">
+                <legend class="field__label">Nuevo estado</legend>
+                <div class="choice-list" id="status-options">
+                    @foreach (var step in order.NextSteps)
+                    {
+                        var value = ((int)step.Status).ToString();
+                        <label class="choice@(step.IsAvailable ? string.Empty : " choice--disabled")">
+                            <input type="radio" name="Status" value="@value" checked="@(step.IsAvailable && step.Status == form.Status)"
+                                   disabled="@(!step.IsAvailable)" aria-describedby="status-@value-text" />
+                            <span class="choice__body">
+                                <span class="choice__title"><partial name="_OrderStatus" model="step.Status" /></span>
+                                <span class="choice__text" id="status-@value-text">
+                                    @DomainDisplay.Description(step.Status)
+                                    @if (step.Blocker is { } blocker)
+                                    {
+                                        <span class="choice__blocker"><icon name="triangle-alert" />@blocker</span>
+                                    }
+                                </span>
+                            </span>
+                        </label>
+                    }
+                </div>
+                @if (statusError is not null)
+                {
+                    <p class="field__error" id="Status-error"><icon name="triangle-alert" />@statusError</p>
+                }
+            </fieldset>
+
+            <partial name="_FormField" model='new FormField(nameof(form.Note), "Nota")
+            {
+                Value = form.Note, Error = errors.For(nameof(form.Note)), Optional = true, Wide = true,
+                Hint = "Obligatoria al esperar repuestos (qué repuesto) y al cancelar (motivo). Queda en el historial y no puede editarse.",
+                Rows = 3, MaxLength = ServiceOrderStatusChange.NoteMaxLength,
+            }' />
+
+            <div class="field field--wide field__conditional" data-show-for-status="@deliveredValue">
+                <partial name="_FormField" model='new FormField(nameof(form.FinalCost), "Costo final")
+                {
+                    Value = form.FinalCost, Error = errors.For(nameof(form.FinalCost)), Mono = true, Prefix = "Q",
+                    Hint = order.EstimatedCost is { } estimate
+                        ? $"Solo se registra al entregar. Monto cobrado al cliente; el estimado era {Money.Format(estimate)}."
+                        : "Solo se registra al entregar. Monto cobrado al cliente en quetzales.",
+                    InputMode = "decimal", Autocomplete = "off", MaxLength = 16,
+                }' />
+            </div>
+        </div>
+
+        <input type="hidden" name="Version" value="@form.Version" />
+
+        <footer class="form-card__actions">
+            <a class="button button--secondary" asp-action="Details" asp-route-id="@order.Id">Cancelar</a>
+            <button class="button button--primary" type="submit">
+                <icon name="check" />
+                Guardar cambio de estado
+            </button>
+        </footer>
+    </form>
+</div>

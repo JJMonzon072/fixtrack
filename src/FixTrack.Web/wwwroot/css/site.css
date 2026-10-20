@@ -2443,6 +2443,130 @@ fieldset.field > legend {
     border-color: var(--color-danger);
 }
 
+/* Opciones en forma de tarjeta (estados siguientes, técnicos) */
+.choice-list {
+    display: grid;
+    gap: var(--space-2);
+    margin: var(--space-1) 0 0;
+    padding: 0;
+    border: 0;
+}
+
+.choice {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition:
+        border-color var(--duration-fast) ease,
+        background-color var(--duration-fast) ease,
+        box-shadow var(--duration-fast) ease;
+}
+
+.choice:hover {
+    border-color: var(--color-border-strong);
+}
+
+.choice input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0.125rem 0 0;
+    accent-color: var(--color-accent);
+}
+
+.choice:has(input:checked) {
+    border-color: var(--color-accent);
+    background: var(--color-accent-subtle);
+    box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.choice:has(input:focus-visible) {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+}
+
+.choice--disabled {
+    background: var(--color-surface-subtle);
+    cursor: not-allowed;
+}
+
+.choice--disabled:hover {
+    border-color: var(--color-border);
+}
+
+.choice--disabled .choice__title {
+    color: var(--color-text-tertiary);
+}
+
+.choice__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+}
+
+.choice__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    font-weight: 500;
+}
+
+.choice__text {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+}
+
+.choice__blocker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--color-warning-text);
+}
+
+.choice__blocker .icon {
+    width: 0.75rem;
+    height: 0.75rem;
+}
+
+.choice__aside {
+    align-self: center;
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.workload {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+}
+
+.workload__bar {
+    width: 4.5rem;
+    height: 0.375rem;
+}
+
+.workload__track {
+    fill: var(--color-surface-active);
+}
+
+.workload__fill {
+    fill: var(--color-accent);
+}
+
 /* Encabezado del detalle de una orden */
 .order-title {
     font-family: var(--font-mono);
@@ -2730,6 +2854,115 @@ fieldset.field > legend {
     font-size: var(--text-sm);
     color: var(--color-text-secondary);
     overflow-wrap: anywhere;
+}
+
+/* Siguientes pasos de una orden abierta */
+.next-steps {
+    margin: 0;
+    padding: 0 var(--space-2) var(--space-2);
+    list-style: none;
+}
+
+.next-steps__link,
+.next-steps__blocked {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2);
+    border-radius: var(--radius-sm);
+}
+
+.next-steps__link {
+    transition: background-color var(--duration-fast) ease;
+}
+
+.next-steps__link:hover {
+    background: var(--color-surface-hover);
+}
+
+.next-steps__icon {
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    flex-shrink: 0;
+    border: 1px solid color-mix(in srgb, var(--status-color) 40%, var(--color-border));
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--status-color) 12%, var(--color-surface));
+    color: var(--status-color);
+}
+
+.next-steps__icon .icon {
+    width: 0.875rem;
+    height: 0.875rem;
+    stroke-width: 2;
+}
+
+.next-steps__text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    font-size: var(--text-sm);
+    font-weight: 500;
+}
+
+.next-steps__reason {
+    font-size: var(--text-xs);
+    font-weight: 400;
+    color: var(--color-warning-text);
+}
+
+.next-steps__blocked .next-steps__text {
+    color: var(--color-text-tertiary);
+}
+
+.next-steps__blocked .next-steps__icon {
+    opacity: 0.6;
+}
+
+.next-steps__chevron {
+    color: var(--color-text-tertiary);
+    transition: transform var(--duration-base) var(--ease-out);
+}
+
+.next-steps__link:hover .next-steps__chevron {
+    color: var(--color-text);
+    transform: translateX(2px);
+}
+
+/* Resumen de la orden en las páginas de acción */
+.order-context {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-4);
+    margin: 0 var(--space-6);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-subtle);
+    font-size: var(--text-sm);
+}
+
+.order-context:first-child {
+    margin-top: var(--space-6);
+}
+
+.order-context__item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+}
+
+.order-context__label {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+}
+
+.field__conditional[hidden] {
+    display: none;
 }
 
 /* 9. Utilidades ------------------------------------------------------------ */

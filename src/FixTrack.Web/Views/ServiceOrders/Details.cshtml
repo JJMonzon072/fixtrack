@@ -61,6 +61,19 @@
         </div>
     </div>
 
+    @if (!order.IsClosed)
+    {
+        <div class="page-header__actions">
+            <a class="button button--secondary" asp-action="Plan" asp-route-id="@order.Id">
+                <icon name="calendar-clock" />
+                Planificación
+            </a>
+            <a class="button button--primary" asp-action="ChangeStatus" asp-route-id="@order.Id">
+                <icon name="arrow-right" />
+                Cambiar estado
+            </a>
+        </div>
+    }
 </header>
 
 @if (order.Status == ServiceOrderStatus.Cancelled)
@@ -153,6 +166,13 @@ else if (order.Status == ServiceOrderStatus.Delivered && order.DeliveredAtUtc is
         <section class="card" aria-labelledby="diagnosis-title">
             <header class="card__header">
                 <h2 class="card__title" id="diagnosis-title">Diagnóstico técnico</h2>
+                @if (order.CanRecordDiagnosis)
+                {
+                    <a class="button button--secondary button--small" asp-action="Diagnosis" asp-route-id="@order.Id">
+                        <icon name="pencil" />
+                        @(order.Diagnosis is null ? "Registrar diagnóstico" : "Editar")
+                    </a>
+                }
             </header>
             @if (order.Diagnosis is { } diagnosis)
             {
@@ -211,6 +231,40 @@ else if (order.Status == ServiceOrderStatus.Delivered && order.DeliveredAtUtc is
     </div>
 
     <aside class="detail-layout__side" aria-label="Datos de la orden">
+        @if (!order.IsClosed)
+        {
+            <section class="card" aria-labelledby="next-title">
+                <header class="card__header">
+                    <h2 class="card__title" id="next-title">Siguiente paso</h2>
+                </header>
+                <ul class="next-steps" role="list">
+                    @foreach (var step in order.NextSteps)
+                    {
+                        <li class="next-steps__item" data-status="@DomainDisplay.Tone(step.Status)">
+                            @if (step.IsAvailable)
+                            {
+                                <a class="next-steps__link" asp-action="ChangeStatus" asp-route-id="@order.Id" asp-route-a="@DomainDisplay.Slug(step.Status)">
+                                    <span class="next-steps__icon" aria-hidden="true"><icon name="@DomainDisplay.Icon(step.Status)" /></span>
+                                    <span class="next-steps__text">Pasar a «@DomainDisplay.Name(step.Status)»</span>
+                                    <icon name="chevron-right" class="next-steps__chevron" />
+                                </a>
+                            }
+                            else
+                            {
+                                <div class="next-steps__blocked">
+                                    <span class="next-steps__icon" aria-hidden="true"><icon name="@DomainDisplay.Icon(step.Status)" /></span>
+                                    <span class="next-steps__text">
+                                        @DomainDisplay.Name(step.Status)
+                                        <span class="next-steps__reason">@step.Blocker</span>
+                                    </span>
+                                </div>
+                            }
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+
         <section class="card" aria-labelledby="summary-title">
             <header class="card__header">
                 <h2 class="card__title" id="summary-title">Resumen</h2>
@@ -254,6 +308,13 @@ else if (order.Status == ServiceOrderStatus.Delivered && order.DeliveredAtUtc is
         <section class="card" aria-labelledby="costs-title">
             <header class="card__header">
                 <h2 class="card__title" id="costs-title">Costos</h2>
+                @if (!order.IsClosed)
+                {
+                    <a class="button button--secondary button--small" asp-action="Plan" asp-route-id="@order.Id">
+                        <icon name="pencil" />
+                        Editar
+                    </a>
+                }
             </header>
             <dl class="meta-list meta-list--stacked">
                 <div class="meta-list__row">
@@ -293,6 +354,13 @@ else if (order.Status == ServiceOrderStatus.Delivered && order.DeliveredAtUtc is
         <section class="card" aria-labelledby="technician-title">
             <header class="card__header">
                 <h2 class="card__title" id="technician-title">Técnico responsable</h2>
+                @if (!order.IsClosed)
+                {
+                    <a class="button button--secondary button--small" asp-action="Assign" asp-route-id="@order.Id">
+                        <icon name="user-check" />
+                        @(technician is null ? "Asignar" : "Reasignar")
+                    </a>
+                }
             </header>
             <div class="card__body">
                 @if (technician is not null)

@@ -63,6 +63,15 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
             .SingleAsync(order => order.Id == id, Token);
     }
 
+    private static Task<HttpResponseMessage> ChangeStatusAsync(HttpClient client, int id, ServiceOrderStatus status, int version, string note = "", string finalCost = "") =>
+        FormPost.SendAsync(client, $"/ordenes/{id}/estado", new()
+        {
+            ["Status"] = ((int)status).ToString(),
+            ["Note"] = note,
+            ["FinalCost"] = finalCost,
+            ["Version"] = version.ToString(),
+        });
+
     [Fact]
     public async Task Registers_an_order_and_shows_its_details_and_first_history_entry()
     {
@@ -179,6 +188,85 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     }
 
     [Fact]
+    public async Task Walks_an_order_through_the_whole_workflow_and_closes_it()
+    {
+        using var client = factory.CreateClient();
+        var scenario = await ScenarioAsync(client, "Flujo");
+        var id = await CreateOrderAsync(client, scenario);
+
+        var assigned = await FormPost.SendAsync(client, $"/ordenes/{id}/asignar", new() { ["TechnicianId"] = scenario.TechnicianId.ToString(), ["Version"] = "0" });
+        await ChangeStatusAsync(client, id, ServiceOrderStatus.Diagnosing, 1);
+        var diagnosed = await FormPost.SendAsync(client, $"/ordenes/{id}/diagnostico", new() { ["Diagnosis"] = "Fuente de poder dañada.", ["Version"] = "2" });
+        await ChangeStatusAsync(client, id, ServiceOrderStatus.InRepair, 3);
+        await ChangeStatusAsync(client, id, ServiceOrderStatus.AwaitingParts, 4, note: "Fuente de 65 W pedida al proveedor");
+        await ChangeStatusAsync(client, id, ServiceOrderStatus.InRepair, 5);
+        await ChangeStatusAsync(client, id, ServiceOrderStatus.ReadyForPickup, 6, note: "Probada durante dos horas");
+        var delivered = await ChangeStatusAsync(client, id, ServiceOrderStatus.Delivered, 7, note: "Pagado en efectivo", finalCost: "1300");
+        var html = await delivered.Content.ReadAsStringAsync(Token);
+
+        Assert.Contains("Técnico asignado correctamente.", await assigned.Content.ReadAsStringAsync(Token));
+        Assert.Contains("Diagnóstico guardado.", await diagnosed.Content.ReadAsStringAsync(Token));
+        Assert.Contains("La orden pasó a «Entregada».", html);
+        Assert.Contains("La orden está cerrada y ya no admite cambios.", html);
+        Assert.Contains("Fuente de 65 W pedida al proveedor", html);
+        Assert.Contains("&#x2B;Q 49.50", html); // "+Q 49.50": el codificador HTML escapa el signo +.
+
+        var order = await LoadAsync(id);
+        Assert.Equal(ServiceOrderStatus.Delivered, order.Status);
+        Assert.Equal(1300m, order.FinalCost);
+        Assert.Equal(7, order.StatusHistory.Count);
+        Assert.NotNull(order.DeliveredAtUtc);
+    }
+
+    [Fact]
+    public async Task Rejected_transitions_are_explained_on_the_status_page()
+    {
+        using var client = factory.CreateClient();
+        var scenario = await ScenarioAsync(client, "Rechazo");
+        var id = await CreateOrderAsync(client, scenario);
+
+        var skip = await (await ChangeStatusAsync(client, id, ServiceOrderStatus.Delivered, 0, finalCost: "100")).Content.ReadAsStringAsync(Token);
+        var withoutTechnician = await (await ChangeStatusAsync(client, id, ServiceOrderStatus.Diagnosing, 0)).Content.ReadAsStringAsync(Token);
+        var page = await client.GetStringAsync($"/ordenes/{id}/estado", Token);
+
+        Assert.Contains("Una orden «Recibida» no puede pasar a «Entregada».", skip);
+        Assert.Contains("Asigna un técnico antes de iniciar el diagnóstico.", withoutTechnician);
+        Assert.Contains("Asigna un técnico antes de iniciar el diagnóstico.", page);
+        Assert.Equal(ServiceOrderStatus.Received, (await LoadAsync(id)).Status);
+    }
+
+    [Fact]
+    public async Task A_stale_form_does_not_overwrite_a_newer_change()
+    {
+        using var client = factory.CreateClient();
+        var scenario = await ScenarioAsync(client, "Concurrencia");
+        var id = await CreateOrderAsync(client, scenario);
+        await FormPost.SendAsync(client, $"/ordenes/{id}/planificacion", new() { ["Priority"] = "4", ["Version"] = "0" });
+
+        var html = await (await FormPost.SendAsync(client, $"/ordenes/{id}/planificacion", new() { ["Priority"] = "1", ["Version"] = "0" }))
+            .Content.ReadAsStringAsync(Token);
+
+        Assert.Contains("Otra persona modificó esta orden mientras la revisabas.", html);
+        Assert.Equal(ServiceOrderPriority.Urgent, (await LoadAsync(id)).Priority);
+    }
+
+    [Fact]
+    public async Task Closed_orders_do_not_offer_their_forms()
+    {
+        using var client = factory.CreateClient();
+        var scenario = await ScenarioAsync(client, "Cerrada");
+        var id = await CreateOrderAsync(client, scenario);
+        await ChangeStatusAsync(client, id, ServiceOrderStatus.Cancelled, 0, note: "El cliente desistió");
+
+        var form = await client.GetStringAsync($"/ordenes/{id}/planificacion", Token);
+        var post = await (await ChangeStatusAsync(client, id, ServiceOrderStatus.Diagnosing, 1)).Content.ReadAsStringAsync(Token);
+
+        Assert.Contains("La orden está cerrada (entregada o cancelada) y ya no admite cambios.", form);
+        Assert.Contains("Motivo: El cliente desistió", form);
+        Assert.Contains("ya no admite cambios", post);
+    }
+
+    [Fact]
     public async Task A_technician_with_open_orders_cannot_be_deactivated()
     {
         using var client = factory.CreateClient();
@@ -229,6 +317,22 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
         Assert.Contains("<tr class=\"is-overdue\">", overdue);
         Assert.Contains("Vencida hace", overdue);
         Assert.Contains("Entrega vencida", details);
+    }
+
+    [Fact]
+    public async Task Rejects_posts_without_an_antiforgery_token()
+    {
+        using var client = factory.CreateClient();
+        var scenario = await ScenarioAsync(client, "Token");
+        var id = await CreateOrderAsync(client, scenario);
+
+        using var response = await client.PostAsync(
+            $"/ordenes/{id}/estado",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["Status"] = "7", ["Note"] = "x", ["Version"] = "0" }),
+            Token);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(ServiceOrderStatus.Received, (await LoadAsync(id)).Status);
     }
 
     [Fact]

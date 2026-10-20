@@ -1,0 +1,51 @@
+@using FixTrack.Domain.ServiceOrders
+@using FixTrack.Web.Models.Forms
+@using FixTrack.Web.Models.ServiceOrders
+@model ServiceOrderDiagnosisViewModel
+@{
+    var order = Model.Order;
+    ViewData["Title"] = "Diagnóstico";
+    ViewData["ParentTitle"] = order.Number;
+    ViewData["ParentUrl"] = Url.Action("Details", new { id = order.Id });
+
+    var errors = FormErrors.From(ViewData.ModelState, ("Diagnosis", "Diagnóstico", null));
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">@(order.Diagnosis is null ? "Registrar diagnóstico" : "Editar diagnóstico")</h1>
+        <p class="page-description">
+            Describe la falla encontrada y el trabajo necesario. El diagnóstico es obligatorio para iniciar la reparación o marcar la orden como lista para entrega.
+        </p>
+    </div>
+</header>
+
+<div class="form-layout">
+    <form class="form-card" method="post" novalidate asp-action="Diagnosis" asp-route-id="@order.Id" asp-antiforgery="true">
+        <partial name="_OrderContext" model="order" />
+        <partial name="_ErrorSummary" model="errors" />
+
+        <div class="form-grid">
+            <div class="field field--wide">
+                <span class="field__label">Problema reportado por el cliente</span>
+                <p class="notes field__hint">@order.ReportedIssue</p>
+            </div>
+            <partial name="_FormField" model='new FormField("Diagnosis", "Diagnóstico técnico")
+            {
+                Value = Model.Diagnosis, Error = errors.For("Diagnosis"), Wide = true,
+                Hint = "Incluye la causa, las pruebas realizadas y los repuestos o trabajos recomendados.",
+                Rows = 8, MaxLength = ServiceOrderRules.DiagnosisMaxLength,
+            }' />
+        </div>
+
+        <input type="hidden" name="Version" value="@Model.Version" />
+
+        <footer class="form-card__actions">
+            <a class="button button--secondary" asp-action="Details" asp-route-id="@order.Id">Cancelar</a>
+            <button class="button button--primary" type="submit">
+                <icon name="check" />
+                Guardar diagnóstico
+            </button>
+        </footer>
+    </form>
+</div>
