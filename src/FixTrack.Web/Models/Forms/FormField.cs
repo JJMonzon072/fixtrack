@@ -31,6 +31,9 @@ public sealed record FormField(string Name, string Label)
     /// <summary>Usa la tipografía monoespaciada (teléfonos, números de serie).</summary>
     public bool Mono { get; init; }
 
+    /// <summary>Texto fijo antes del valor, por ejemplo "Q" en los montos.</summary>
+    public string? Prefix { get; init; }
+
     /// <summary>Si tiene valor, el campo es un área de texto con esa cantidad de filas y contador de caracteres.</summary>
     public int? Rows { get; init; }
 

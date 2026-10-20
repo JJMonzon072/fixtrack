@@ -42,6 +42,16 @@
         <textarea class="@controlClass textarea" id="@field.Name" name="@field.Name" rows="@field.Rows"
                   maxlength="@field.MaxLength" aria-invalid="@invalid" aria-describedby="@field.DescribedBy">@field.Value</textarea>
     }
+    else if (field.Prefix is not null)
+    {
+        <div class="input-group">
+            <span class="input-group__prefix" aria-hidden="true">@field.Prefix</span>
+            <input class="@controlClass" id="@field.Name" name="@field.Name" type="@field.InputType" value="@field.Value"
+                   maxlength="@field.MaxLength" autocomplete="@field.Autocomplete" inputmode="@field.InputMode"
+                   spellcheck="@(field.Spellcheck ? null : "false")" required="@(!field.Optional)"
+                   aria-invalid="@invalid" aria-describedby="@field.DescribedBy" />
+        </div>
+    }
     else
     {
         <input class="@controlClass" id="@field.Name" name="@field.Name" type="@field.InputType" value="@field.Value"
