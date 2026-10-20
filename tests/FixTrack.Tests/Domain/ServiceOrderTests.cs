@@ -401,4 +401,30 @@ public sealed class ServiceOrderTests
     [Fact]
     public void The_order_number_is_derived_from_the_id() =>
         Assert.Equal("OS-000042", ServiceOrder.FormatNumber(42));
+
+    [Fact]
+    public void Status_change_problems_are_reported_by_field()
+    {
+        var order = DiagnosedOrder();
+        order.ChangeStatus(ServiceOrderStatus.ReadyForPickup, Received.AddHours(3));
+
+        var errors = order.ValidateStatusChange(ServiceOrderStatus.Delivered, new string('a', ServiceOrderStatusChange.NoteMaxLength + 1), -5m);
+
+        Assert.Equal(["FinalCost", "Note"], errors.Keys.Order());
+        Assert.Equal("Status", Assert.Single(NewOrder().ValidateStatusChange(ServiceOrderStatus.InRepair, null, null)).Key);
+        Assert.Empty(order.ValidateStatusChange(ServiceOrderStatus.Delivered, "Pagado en efectivo", 100m));
+        Assert.Equal(ServiceOrderStatus.ReadyForPickup, order.Status);
+    }
+
+    [Fact]
+    public void Plan_problems_are_reported_by_field()
+    {
+        var order = NewOrder();
+
+        var errors = order.ValidatePlanChange(null, Received.AddDays(1), -1m, Received.AddDays(2));
+
+        Assert.Equal(["EstimatedCost", "Priority", "PromisedAtUtc"], errors.Keys.Order());
+        Assert.Empty(order.ValidatePlanChange(ServiceOrderPriority.High, order.PromisedAtUtc, null, Received.AddDays(5)));
+    }
 }
+

@@ -11,6 +11,8 @@ namespace FixTrack.Domain.ServiceOrders;
 /// </summary>
 public sealed class ServiceOrder : Entity
 {
+    private const string ClosedMessage = "La orden está cerrada (entregada o cancelada) y no admite cambios.";
+
     private readonly List<ServiceOrderStatusChange> _statusHistory = [];
 
     /// <summary>Registra la recepción de un equipo. El propietario del equipo debe estar cargado y activo.</summary>
@@ -170,18 +172,33 @@ public sealed class ServiceOrder : Entity
         if (promisedAtUtc is { } promised)
         {
             UtcClock.Ensure(promised, nameof(promisedAtUtc));
-            if (promised != PromisedAtUtc && promised < updatedAt)
-            {
-                throw new DomainException("La nueva fecha de entrega comprometida no puede estar en el pasado.");
-            }
         }
 
-        ThrowIfInvalid(ServiceOrderRules.ValidatePlan(priority, ReceivedAtUtc, promisedAtUtc, estimatedCost));
+        ThrowIfInvalid(ValidatePlanChange(priority, promisedAtUtc, estimatedCost, updatedAt));
 
         Priority = priority;
         PromisedAtUtc = promisedAtUtc;
         EstimatedCost = estimatedCost;
         Touch(updatedAt);
+    }
+
+    /// <summary>Revisa una nueva planificación sin aplicarla. Las claves son los nombres de las propiedades.</summary>
+    public IReadOnlyDictionary<string, string> ValidatePlanChange(
+        ServiceOrderPriority? priority,
+        DateTime? promisedAtUtc,
+        decimal? estimatedCost,
+        DateTime nowUtc)
+    {
+        var errors = new Dictionary<string, string>(ServiceOrderRules.ValidatePlan(priority, ReceivedAtUtc, promisedAtUtc, estimatedCost));
+        if (promisedAtUtc is { } promised
+            && promised != PromisedAtUtc
+            && promised < nowUtc
+            && !errors.ContainsKey(nameof(PromisedAtUtc)))
+        {
+            errors[nameof(PromisedAtUtc)] = "La nueva fecha de entrega comprometida no puede estar en el pasado.";
+        }
+
+        return errors;
     }
 
     /// <summary>
@@ -190,22 +207,7 @@ public sealed class ServiceOrder : Entity
     /// </summary>
     public void ChangeStatus(ServiceOrderStatus newStatus, DateTime changedAtUtc, string? note = null, decimal? finalCost = null)
     {
-        EnsureOpen();
-        if (!Enum.IsDefined(newStatus))
-        {
-            throw new DomainException("El estado no es válido.");
-        }
-
-        if (newStatus == Status)
-        {
-            throw new DomainException("La orden ya se encuentra en ese estado.");
-        }
-
-        if (!ServiceOrderWorkflow.CanTransition(Status, newStatus))
-        {
-            throw new DomainException(
-                $"Una orden «{ServiceOrderWorkflow.Name(Status)}» no puede pasar a «{ServiceOrderWorkflow.Name(newStatus)}».");
-        }
+        ThrowIfInvalid(ValidateStatusChange(newStatus, note, finalCost));
 
         var changedAt = UtcClock.Ensure(changedAtUtc, nameof(changedAtUtc));
         if (changedAt < (UpdatedAtUtc ?? ReceivedAtUtc))
@@ -213,10 +215,7 @@ public sealed class ServiceOrder : Entity
             throw new DomainException("El cambio de estado no puede ser anterior al último cambio registrado en la orden.");
         }
 
-        var cleanNote = Text.CleanOrNull(note);
-        EnsurePreconditions(newStatus, cleanNote, finalCost);
-
-        _statusHistory.Add(new ServiceOrderStatusChange(Status, newStatus, changedAt, cleanNote));
+        _statusHistory.Add(new ServiceOrderStatusChange(Status, newStatus, changedAt, Text.CleanOrNull(note)));
         Status = newStatus;
         if (newStatus == ServiceOrderStatus.Delivered)
         {
@@ -227,31 +226,80 @@ public sealed class ServiceOrder : Entity
         Touch(changedAt);
     }
 
-    private void EnsurePreconditions(ServiceOrderStatus newStatus, string? note, decimal? finalCost)
+    /// <summary>
+    /// Revisa si la orden puede pasar a <paramref name="newStatus"/> con esa nota y ese costo final, sin modificarla.
+    /// Las claves del resultado son <c>Status</c>, <c>Note</c> y <c>FinalCost</c>.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> ValidateStatusChange(ServiceOrderStatus newStatus, string? note, decimal? finalCost)
     {
-        if (finalCost is not null && newStatus != ServiceOrderStatus.Delivered)
+        var errors = new Dictionary<string, string>();
+        if (StatusError(newStatus) is { } statusError)
         {
-            throw new DomainException("El costo final solo se registra al entregar la orden.");
+            errors[nameof(Status)] = statusError;
         }
 
-        switch (newStatus)
+        var cleanNote = Text.CleanOrNull(note);
+        if (cleanNote is { Length: > ServiceOrderStatusChange.NoteMaxLength })
         {
-            case ServiceOrderStatus.Diagnosing when TechnicianId is null:
-                throw new DomainException("Asigna un técnico antes de iniciar el diagnóstico.");
-            case ServiceOrderStatus.InRepair when TechnicianId is null:
-                throw new DomainException("Asigna un técnico antes de iniciar la reparación.");
-            case ServiceOrderStatus.InRepair or ServiceOrderStatus.AwaitingParts or ServiceOrderStatus.ReadyForPickup
-                when Diagnosis is null:
-                throw new DomainException("Registra el diagnóstico antes de continuar con la orden.");
-            case ServiceOrderStatus.AwaitingParts when note is null:
-                throw new DomainException("Indica qué repuesto se está esperando.");
-            case ServiceOrderStatus.Cancelled when note is null:
-                throw new DomainException("Indica el motivo de la cancelación.");
-            case ServiceOrderStatus.Delivered when finalCost is null:
-                throw new DomainException("Indica el costo final para entregar la orden.");
-            case ServiceOrderStatus.Delivered when ServiceOrderRules.ValidateAmount(finalCost, "El costo final") is { } costError:
-                throw new DomainException(costError);
+            errors[nameof(ServiceOrderStatusChange.Note)] = $"La nota no puede superar {ServiceOrderStatusChange.NoteMaxLength} caracteres.";
         }
+        else if (cleanNote is null && newStatus == ServiceOrderStatus.AwaitingParts)
+        {
+            errors[nameof(ServiceOrderStatusChange.Note)] = "Indica qué repuesto se está esperando.";
+        }
+        else if (cleanNote is null && newStatus == ServiceOrderStatus.Cancelled)
+        {
+            errors[nameof(ServiceOrderStatusChange.Note)] = "Indica el motivo de la cancelación.";
+        }
+
+        if (newStatus == ServiceOrderStatus.Delivered)
+        {
+            var costError = finalCost is null
+                ? "Indica el costo final para entregar la orden."
+                : ServiceOrderRules.ValidateAmount(finalCost, "El costo final");
+            if (costError is not null)
+            {
+                errors[nameof(FinalCost)] = costError;
+            }
+        }
+        else if (finalCost is not null)
+        {
+            errors[nameof(FinalCost)] = "El costo final solo se registra al entregar la orden.";
+        }
+
+        return errors;
+    }
+
+    private string? StatusError(ServiceOrderStatus newStatus)
+    {
+        if (IsClosed)
+        {
+            return ClosedMessage;
+        }
+
+        if (!Enum.IsDefined(newStatus))
+        {
+            return "Selecciona el nuevo estado.";
+        }
+
+        if (newStatus == Status)
+        {
+            return "La orden ya se encuentra en ese estado.";
+        }
+
+        if (!ServiceOrderWorkflow.CanTransition(Status, newStatus))
+        {
+            return $"Una orden «{ServiceOrderWorkflow.Name(Status)}» no puede pasar a «{ServiceOrderWorkflow.Name(newStatus)}».";
+        }
+
+        return newStatus switch
+        {
+            ServiceOrderStatus.Diagnosing when TechnicianId is null => "Asigna un técnico antes de iniciar el diagnóstico.",
+            ServiceOrderStatus.InRepair when TechnicianId is null => "Asigna un técnico antes de iniciar la reparación.",
+            ServiceOrderStatus.InRepair or ServiceOrderStatus.AwaitingParts or ServiceOrderStatus.ReadyForPickup when Diagnosis is null =>
+                "Registra el diagnóstico antes de continuar con la orden.",
+            _ => null,
+        };
     }
 
     private void SetTechnician(Technician technician, DateTime assignedAtUtc)
@@ -276,7 +324,7 @@ public sealed class ServiceOrder : Entity
     {
         if (IsClosed)
         {
-            throw new DomainException("La orden está cerrada (entregada o cancelada) y no admite cambios.");
+            throw new DomainException(ClosedMessage);
         }
     }
 
