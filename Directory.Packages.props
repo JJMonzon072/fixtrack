@@ -17,6 +17,11 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.13" />
   </ItemGroup>
 
+  <ItemGroup Label="Autenticación">
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.13" />
+  </ItemGroup>
+
   <ItemGroup Label="Correcciones de seguridad (dependencias transitivas)">
     <!-- Microsoft.Data.SqlClient 6.1.7 trae la 9.0.11, afectada por CVE-2026-84008 y CVE-2026-70162. -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />

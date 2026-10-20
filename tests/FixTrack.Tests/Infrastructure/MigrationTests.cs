@@ -40,10 +40,18 @@ public sealed class MigrationTests
 
         Assert.Contains("TR_ServiceOrderStatusHistory_AppendOnly", script);
 
-        foreach (var forbidden in new[] { "DROP TABLE", "DROP COLUMN", "DROP INDEX", "TRUNCATE", "DELETE FROM", "UPDATE [", "ON DELETE CASCADE" })
+        foreach (var forbidden in new[] { "DROP TABLE", "DROP COLUMN", "DROP INDEX", "TRUNCATE", "DELETE FROM", "UPDATE [" })
         {
             Assert.DoesNotContain(forbidden, script, StringComparison.OrdinalIgnoreCase);
         }
+
+        // Ninguna tabla del negocio borra en cascada. Solo las tablas internas de Identity (AspNet*) lo hacen entre sí:
+        // por ejemplo, los roles de un usuario se eliminan con el usuario.
+        var tables = Regex.Matches(script, @"CREATE TABLE \[(?<table>\w+)\] \((?<body>.*?)\n\s*\);", RegexOptions.Singleline);
+        var cascadesInIdentityTables = tables
+            .Where(match => match.Groups["table"].Value.StartsWith("AspNet", StringComparison.Ordinal))
+            .Sum(match => Regex.Count(match.Groups["body"].Value, "ON DELETE CASCADE"));
+        Assert.Equal(Regex.Count(script, "ON DELETE CASCADE"), cascadesInIdentityTables);
 
         // ALTER COLUMN incluye un bloque estándar de EF que elimina la restricción DEFAULT de la columna, si existe.
         // Es el único DROP permitido.
@@ -84,5 +92,26 @@ public sealed class MigrationTests
         Assert.Contains("CK_ServiceOrders_TechnicianAssignment", script);
         Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ALTER COLUMN", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void The_identity_migration_creates_the_account_tables_and_both_roles()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: "20261020060713_ServiceOrderWorkflowFields",
+            toMigration: "20261020071400_IdentityAndDataProtectionKeys");
+
+        foreach (var table in new[] { "AspNetUsers", "AspNetRoles", "AspNetUserRoles", "AspNetUserClaims", "AspNetUserLogins", "AspNetUserTokens", "AspNetRoleClaims", "DataProtectionKeys" })
+        {
+            Assert.Contains($"CREATE TABLE [{table}]", script);
+        }
+
+        Assert.Contains("N'Administrador', N'ADMINISTRADOR'", script);
+        Assert.Contains("N'Operador', N'OPERADOR'", script);
+        Assert.Contains("CREATE UNIQUE INDEX [UserNameIndex]", script);
+        Assert.Contains("CK_AspNetUsers_FullName_NotEmpty", script);
+        Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ALTER TABLE [ServiceOrders]", script, StringComparison.Ordinal);
     }
 }
