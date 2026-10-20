@@ -11,13 +11,15 @@ public sealed class CustomerServiceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 19, 15, 0, 0, TimeSpan.Zero);
 
-    private readonly FakeCustomerRepository _repository = new();
+    private readonly InMemoryStore _store = new();
+    private readonly FakeCustomerRepository _repository;
     private readonly FakeUnitOfWork _unitOfWork;
     private readonly ICustomerService _service;
 
     public CustomerServiceTests()
     {
-        _unitOfWork = new FakeUnitOfWork(_repository);
+        _repository = new FakeCustomerRepository(_store);
+        _unitOfWork = new FakeUnitOfWork(_store);
         _service = new ServiceCollection()
             .AddApplication()
             .AddSingleton<ICustomerRepository>(_repository)
@@ -35,7 +37,7 @@ public sealed class CustomerServiceTests
         var result = await _service.CreateAsync(new("  Ana  López ", "5555-1234", " ANA@EXAMPLE.COM ", null), Token);
 
         Assert.True(result.Succeeded);
-        var customer = Assert.Single(_repository.Items);
+        var customer = Assert.Single(_store.Customers);
         Assert.Equal(result.Value, customer.Id);
         Assert.Equal("Ana López", customer.FullName);
         Assert.Equal("ana@example.com", customer.Email);
@@ -52,7 +54,7 @@ public sealed class CustomerServiceTests
         Assert.Equal(
             [nameof(Customer.Email), nameof(Customer.FullName), nameof(Customer.Notes), nameof(Customer.Phone)],
             result.Errors.Keys.Order());
-        Assert.Empty(_repository.Items);
+        Assert.Empty(_store.Customers);
         Assert.Equal(0, _unitOfWork.SaveCount);
     }
 
@@ -75,8 +77,8 @@ public sealed class CustomerServiceTests
         var result = await _service.UpdateAsync(created.Value, new("Ana María López", "5555-1234", "ana@example.com", "Cliente frecuente"), Token);
 
         Assert.True(result.Succeeded);
-        Assert.Equal("Ana María López", _repository.Items[0].FullName);
-        Assert.Equal(Now.UtcDateTime, _repository.Items[0].UpdatedAtUtc);
+        Assert.Equal("Ana María López", _store.Customers[0].FullName);
+        Assert.Equal(Now.UtcDateTime, _store.Customers[0].UpdatedAtUtc);
     }
 
     [Fact]
@@ -96,12 +98,12 @@ public sealed class CustomerServiceTests
         var created = await _service.CreateAsync(new("Ana López", "5555-1234", null, null), Token);
 
         Assert.True((await _service.DeactivateAsync(created.Value, Token)).Succeeded);
-        Assert.False(_repository.Items[0].IsActive);
+        Assert.False(_store.Customers[0].IsActive);
         Assert.Equal(CommandStatus.Conflict, (await _service.DeactivateAsync(created.Value, Token)).Status);
 
         Assert.True((await _service.ReactivateAsync(created.Value, Token)).Succeeded);
-        Assert.True(_repository.Items[0].IsActive);
-        Assert.Single(_repository.Items);
+        Assert.True(_store.Customers[0].IsActive);
+        Assert.Single(_store.Customers);
     }
 
     [Fact]
@@ -122,72 +124,5 @@ public sealed class CustomerServiceTests
         Assert.Equal(CustomerSearch.TextMaxLength, search.Text!.Length);
         Assert.Equal(StatusFilter.Active, search.Status);
         Assert.Equal(1, search.Page);
-    }
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
-
-    private sealed class FakeCustomerRepository : ICustomerRepository
-    {
-        public List<Customer> Items { get; } = [];
-
-        public List<Customer> Pending { get; } = [];
-
-        public CustomerSearch? LastSearch { get; private set; }
-
-        public Task<CustomerSearchResult> SearchAsync(CustomerSearch search, CancellationToken cancellationToken)
-        {
-            LastSearch = search;
-            return Task.FromResult(new CustomerSearchResult(new PagedResult<CustomerListItem>([], 1, CustomerSearch.PageSize, 0), 0, 0));
-        }
-
-        public Task<CustomerDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken) =>
-            Task.FromResult(Items.Where(c => c.Id == id)
-                .Select(c => new CustomerDetails(c.Id, c.FullName, c.Phone, c.Email, c.Notes, c.IsActive, 0, c.CreatedAtUtc, c.UpdatedAtUtc, c.DeactivatedAtUtc))
-                .SingleOrDefault());
-
-        public Task<Customer?> FindAsync(int id, CancellationToken cancellationToken) =>
-            Task.FromResult(Items.SingleOrDefault(c => c.Id == id));
-
-        public Task<bool> EmailExistsAsync(string email, int? excludingCustomerId, CancellationToken cancellationToken) =>
-            Task.FromResult(Items.Any(c => c.Email == email && c.Id != excludingCustomerId));
-
-        public Task<IReadOnlyList<CustomerOption>> SuggestActiveAsync(string? text, int limit, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<CustomerOption>>([]);
-
-        public Task<CustomerOption?> GetOptionAsync(int id, CancellationToken cancellationToken) =>
-            Task.FromResult<CustomerOption?>(null);
-
-        public void Add(Customer customer) => Pending.Add(customer);
-    }
-
-    /// <summary>Simula el guardado: asigna Ids como lo haría la columna IDENTITY.</summary>
-    private sealed class FakeUnitOfWork(FakeCustomerRepository repository) : IUnitOfWork
-    {
-        public int SaveCount { get; private set; }
-
-        public bool FailNextSaveWithDuplicate { get; set; }
-
-        public Task SaveChangesAsync(CancellationToken cancellationToken)
-        {
-            if (FailNextSaveWithDuplicate)
-            {
-                FailNextSaveWithDuplicate = false;
-                repository.Pending.Clear();
-                throw new DuplicateValueException("Duplicado", new InvalidOperationException());
-            }
-
-            foreach (var customer in repository.Pending)
-            {
-                typeof(Customer).BaseType!.GetProperty("Id")!.SetValue(customer, repository.Items.Count + 1);
-                repository.Items.Add(customer);
-            }
-
-            repository.Pending.Clear();
-            SaveCount++;
-            return Task.CompletedTask;
-        }
     }
 }
