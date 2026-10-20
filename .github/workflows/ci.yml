@@ -47,6 +47,59 @@ jobs:
       - name: Ejecutar las pruebas
         run: dotnet test --configuration Release --no-build
 
+  sqlserver:
+    name: Probar contra SQL Server efímero
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Iniciar SQL Server 2022 desechable
+        run: |
+          # Contraseña aleatoria de este trabajo: no es un secreto del repositorio y el contenedor se destruye al terminar.
+          password="Fx$(openssl rand -hex 16)9!"
+          echo "::add-mask::$password"
+          docker run --detach --name sqlserver \
+            --env ACCEPT_EULA=Y --env MSSQL_PID=Developer --env "MSSQL_SA_PASSWORD=$password" \
+            --publish 127.0.0.1:1433:1433 \
+            mcr.microsoft.com/mssql/server@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718 # 2022-latest
+          echo "FIXTRACK_TEST_SQLSERVER_SERVER=Server=127.0.0.1,1433;User ID=sa;Password=$password;Encrypt=True;TrustServerCertificate=True;" >> "$GITHUB_ENV"
+
+      - name: Configurar .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restaurar y compilar
+        run: |
+          dotnet restore
+          dotnet build --configuration Release --no-restore
+
+      - name: Esperar a SQL Server
+        run: |
+          for _ in $(seq 1 60); do
+            docker logs sqlserver 2>&1 | grep -q "SQL Server is now ready for client connections" && exit 0
+            sleep 2
+          done
+          docker logs sqlserver 2>&1 | tail -n 40
+          exit 1
+
+      - name: Ejecutar las pruebas de SQL Server
+        # Cada ejecución crea una base con nombre único, aplica las migraciones, carga datos ficticios y la elimina.
+        run: dotnet test --configuration Release --no-build -- --filter-namespace FixTrack.Tests.SqlServer
+
+      - name: Registro de SQL Server
+        if: failure()
+        run: docker logs sqlserver 2>&1 | tail -n 40 || true
+
   docker:
     name: Construir y probar la imagen Docker
     runs-on: ubuntu-latest
@@ -74,7 +127,7 @@ jobs:
             --env PORT=9000 \
             --env ConnectionStrings__FixTrack="Server=no-existe.invalid;Database=NoUsar;Encrypt=True;" \
             fixtrack:ci
-          for attempt in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             curl --silent --fail http://localhost:8080/salud > /dev/null && break
             sleep 2
           done
