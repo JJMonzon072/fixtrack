@@ -154,6 +154,12 @@ public sealed class CustomerServiceTests
         public Task<bool> EmailExistsAsync(string email, int? excludingCustomerId, CancellationToken cancellationToken) =>
             Task.FromResult(Items.Any(c => c.Email == email && c.Id != excludingCustomerId));
 
+        public Task<IReadOnlyList<CustomerOption>> SuggestActiveAsync(string? text, int limit, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CustomerOption>>([]);
+
+        public Task<CustomerOption?> GetOptionAsync(int id, CancellationToken cancellationToken) =>
+            Task.FromResult<CustomerOption?>(null);
+
         public void Add(Customer customer) => Pending.Add(customer);
     }
 

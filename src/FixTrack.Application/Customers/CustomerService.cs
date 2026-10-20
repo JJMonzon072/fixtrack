@@ -10,6 +10,7 @@ internal sealed class CustomerService(
     TimeProvider clock) : ICustomerService
 {
     internal const string DuplicateEmailMessage = "Ya existe un cliente registrado con este correo electrónico.";
+    internal const int SuggestionLimit = 8;
 
     private DateTime UtcNow => clock.GetUtcNow().UtcDateTime;
 
@@ -28,6 +29,20 @@ internal sealed class CustomerService(
 
     public Task<CustomerDetails?> GetAsync(int id, CancellationToken cancellationToken) =>
         id > 0 ? customers.GetDetailsAsync(id, cancellationToken) : Task.FromResult<CustomerDetails?>(null);
+
+    public Task<IReadOnlyList<CustomerOption>> SuggestActiveAsync(string? text, CancellationToken cancellationToken)
+    {
+        var cleaned = Text.CleanOrNull(text);
+        if (cleaned is { Length: > CustomerSearch.TextMaxLength })
+        {
+            cleaned = cleaned[..CustomerSearch.TextMaxLength];
+        }
+
+        return customers.SuggestActiveAsync(cleaned, SuggestionLimit, cancellationToken);
+    }
+
+    public Task<CustomerOption?> GetOptionAsync(int id, CancellationToken cancellationToken) =>
+        id > 0 ? customers.GetOptionAsync(id, cancellationToken) : Task.FromResult<CustomerOption?>(null);
 
     public async Task<CommandResult<int>> CreateAsync(CustomerInput input, CancellationToken cancellationToken)
     {
