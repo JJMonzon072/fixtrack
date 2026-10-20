@@ -16,7 +16,7 @@ public sealed class CustomersPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Registers_a_customer_and_shows_its_details()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await FormPost.SendAsync(client, "/clientes/nuevo", new()
         {
@@ -38,7 +38,7 @@ public sealed class CustomersPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Rejects_posts_without_an_antiforgery_token()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.PostAsync(
             "/clientes/nuevo",
@@ -52,7 +52,7 @@ public sealed class CustomersPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Shows_server_side_validation_errors_and_keeps_the_input()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await FormPost.SendAsync(client, "/clientes/nuevo", new()
         {
@@ -75,7 +75,7 @@ public sealed class CustomersPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Rejects_a_duplicate_email()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         await CreateCustomerAsync(client, "Carla Duplicado", "5555-1002", "carla.dup@example.com");
 
         var response = await FormPost.SendAsync(client, "/clientes/nuevo", new()
@@ -93,7 +93,7 @@ public sealed class CustomersPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Edits_a_customer()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var id = await CreateCustomerAsync(client, "Luis Edición", "5555-1004", null);
 
         var response = await FormPost.SendAsync(client, $"/clientes/{id}/editar", new()
@@ -112,7 +112,7 @@ public sealed class CustomersPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Deactivates_and_reactivates_a_customer_without_deleting_it()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var id = await CreateCustomerAsync(client, "Marta Estado", "5555-1006", null);
 
         var deactivated = await (await FormPost.SendAsync(client, $"/clientes/{id}/desactivar", [])).Content.ReadAsStringAsync(Token);
@@ -132,7 +132,7 @@ public sealed class CustomersPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Searches_customers_and_explains_empty_results()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         await CreateCustomerAsync(client, "Sofía Búsqueda", "5555-1007", "sofia.busqueda@example.com");
 
         var found = await client.GetStringAsync("/clientes?buscar=sofia.busqueda", Token);
@@ -146,7 +146,7 @@ public sealed class CustomersPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task User_input_is_html_encoded()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var id = await CreateCustomerAsync(client, "Pedro Seguro", "5555-1008", null, notes: "<script>alert(1)</script>");
 
         var html = await client.GetStringAsync($"/clientes/{id}", Token);
@@ -160,7 +160,7 @@ public sealed class CustomersPageTests(FixTrackWebApplicationFactory factory)
     [InlineData("/clientes/999999/editar")]
     public async Task Unknown_customers_return_not_found(string url)
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync(url, Token);
 

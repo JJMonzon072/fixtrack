@@ -6,7 +6,9 @@ using FixTrack.Application.Technicians;
 using FixTrack.Domain.ServiceOrders;
 using FixTrack.Web.Models;
 using FixTrack.Web.Models.ServiceOrders;
+using FixTrack.Web.Security;
 using FixTrack.Web.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FixTrack.Web.Controllers;
@@ -17,6 +19,7 @@ namespace FixTrack.Web.Controllers;
 /// los errores de validación se muestren junto al formulario sin perder lo escrito.
 /// </summary>
 [Route("ordenes")]
+[Authorize(Policy = AuthorizationPolicies.Workshop)]
 public sealed class ServiceOrdersController(
     IServiceOrderService orders,
     ICustomerService customers,

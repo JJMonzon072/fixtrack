@@ -2,13 +2,16 @@ using System.Globalization;
 using FixTrack.Application.Dashboard;
 using FixTrack.Application.Modules;
 using FixTrack.Web.Models;
+using FixTrack.Web.Security;
 using FixTrack.Web.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FixTrack.Web.Controllers;
 
 /// <summary>Panel general: indicadores, acciones recomendadas y listas calculadas con los datos registrados.</summary>
 [Route("")]
+[Authorize(Policy = AuthorizationPolicies.Workshop)]
 public sealed class DashboardController(
     IDashboardService dashboard,
     IModuleCatalog modules,

@@ -48,7 +48,7 @@ public sealed partial class DashboardPageTests(FixTrackWebApplicationFactory fac
     public async Task Without_orders_every_indicator_is_zero_and_the_lists_explain_why_they_are_empty()
     {
         await using var emptyFactory = new FixTrackWebApplicationFactory();
-        using var client = emptyFactory.CreateClient();
+        using var client = await emptyFactory.CreateAuthenticatedClientAsync();
 
         var dashboard = await client.GetStringAsync("/", Token);
         var queue = await client.GetStringAsync("/cola-de-trabajo", Token);
@@ -64,7 +64,7 @@ public sealed partial class DashboardPageTests(FixTrackWebApplicationFactory fac
     [Fact]
     public async Task The_dashboard_counts_real_orders_and_recommends_the_best_scored_actions()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Panel");
         var urgent = await CreateOrderAsync(client, scenario, ServiceOrderPriority.Urgent, assign: true);
         var unassigned = await CreateOrderAsync(client, scenario, ServiceOrderPriority.Low, assign: false);
@@ -86,7 +86,7 @@ public sealed partial class DashboardPageTests(FixTrackWebApplicationFactory fac
     [Fact]
     public async Task The_work_queue_orders_repairs_by_score_and_explains_each_score()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Cola");
         var normal = await CreateOrderAsync(client, scenario, ServiceOrderPriority.Normal, assign: true);
         var urgent = await CreateOrderAsync(client, scenario, ServiceOrderPriority.Urgent, assign: true);
@@ -105,15 +105,15 @@ public sealed partial class DashboardPageTests(FixTrackWebApplicationFactory fac
     [Fact]
     public async Task Overdue_orders_add_their_bonus_in_the_queue_and_count_on_the_dashboard()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Vencida");
         var promised = DateTime.Now.AddHours(1).ToString("yyyy-MM-dd'T'HH:mm", System.Globalization.CultureInfo.InvariantCulture);
         var id = await CreateOrderAsync(client, scenario, ServiceOrderPriority.High, assign: true, promisedAt: promised);
 
-        using var later = factory
+        using var later = await factory
             .WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
                 services.AddSingleton<TimeProvider>(new LaterClock(DateTimeOffset.UtcNow.AddDays(2)))))
-            .CreateClient();
+            .CreateAuthenticatedClientAsync();
         var queue = await later.GetStringAsync("/cola-de-trabajo", Token);
         var dashboard = await later.GetStringAsync("/", Token);
 

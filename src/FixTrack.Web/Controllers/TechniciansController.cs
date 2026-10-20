@@ -2,13 +2,19 @@ using FixTrack.Application.Common;
 using FixTrack.Application.Technicians;
 using FixTrack.Web.Models;
 using FixTrack.Web.Models.Technicians;
+using FixTrack.Web.Security;
 using FixTrack.Web.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FixTrack.Web.Controllers;
 
-/// <summary>Módulo Técnicos: listado, búsqueda, registro, edición, desactivación y reactivación.</summary>
+/// <summary>
+/// Módulo Técnicos: listado, búsqueda, registro, edición, desactivación y reactivación. Cualquier rol del taller
+/// consulta los técnicos; solo el administrador los registra o modifica.
+/// </summary>
 [Route("tecnicos")]
+[Authorize(Policy = AuthorizationPolicies.Workshop)]
 public sealed class TechniciansController(ITechnicianService technicians) : Controller
 {
     [HttpGet("")]
@@ -24,9 +30,11 @@ public sealed class TechniciansController(ITechnicianService technicians) : Cont
     }
 
     [HttpGet("nuevo")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTechnicians)]
     public IActionResult Create() => View("Editor", new TechnicianEditorViewModel(null, null, new TechnicianFormModel()));
 
     [HttpPost("nuevo")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTechnicians)]
     public async Task<IActionResult> Create(TechnicianFormModel form, CancellationToken cancellationToken)
     {
         var result = await technicians.CreateAsync(form.ToInput(), cancellationToken);
@@ -48,6 +56,7 @@ public sealed class TechniciansController(ITechnicianService technicians) : Cont
     }
 
     [HttpGet("{id:int}/editar")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTechnicians)]
     public async Task<IActionResult> Edit(int id, CancellationToken cancellationToken)
     {
         var technician = await technicians.GetAsync(id, cancellationToken);
@@ -57,6 +66,7 @@ public sealed class TechniciansController(ITechnicianService technicians) : Cont
     }
 
     [HttpPost("{id:int}/editar")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTechnicians)]
     public async Task<IActionResult> Edit(int id, TechnicianFormModel form, CancellationToken cancellationToken)
     {
         var result = await technicians.UpdateAsync(id, form.ToInput(), cancellationToken);
@@ -77,10 +87,12 @@ public sealed class TechniciansController(ITechnicianService technicians) : Cont
     }
 
     [HttpPost("{id:int}/desactivar")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTechnicians)]
     public Task<IActionResult> Deactivate(int id, CancellationToken cancellationToken) =>
         ChangeStatusAsync(id, technicians.DeactivateAsync, "Técnico desactivado. Su información e historial se conservan.", cancellationToken);
 
     [HttpPost("{id:int}/reactivar")]
+    [Authorize(Policy = AuthorizationPolicies.ManageTechnicians)]
     public Task<IActionResult> Reactivate(int id, CancellationToken cancellationToken) =>
         ChangeStatusAsync(id, technicians.ReactivateAsync, "Técnico reactivado.", cancellationToken);
 

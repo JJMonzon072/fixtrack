@@ -3,7 +3,9 @@
 @model TechnicianDetails
 @inject DateDisplay Dates
 @inject TimeProvider Clock
+@inject IAuthorizationService Authorization
 @{
+    var canManage = (await Authorization.AuthorizeAsync(User, AuthorizationPolicies.ManageTechnicians)).Succeeded;
     ViewData["Title"] = Model.FullName;
     ViewData["ParentTitle"] = "Técnicos";
     ViewData["ParentUrl"] = Url.Action("Index");
@@ -29,6 +31,8 @@
         </div>
     </div>
 
+    @if (canManage)
+    {
     <div class="page-header__actions">
         <a class="button button--secondary" asp-action="Edit" asp-route-id="@Model.Id">
             <icon name="pencil" />
@@ -51,6 +55,7 @@
             </form>
         }
     </div>
+    }
 </header>
 
 @if (!Model.IsActive && Model.DeactivatedAtUtc is { } deactivatedAt)
@@ -172,7 +177,7 @@
     </section>
 </div>
 
-@if (Model.IsActive)
+@if (Model.IsActive && canManage)
 {
     <dialog class="dialog" id="deactivate-dialog" aria-labelledby="deactivate-title" aria-describedby="deactivate-text">
         @if (openOrders > 0)

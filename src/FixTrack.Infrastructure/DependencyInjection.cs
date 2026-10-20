@@ -2,8 +2,10 @@ using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Application.Dashboard;
 using FixTrack.Application.Devices;
+using FixTrack.Application.Security;
 using FixTrack.Application.ServiceOrders;
 using FixTrack.Application.Technicians;
+using FixTrack.Infrastructure.Identity;
 using FixTrack.Infrastructure.Persistence;
 using FixTrack.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -44,6 +46,9 @@ public static class DependencyInjection
         services.AddScoped<ITechnicianRepository, TechnicianRepository>();
         services.AddScoped<IServiceOrderRepository, ServiceOrderRepository>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
+
+        // Requiere el UserManager de ASP.NET Core Identity, que registra la capa de presentación (AddIdentity).
+        services.AddScoped<IUserAccountService, UserAccountService>();
 
         return services;
     }

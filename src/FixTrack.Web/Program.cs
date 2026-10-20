@@ -2,6 +2,7 @@ using FixTrack.Application;
 using FixTrack.Infrastructure;
 using FixTrack.Web;
 using FixTrack.Web.Hosting;
+using FixTrack.Web.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,7 +10,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration)
-    .AddPresentation();
+    .AddPresentation()
+    .AddSecurity(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 
@@ -31,9 +33,13 @@ if (!app.Environment.IsDevelopment() || HttpsEndpoint.IsConfigured(app.Configura
 
 app.UseRequestLocalization();
 app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
 
-app.MapStaticAssets();
+// Los archivos estáticos (estilos, íconos, fuentes) son públicos: los necesita la página de inicio de sesión.
+app.MapStaticAssets().AllowAnonymous();
 app.MapControllers()
     .WithStaticAssets();
 
-app.Run();
+await app.RunAsync();
+return 0;

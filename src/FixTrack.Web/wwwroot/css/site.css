@@ -3360,6 +3360,313 @@ fieldset.field > legend {
     fill: var(--status-color, var(--color-accent));
 }
 
+/* 8f. Acceso y cuentas --------------------------------------------------- */
+
+.alert--danger {
+    background: var(--color-danger-subtle);
+    border-color: var(--color-danger-border);
+    color: var(--color-danger-text);
+}
+
+.button--large {
+    height: 2.5rem;
+    padding: 0 var(--space-4);
+    font-size: var(--text-base);
+}
+
+/* Pantalla de inicio de sesión: marca a la izquierda y formulario a la derecha */
+.auth-body {
+    background: var(--color-surface);
+}
+
+.auth {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+.auth__brand {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: var(--space-10);
+    padding: var(--space-10) var(--space-12);
+    overflow: hidden;
+    background-color: #0b3d38;
+    color: #e6f2f0;
+}
+
+/* Retícula sutil, como un plano técnico. */
+.auth__brand::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgb(255 255 255 / 0.045) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: linear-gradient(160deg, #000 20%, transparent 85%);
+    pointer-events: none;
+}
+
+.auth__brand > * {
+    position: relative;
+}
+
+.brand--inverse .logo-mark {
+    color: #e6f2f0;
+    --color-accent-contrast: #0b3d38;
+}
+
+.brand--inverse .brand__name {
+    color: #ffffff;
+}
+
+.brand--inverse .brand__tagline {
+    color: rgb(230 242 240 / 0.7);
+}
+
+.auth__pitch {
+    max-width: 30rem;
+}
+
+.auth__headline {
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    color: #ffffff;
+    text-wrap: balance;
+}
+
+.auth__lead {
+    margin-top: var(--space-4);
+    font-size: var(--text-md);
+    color: rgb(230 242 240 / 0.78);
+}
+
+.auth__features {
+    display: grid;
+    gap: var(--space-3);
+    margin-top: var(--space-8);
+    padding: 0;
+    list-style: none;
+    font-size: var(--text-sm);
+    color: rgb(230 242 240 / 0.88);
+}
+
+.auth__features li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.auth__features .icon {
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0.375rem;
+    border: 1px solid rgb(255 255 255 / 0.14);
+    border-radius: var(--radius-sm);
+    background: rgb(255 255 255 / 0.06);
+    color: #8fd8cc;
+}
+
+.auth__footnote {
+    font-size: var(--text-xs);
+    color: rgb(230 242 240 / 0.55);
+}
+
+.auth__panel {
+    display: grid;
+    place-items: center;
+    padding: var(--space-10) var(--space-6);
+    background: var(--color-canvas);
+}
+
+.auth__card {
+    width: min(100%, 25rem);
+}
+
+.auth__mobile-brand {
+    display: none;
+}
+
+.auth__title {
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.auth__subtitle {
+    margin: var(--space-2) 0 var(--space-6);
+    color: var(--color-text-secondary);
+}
+
+.auth__card .alert {
+    margin-bottom: var(--space-5);
+}
+
+.auth__form {
+    display: grid;
+    gap: var(--space-5);
+}
+
+.auth__form .input {
+    height: 2.5rem;
+}
+
+.auth__help {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-top: var(--space-6);
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--color-border);
+    font-size: var(--text-sm);
+    color: var(--color-text-tertiary);
+}
+
+.auth__help .icon {
+    margin-top: 0.15rem;
+    width: 0.875rem;
+    height: 0.875rem;
+}
+
+/* Campo de contraseña con botón para mostrarla */
+.password-field {
+    position: relative;
+}
+
+.password-field__input {
+    padding-right: 2.75rem;
+}
+
+.password-field__toggle {
+    position: absolute;
+    top: calc(50% + 0.125rem);
+    right: 0.25rem;
+    transform: translateY(-50%);
+}
+
+.password-field__hide,
+.password-field__toggle[aria-pressed="true"] .password-field__show {
+    display: none;
+}
+
+.password-field__toggle[aria-pressed="true"] .password-field__hide {
+    display: block;
+}
+
+/* Menú de la cuenta en la barra superior */
+.user-menu {
+    position: relative;
+}
+
+.user-menu__button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 2rem;
+    padding: 0 var(--space-2) 0 0.25rem;
+    border-radius: var(--radius-full);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    list-style: none;
+    transition: background-color var(--duration-fast) ease;
+}
+
+.user-menu__button::-webkit-details-marker {
+    display: none;
+}
+
+.user-menu__button:hover,
+.user-menu[open] .user-menu__button {
+    background: var(--color-surface-hover);
+}
+
+.user-menu__name {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-menu__chevron {
+    width: 0.875rem;
+    height: 0.875rem;
+    color: var(--color-text-tertiary);
+}
+
+.user-menu__panel {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    z-index: 30;
+    display: grid;
+    width: 16rem;
+    padding: var(--space-1);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-lg);
+}
+
+.user-menu__header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+    margin-bottom: var(--space-1);
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.user-menu__full-name {
+    font-size: var(--text-sm);
+    font-weight: 600;
+}
+
+.user-menu__email {
+    margin-bottom: var(--space-1);
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    overflow-wrap: anywhere;
+}
+
+.user-menu__item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    height: 2rem;
+    padding: 0 var(--space-3);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    font-size: var(--text-sm);
+    text-align: left;
+    color: var(--color-text);
+    cursor: pointer;
+}
+
+.user-menu__item:hover {
+    background: var(--color-surface-hover);
+}
+
+.user-menu__item .icon {
+    width: 0.875rem;
+    height: 0.875rem;
+    color: var(--color-text-tertiary);
+}
+
+.user-menu__item--danger,
+.user-menu__item--danger .icon {
+    color: var(--color-danger-text);
+}
+
 /* 9. Utilidades ------------------------------------------------------------ */
 
 .mono {
@@ -3805,6 +4112,44 @@ fieldset.field > legend {
 
     .stepper__summary {
         display: block;
+    }
+}
+
+/* Acceso en pantallas medianas y pequeñas */
+@media (max-width: 899.98px) {
+    .auth {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .auth__brand {
+        display: none;
+    }
+
+    .auth__panel {
+        align-items: start;
+        padding-top: var(--space-12);
+    }
+
+    .auth__mobile-brand {
+        display: block;
+        margin-bottom: var(--space-6);
+        color: var(--color-accent);
+    }
+
+    .auth__mobile-brand .logo-mark {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
+}
+
+@media (max-width: 639.98px) {
+    .user-menu__name,
+    .user-menu__chevron {
+        display: none;
+    }
+
+    .user-menu__button {
+        padding: 0 0.25rem;
     }
 }
 

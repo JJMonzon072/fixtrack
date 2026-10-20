@@ -75,7 +75,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task Registers_an_order_and_shows_its_details_and_first_history_entry()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Registro");
 
         var response = await FormPost.SendAsync(client, "/ordenes/nueva", OrderForm(scenario, scenario.TechnicianId));
@@ -100,7 +100,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task Shows_every_validation_error_in_spanish()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var html = await (await FormPost.SendAsync(client, "/ordenes/nueva", new()
         {
@@ -125,7 +125,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [InlineData("EstimatedCost", "10.555", "El costo estimado admite como máximo dos decimales.")]
     public async Task Rejects_dates_and_amounts_that_cannot_be_interpreted(string field, string value, string expected)
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, $"Formato{field}{value.Length}");
         var form = OrderForm(scenario);
         form[field] = value;
@@ -139,7 +139,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task The_device_must_belong_to_the_selected_customer()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Dueno");
         var otherCustomer = await FormPost.CreateCustomerAsync(client, "Otro Dueño", "5555-7001");
 
@@ -152,7 +152,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task Orders_cannot_be_registered_for_an_inactive_customer_or_with_an_inactive_technician()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Inactivos");
         await FormPost.SendAsync(client, $"/tecnicos/{scenario.TechnicianId}/desactivar", []);
 
@@ -171,7 +171,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task The_order_number_and_status_cannot_be_chosen_in_the_form()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Sobreescritura");
         var form = OrderForm(scenario);
         form["Id"] = "999";
@@ -190,7 +190,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task Walks_an_order_through_the_whole_workflow_and_closes_it()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Flujo");
         var id = await CreateOrderAsync(client, scenario);
 
@@ -221,7 +221,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task Rejected_transitions_are_explained_on_the_status_page()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Rechazo");
         var id = await CreateOrderAsync(client, scenario);
 
@@ -238,7 +238,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task A_stale_form_does_not_overwrite_a_newer_change()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Concurrencia");
         var id = await CreateOrderAsync(client, scenario);
         await FormPost.SendAsync(client, $"/ordenes/{id}/planificacion", new() { ["Priority"] = "4", ["Version"] = "0" });
@@ -253,7 +253,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task Closed_orders_do_not_offer_their_forms()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Cerrada");
         var id = await CreateOrderAsync(client, scenario);
         await ChangeStatusAsync(client, id, ServiceOrderStatus.Cancelled, 0, note: "El cliente desistió");
@@ -269,7 +269,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task A_technician_with_open_orders_cannot_be_deactivated()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Carga");
         var id = await CreateOrderAsync(client, scenario, scenario.TechnicianId);
 
@@ -282,7 +282,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task Lists_filters_and_finds_orders_by_number()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Listado");
         var unassigned = await CreateOrderAsync(client, scenario);
         var assigned = await CreateOrderAsync(client, scenario, scenario.TechnicianId);
@@ -299,7 +299,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task Overdue_orders_are_flagged_and_listed_in_their_own_view()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Atraso");
         var form = OrderForm(scenario);
         form["PromisedAt"] = DateTime.Now.AddHours(2).ToString("yyyy-MM-dd'T'HH:mm", System.Globalization.CultureInfo.InvariantCulture);
@@ -307,9 +307,9 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
 
         // Tres días después, la misma orden ya está vencida.
         var later = new MutableClock(DateTimeOffset.UtcNow.AddDays(3));
-        using var futureClient = factory
+        using var futureClient = await factory
             .WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(later)))
-            .CreateClient();
+            .CreateAuthenticatedClientAsync();
         var overdue = await futureClient.GetStringAsync("/ordenes?vista=vencidas&buscar=Cliente%20Atraso", Token);
         var details = await futureClient.GetStringAsync($"/ordenes/{id}", Token);
 
@@ -322,7 +322,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task Customer_device_and_technician_pages_show_their_real_orders()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Integracion");
         var id = await CreateOrderAsync(client, scenario, scenario.TechnicianId);
         var number = $"OS-{id:D6}";
@@ -348,7 +348,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task Rejects_posts_without_an_antiforgery_token()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Token");
         var id = await CreateOrderAsync(client, scenario);
 
@@ -364,7 +364,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task The_history_cannot_be_edited_or_deleted_through_the_application()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Historial");
         var id = await CreateOrderAsync(client, scenario);
 
@@ -381,7 +381,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [Fact]
     public async Task Customer_devices_are_offered_as_json_for_the_order_form()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var scenario = await ScenarioAsync(client, "Json");
 
         var json = await client.GetStringAsync($"/clientes/{scenario.CustomerId}/equipos", Token);
@@ -400,7 +400,7 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     [InlineData("/ordenes/999999/planificacion")]
     public async Task Unknown_orders_return_not_found(string url)
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync(url, Token);
 

@@ -4,13 +4,16 @@ using FixTrack.Application.Devices;
 using FixTrack.Application.ServiceOrders;
 using FixTrack.Web.Models;
 using FixTrack.Web.Models.Customers;
+using FixTrack.Web.Security;
 using FixTrack.Web.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FixTrack.Web.Controllers;
 
 /// <summary>Módulo Clientes: listado, búsqueda, registro, edición, desactivación y reactivación, con sus equipos y órdenes.</summary>
 [Route("clientes")]
+[Authorize(Policy = AuthorizationPolicies.Workshop)]
 public sealed class CustomersController(ICustomerService customers, IDeviceService devices, IServiceOrderService orders) : Controller
 {
     [HttpGet("")]

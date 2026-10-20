@@ -41,10 +41,10 @@ public sealed class CompositionTests(FixTrackWebApplicationFactory factory)
     public async Task Dashboard_shows_the_current_date_from_the_injected_clock()
     {
         var clock = new FixedTimeProvider(new DateTimeOffset(2026, 10, 19, 15, 0, 0, TimeSpan.Zero));
-        using var client = factory
+        using var client = await factory
             .WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
                 services.AddSingleton<TimeProvider>(clock)))
-            .CreateClient();
+            .CreateAuthenticatedClientAsync();
 
         var html = await client.GetStringAsync("/", TestContext.Current.CancellationToken);
 

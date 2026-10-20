@@ -1,0 +1,30 @@
+@{
+    var title = ViewData["Title"] as string ?? "FixTrack";
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="FixTrack: gestión y seguimiento de órdenes de servicio técnico." />
+    <meta name="robots" content="noindex" />
+    <title>@title · FixTrack</title>
+    <script>
+        // Aplica el tema guardado antes de pintar la página para evitar un parpadeo.
+        try {
+            const theme = localStorage.getItem("fixtrack-theme");
+            if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+        } catch { }
+    </script>
+    <link rel="preload" href="@Url.Content("~/fonts/ibm-plex-sans-latin-wght.woff2")" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="icon" href="~/favicon.svg" type="image/svg+xml" />
+</head>
+<body class="auth-body">
+    <main id="main" class="auth">
+        @RenderBody()
+    </main>
+    <script src="~/js/site.js" asp-append-version="true" defer></script>
+</body>
+</html>

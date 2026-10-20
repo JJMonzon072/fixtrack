@@ -25,7 +25,7 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Registers_a_device_and_shows_it_in_its_details_and_in_its_customer()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var customerId = await FormPost.CreateCustomerAsync(client, "Ana Equipos", "5555-2001");
 
         var response = await FormPost.SendAsync(client, "/equipos/nuevo", DeviceForm(customerId, "Dell", "dl-0001"));
@@ -45,7 +45,7 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Starting_from_a_customer_preselects_the_owner()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var customerId = await FormPost.CreateCustomerAsync(client, "Bruno Preseleccion", "5555-2002");
 
         var customerPage = await client.GetStringAsync($"/clientes/{customerId}", Token);
@@ -59,7 +59,7 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task An_inactive_customer_keeps_its_devices_but_cannot_receive_new_ones()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var customerId = await FormPost.CreateCustomerAsync(client, "Carla Inactiva", "5555-2003");
         await FormPost.SendAsync(client, "/equipos/nuevo", DeviceForm(customerId, "Lenovo"));
         await FormPost.SendAsync(client, $"/clientes/{customerId}/desactivar", []);
@@ -78,7 +78,7 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Shows_validation_errors_including_a_missing_owner()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await FormPost.SendAsync(client, "/equipos/nuevo", new()
         {
@@ -100,7 +100,7 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Rejects_a_duplicate_serial_number_within_the_same_brand()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var customerId = await FormPost.CreateCustomerAsync(client, "Diego Serie", "5555-2004");
         await FormPost.SendAsync(client, "/equipos/nuevo", DeviceForm(customerId, "HP", "HP-DUP-01"));
 
@@ -114,7 +114,7 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Edits_a_device_without_changing_its_owner_even_if_the_form_is_tampered_with()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var ownerId = await FormPost.CreateCustomerAsync(client, "Elena Duena", "5555-2005");
         var otherId = await FormPost.CreateCustomerAsync(client, "Felipe Otro", "5555-2006");
         var deviceId = FormPost.CreatedId(await FormPost.SendAsync(client, "/equipos/nuevo", DeviceForm(ownerId, "Acer")));
@@ -136,7 +136,7 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Searches_and_filters_devices()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var customerId = await FormPost.CreateCustomerAsync(client, "Gabriela Filtro", "5555-2007");
         await FormPost.SendAsync(client, "/equipos/nuevo", DeviceForm(customerId, "Brother", "BR-FILTRO", type: "5"));
 
@@ -154,7 +154,7 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Suggests_only_active_customers_as_json()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         await FormPost.CreateCustomerAsync(client, "Hector Sugerido", "5555-2008");
         var inactiveId = await FormPost.CreateCustomerAsync(client, "Hector Inactivo", "5555-2009");
         await FormPost.SendAsync(client, $"/clientes/{inactiveId}/desactivar", []);
@@ -170,7 +170,7 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Rejects_posts_without_an_antiforgery_token()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var create = await client.PostAsync("/equipos/nuevo", new FormUrlEncodedContent(new Dictionary<string, string> { ["Brand"] = "Dell" }), Token);
         using var edit = await client.PostAsync("/equipos/1/editar", new FormUrlEncodedContent(new Dictionary<string, string> { ["Brand"] = "Dell" }), Token);
@@ -184,7 +184,7 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
     [InlineData("/equipos/999999/editar")]
     public async Task Unknown_devices_return_not_found(string url)
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync(url, Token);
 

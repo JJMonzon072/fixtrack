@@ -49,7 +49,7 @@ public sealed class HttpsTests(FixTrackWebApplicationFactory factory)
                 .ConfigureLogging(logging => logging.AddProvider(logs)))
             .CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        using var response = await client.GetAsync("/", CancellationToken);
+        using var response = await client.GetAsync("/cuenta/iniciar-sesion", CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.DoesNotContain(logs.Entries, entry =>

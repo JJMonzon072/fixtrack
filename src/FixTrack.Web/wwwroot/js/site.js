@@ -341,6 +341,37 @@
         update();
     });
 
+    // --- Mostrar u ocultar la contraseña ---------------------------------------
+
+    document.querySelectorAll("[data-password-toggle]").forEach((button) => {
+        const input = document.getElementById(button.dataset.passwordToggle);
+        if (!(input instanceof HTMLInputElement)) return;
+
+        button.hidden = false;
+        button.addEventListener("click", () => {
+            const show = input.type === "password";
+            input.type = show ? "text" : "password";
+            button.setAttribute("aria-pressed", String(show));
+            button.setAttribute("aria-label", show ? "Ocultar la contraseña" : "Mostrar la contraseña");
+            input.focus();
+        });
+    });
+
+    // --- Menú de la cuenta: se cierra al hacer clic fuera o con Escape --------
+
+    const userMenu = document.querySelector("[data-user-menu]");
+    if (userMenu instanceof HTMLDetailsElement) {
+        document.addEventListener("click", (event) => {
+            if (userMenu.open && !userMenu.contains(event.target)) userMenu.open = false;
+        });
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && userMenu.open) {
+                userMenu.open = false;
+                userMenu.querySelector("summary")?.focus();
+            }
+        });
+    }
+
     // --- Resumen de errores: recibe el foco para que se anuncie y se vea ------
 
     document.querySelector("[data-error-summary]")?.focus();

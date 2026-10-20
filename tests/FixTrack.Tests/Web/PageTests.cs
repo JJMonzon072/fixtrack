@@ -19,7 +19,7 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
     [InlineData("/tecnicos", "Técnicos")]
     public async Task Main_pages_respond_successfully_in_spanish(string url, string expectedHeading)
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync(url, CancellationToken);
         var html = await response.Content.ReadAsStringAsync(CancellationToken);
@@ -40,7 +40,7 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
     [InlineData("/tecnicos", "/tecnicos")]
     public async Task Sidebar_marks_only_the_current_module_as_active(string url, string expectedHref)
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var html = await client.GetStringAsync(url, CancellationToken);
         var activeLinks = ActiveNavigationLink().Matches(html);
@@ -52,7 +52,7 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Dashboard_metrics_are_numbers_from_the_database_not_placeholders()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var html = await client.GetStringAsync("/", CancellationToken);
         var values = MetricValue().Matches(html).Select(match => match.Groups["value"].Value).ToList();
@@ -65,7 +65,7 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Unknown_routes_return_a_not_found_page()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync("/ruta-inexistente", CancellationToken);
         var html = await response.Content.ReadAsStringAsync(CancellationToken);
@@ -81,7 +81,7 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
     [InlineData("/fonts/ibm-plex-sans-latin-wght.woff2", "font/woff2")]
     public async Task Static_assets_are_served(string url, string expectedMediaType)
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync(url, CancellationToken);
 

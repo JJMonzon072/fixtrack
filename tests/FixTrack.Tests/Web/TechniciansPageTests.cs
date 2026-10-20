@@ -23,7 +23,7 @@ public sealed class TechniciansPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Registers_a_technician_and_shows_its_details()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await FormPost.SendAsync(client, "/tecnicos/nuevo", new()
         {
@@ -45,7 +45,7 @@ public sealed class TechniciansPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Shows_validation_errors()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var html = await (await FormPost.SendAsync(client, "/tecnicos/nuevo", new()
         {
@@ -65,7 +65,7 @@ public sealed class TechniciansPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Rejects_a_duplicate_email()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         await CreateAsync(client, "Jorge Correo", "jorge.correo@example.com");
 
         var html = await (await FormPost.SendAsync(client, "/tecnicos/nuevo", new()
@@ -81,7 +81,7 @@ public sealed class TechniciansPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Edits_a_technician()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var id = await CreateAsync(client, "Karla Edicion");
 
         var html = await (await FormPost.SendAsync(client, $"/tecnicos/{id}/editar", new()
@@ -100,7 +100,7 @@ public sealed class TechniciansPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Deactivates_and_reactivates_a_technician_without_deleting_it()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var id = await CreateAsync(client, "Leo Estado");
 
         var deactivated = await (await FormPost.SendAsync(client, $"/tecnicos/{id}/desactivar", [])).Content.ReadAsStringAsync(Token);
@@ -120,7 +120,7 @@ public sealed class TechniciansPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task The_status_cannot_be_changed_through_the_edit_form()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var id = await CreateAsync(client, "Mara Formulario");
 
         await FormPost.SendAsync(client, $"/tecnicos/{id}/editar", new()
@@ -140,7 +140,7 @@ public sealed class TechniciansPageTests(FixTrackWebApplicationFactory factory)
     [Fact]
     public async Task Rejects_posts_without_an_antiforgery_token()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var id = await CreateAsync(client, "Nora Token");
 
         using var response = await client.PostAsync($"/tecnicos/{id}/desactivar", new FormUrlEncodedContent([]), Token);
@@ -155,7 +155,7 @@ public sealed class TechniciansPageTests(FixTrackWebApplicationFactory factory)
     [InlineData("/tecnicos/999999/editar")]
     public async Task Unknown_technicians_return_not_found(string url)
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync(url, Token);
 
