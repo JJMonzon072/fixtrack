@@ -144,6 +144,8 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_Devices_Brand_NotEmpty", "[Brand] <> ''");
 
+                            t.HasCheckConstraint("CK_Devices_SerialNumber_NotEmpty", "[SerialNumber] IS NULL OR [SerialNumber] <> ''");
+
                             t.HasCheckConstraint("CK_Devices_Type", "[Type] BETWEEN 1 AND 7");
                         });
                 });
@@ -311,6 +313,7 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(20)");
 
                     b.Property<string>("Specialty")
+                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
@@ -335,6 +338,8 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_Technicians_Email_Format", "[Email] IS NULL OR [Email] LIKE '%_@_%._%'");
 
                             t.HasCheckConstraint("CK_Technicians_FullName_NotEmpty", "[FullName] <> ''");
+
+                            t.HasCheckConstraint("CK_Technicians_Specialty_NotEmpty", "[Specialty] <> ''");
                         });
                 });
 

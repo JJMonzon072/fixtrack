@@ -1,6 +1,7 @@
 using FixTrack.Domain.Customers;
 using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
+using FixTrack.Domain.Technicians;
 using Microsoft.EntityFrameworkCore;
 
 namespace FixTrack.Tests.Infrastructure;
@@ -112,6 +113,23 @@ public sealed class PersistenceModelTests : IDisposable
         customer.RegisterDevice(DeviceType.Desktop, "Dell", null, "SN-1", null, Now);
 
         await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync(Token));
+    }
+
+    [Theory]
+    [InlineData("UPDATE Devices SET SerialNumber = ''")]
+    [InlineData("UPDATE Technicians SET Specialty = ''")]
+    [InlineData("UPDATE Technicians SET IsActive = 0")]
+    public async Task The_database_rejects_empty_values_and_inconsistent_states(string sql)
+    {
+        await using var context = _database.CreateContext();
+        var customer = new Customer("Ana López", "5555-1234", null, null, Now);
+        context.Customers.Add(customer);
+        context.Technicians.Add(new Technician("Luis Pérez", "Laptops", null, null, Now));
+        await context.SaveChangesAsync(Token);
+        customer.RegisterDevice(DeviceType.Laptop, "Dell", null, "SN-1", null, Now);
+        await context.SaveChangesAsync(Token);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => context.Database.ExecuteSqlRawAsync(sql, Token));
     }
 
     [Fact]

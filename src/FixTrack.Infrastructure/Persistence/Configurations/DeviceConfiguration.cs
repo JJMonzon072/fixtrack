@@ -12,6 +12,9 @@ internal sealed class DeviceConfiguration : IEntityTypeConfiguration<Device>
         {
             table.HasCheckConstraint("CK_Devices_Type", "[Type] BETWEEN 1 AND 7");
             table.HasCheckConstraint("CK_Devices_Brand_NotEmpty", "[Brand] <> ''");
+
+            // Una serie vacía chocaría con otras en el índice único: se guarda NULL cuando no existe.
+            table.HasCheckConstraint("CK_Devices_SerialNumber_NotEmpty", "[SerialNumber] IS NULL OR [SerialNumber] <> ''");
         });
 
         builder.HasKey(device => device.Id);
