@@ -29,6 +29,9 @@ internal sealed class TechnicianService(
     public Task<TechnicianDetails?> GetAsync(int id, CancellationToken cancellationToken) =>
         id > 0 ? technicians.GetDetailsAsync(id, cancellationToken) : Task.FromResult<TechnicianDetails?>(null);
 
+    public Task<IReadOnlyList<TechnicianWorkload>> ListWorkloadAsync(CancellationToken cancellationToken) =>
+        technicians.ListWorkloadAsync(cancellationToken);
+
     public async Task<CommandResult<int>> CreateAsync(TechnicianInput input, CancellationToken cancellationToken)
     {
         var data = Normalize(input);

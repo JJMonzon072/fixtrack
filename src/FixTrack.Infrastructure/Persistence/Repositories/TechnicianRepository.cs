@@ -121,6 +121,21 @@ internal sealed class TechnicianRepository(FixTrackDbContext db) : ITechnicianRe
             : FindAsync(id, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<TechnicianWorkload>> ListWorkloadAsync(CancellationToken cancellationToken) =>
+        await db.Technicians
+            .AsNoTracking()
+            .OrderBy(technician => technician.FullName)
+            .ThenBy(technician => technician.Id)
+            .Select(technician => new TechnicianWorkload(
+                technician.Id,
+                technician.FullName,
+                technician.Specialty,
+                technician.IsActive,
+                db.ServiceOrders.Count(order => order.TechnicianId == technician.Id
+                    && order.Status != ServiceOrderStatus.Delivered
+                    && order.Status != ServiceOrderStatus.Cancelled)))
+            .ToListAsync(cancellationToken);
+
     public Task<bool> EmailExistsAsync(string email, int? excludingTechnicianId, CancellationToken cancellationToken) =>
         db.Technicians.AnyAsync(
             technician => technician.Email == email && (excludingTechnicianId == null || technician.Id != excludingTechnicianId),

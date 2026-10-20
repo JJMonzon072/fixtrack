@@ -19,6 +19,9 @@ public interface ITechnicianRepository
     /// </summary>
     Task<Technician?> FindForAssignmentAsync(int id, CancellationToken cancellationToken);
 
+    /// <summary>Todos los técnicos con su cantidad de órdenes abiertas, ordenados por nombre.</summary>
+    Task<IReadOnlyList<TechnicianWorkload>> ListWorkloadAsync(CancellationToken cancellationToken);
+
     Task<bool> EmailExistsAsync(string email, int? excludingTechnicianId, CancellationToken cancellationToken);
 
     /// <summary>Órdenes asignadas al técnico que no están entregadas ni canceladas.</summary>

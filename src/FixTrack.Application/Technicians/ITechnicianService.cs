@@ -9,6 +9,9 @@ public interface ITechnicianService
 
     Task<TechnicianDetails?> GetAsync(int id, CancellationToken cancellationToken);
 
+    /// <summary>Técnicos con su cantidad de órdenes abiertas (activos e inactivos), ordenados por nombre.</summary>
+    Task<IReadOnlyList<TechnicianWorkload>> ListWorkloadAsync(CancellationToken cancellationToken);
+
     /// <summary>Registra un técnico activo. Si tiene éxito, devuelve su Id.</summary>
     Task<CommandResult<int>> CreateAsync(TechnicianInput input, CancellationToken cancellationToken);
 

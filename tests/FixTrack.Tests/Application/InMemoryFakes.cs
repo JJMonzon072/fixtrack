@@ -213,8 +213,16 @@ public sealed class FakeTechnicianRepository(InMemoryStore store) : ITechnicianR
         return FindAsync(id, cancellationToken);
     }
 
+    public Task<IReadOnlyList<TechnicianWorkload>> ListWorkloadAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TechnicianWorkload>>([.. store.Technicians
+            .OrderBy(t => t.FullName)
+            .Select(t => new TechnicianWorkload(t.Id, t.FullName, t.Specialty, t.IsActive, OpenOrders(t.Id)))]);
+
     public Task<int> CountOpenOrdersAsync(int technicianId, CancellationToken cancellationToken) =>
-        Task.FromResult(store.OpenOrdersByTechnician.GetValueOrDefault(technicianId));
+        Task.FromResult(OpenOrders(technicianId));
+
+    private int OpenOrders(int technicianId) =>
+        store.OpenOrdersByTechnician.GetValueOrDefault(technicianId);
 
     public void Add(Technician technician) => store.Pending.Add(technician);
 }
