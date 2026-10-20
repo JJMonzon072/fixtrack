@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Text.RegularExpressions;
 using FixTrack.Infrastructure.Persistence;
+using FixTrack.Tests.Application;
 using FixTrack.Web.Hosting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -75,7 +76,7 @@ public sealed class HostingTests(FixTrackWebApplicationFactory factory)
             .UseSqlite("Data Source=/ruta/inexistente/fixtrack.db;Mode=ReadOnly")
             .Options);
 
-        var result = await new DatabaseHealthCheck(context).CheckHealthAsync(new HealthCheckContext(), Token);
+        var result = await new DatabaseHealthCheck(context, new DatabaseHealthCache(TimeProvider.System)).CheckHealthAsync(new HealthCheckContext(), Token);
 
         Assert.Equal(HealthStatus.Unhealthy, result.Status);
     }
@@ -210,6 +211,40 @@ public sealed class HostingTests(FixTrackWebApplicationFactory factory)
         Assert.Single(warnings);
         Assert.Contains("10.99.0.7", warnings[0]);
         Assert.DoesNotContain("203.0.113.50", warnings[0]);
+    }
+
+    [Fact]
+    public async Task The_database_status_is_reused_for_a_few_seconds_so_the_endpoint_cannot_flood_the_database()
+    {
+        var clock = new FixedClock(DateTimeOffset.UtcNow);
+        var cache = new DatabaseHealthCache(clock);
+        var checks = 0;
+        Task<HealthCheckResult> Check(CancellationToken _)
+        {
+            Interlocked.Increment(ref checks);
+            return Task.FromResult(HealthCheckResult.Healthy());
+        }
+
+        await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => cache.GetAsync(Check, Token)));
+        clock.Advance(DatabaseHealthCache.Lifetime - TimeSpan.FromSeconds(1));
+        await cache.GetAsync(Check, Token);
+        var withinLifetime = checks;
+        clock.Advance(TimeSpan.FromSeconds(2));
+        await cache.GetAsync(Check, Token);
+
+        Assert.Equal(1, withinLifetime);
+        Assert.Equal(2, checks);
+    }
+
+    [Fact]
+    public async Task The_database_check_runs_a_real_query()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var check = new DatabaseHealthCheck(scope.ServiceProvider.GetRequiredService<FixTrackDbContext>(), new DatabaseHealthCache(TimeProvider.System));
+
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), Token);
+
+        Assert.Equal(HealthStatus.Healthy, result.Status);
     }
 
     private static async Task<List<HttpStatusCode>> LoginStatusesAsync(HttpClient client, string header, params string[] values)

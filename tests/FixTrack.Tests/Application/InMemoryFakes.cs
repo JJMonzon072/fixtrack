@@ -11,10 +11,14 @@ using FixTrack.Domain.Technicians;
 
 namespace FixTrack.Tests.Application;
 
-/// <summary>Reloj fijo para pruebas deterministas.</summary>
+/// <summary>Reloj fijo para pruebas deterministas; solo avanza cuando la prueba lo indica.</summary>
 public sealed class FixedClock(DateTimeOffset now) : TimeProvider
 {
-    public override DateTimeOffset GetUtcNow() => now;
+    private DateTimeOffset _now = now;
+
+    public override DateTimeOffset GetUtcNow() => _now;
+
+    public void Advance(TimeSpan time) => _now += time;
 }
 
 /// <summary>
