@@ -320,6 +320,32 @@ public sealed partial class ServiceOrdersPageTests(FixTrackWebApplicationFactory
     }
 
     [Fact]
+    public async Task Customer_device_and_technician_pages_show_their_real_orders()
+    {
+        using var client = factory.CreateClient();
+        var scenario = await ScenarioAsync(client, "Integracion");
+        var id = await CreateOrderAsync(client, scenario, scenario.TechnicianId);
+        var number = $"OS-{id:D6}";
+
+        var customer = await client.GetStringAsync($"/clientes/{scenario.CustomerId}", Token);
+        var device = await client.GetStringAsync($"/equipos/{scenario.DeviceId}", Token);
+        var technician = await client.GetStringAsync($"/tecnicos/{scenario.TechnicianId}", Token);
+        var filtered = await client.GetStringAsync($"/ordenes?cliente={scenario.CustomerId}&vista=todas", Token);
+        var newFromDevice = await client.GetStringAsync($"/ordenes/nueva?equipo={scenario.DeviceId}", Token);
+
+        Assert.Contains(number, customer);
+        Assert.Contains($"href=\"/ordenes/nueva?cliente={scenario.CustomerId}\"", customer);
+        Assert.Contains(number, device);
+        Assert.Contains($"href=\"/ordenes/nueva?equipo={scenario.DeviceId}\"", device);
+        Assert.Contains(number, technician);
+        Assert.Contains("Ver todas sus órdenes", technician);
+        Assert.Equal([number], OrderNumbers(filtered));
+        Assert.Contains("Cliente: Cliente Integracion", filtered);
+        Assert.Contains($"name=\"DeviceId\" value=\"{scenario.DeviceId}\"", newFromDevice);
+        Assert.Contains("Elegir otro equipo de este cliente", newFromDevice);
+    }
+
+    [Fact]
     public async Task Rejects_posts_without_an_antiforgery_token()
     {
         using var client = factory.CreateClient();

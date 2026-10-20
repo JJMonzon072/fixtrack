@@ -1,6 +1,7 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Application.Devices;
+using FixTrack.Application.ServiceOrders;
 using FixTrack.Web.Models;
 using FixTrack.Web.Models.Customers;
 using FixTrack.Web.Services;
@@ -8,9 +9,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace FixTrack.Web.Controllers;
 
-/// <summary>Módulo Clientes: listado, búsqueda, registro, edición, desactivación y reactivación.</summary>
+/// <summary>Módulo Clientes: listado, búsqueda, registro, edición, desactivación y reactivación, con sus equipos y órdenes.</summary>
 [Route("clientes")]
-public sealed class CustomersController(ICustomerService customers, IDeviceService devices) : Controller
+public sealed class CustomersController(ICustomerService customers, IDeviceService devices, IServiceOrderService orders) : Controller
 {
     [HttpGet("")]
     public async Task<IActionResult> Index(
@@ -78,7 +79,8 @@ public sealed class CustomersController(ICustomerService customers, IDeviceServi
         }
 
         var customerDevices = await devices.ListByCustomerAsync(id, cancellationToken);
-        return View(new CustomerDetailsViewModel(customer, customerDevices));
+        var customerOrders = await orders.ListByCustomerAsync(id, cancellationToken);
+        return View(new CustomerDetailsViewModel(customer, customerDevices, customerOrders));
     }
 
     [HttpGet("{id:int}/editar")]

@@ -1,4 +1,5 @@
 using FixTrack.Application.Common;
+using FixTrack.Application.Devices;
 using FixTrack.Domain.ServiceOrders;
 
 namespace FixTrack.Web.Models;
@@ -14,3 +15,12 @@ public sealed record OrderDueViewModel(ServiceOrderStatus Status, DateTime? Prom
 
 /// <summary>Selector de prioridad (control segmentado) con su error de validación.</summary>
 public sealed record PrioritySelectorViewModel(ServiceOrderPriority? Selected, string? Error);
+
+/// <summary>Tabla de órdenes relacionadas en el detalle de un cliente, un equipo o un técnico.</summary>
+public sealed record OrderSummaryTableViewModel(
+    IReadOnlyList<ServiceOrderSummary> Orders,
+    DateTime NowUtc,
+    string Caption,
+    bool ShowDevice = false,
+    bool ShowCustomer = false,
+    bool ShowTechnician = true);

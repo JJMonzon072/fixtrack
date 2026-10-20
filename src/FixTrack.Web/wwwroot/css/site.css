@@ -2316,6 +2316,22 @@ fieldset.field > legend {
     white-space: nowrap;
 }
 
+.data-table--related {
+    min-width: 46rem;
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.card__header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.card__link {
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-sm);
+}
+
 .data-table tr.is-overdue td:first-child {
     box-shadow: inset 2px 0 0 var(--color-danger);
 }
@@ -3287,7 +3303,8 @@ fieldset.field > legend {
         justify-self: end;
     }
 
-    .data-table--orders {
+    .data-table--orders,
+    .data-table--related {
         min-width: 0;
     }
 
