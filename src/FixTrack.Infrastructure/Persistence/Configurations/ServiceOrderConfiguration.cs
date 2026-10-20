@@ -63,6 +63,11 @@ internal sealed class ServiceOrderConfiguration : IEntityTypeConfiguration<Servi
             .HasForeignKey(change => change.ServiceOrderId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasMany(order => order.Assignments)
+            .WithOne()
+            .HasForeignKey(assignment => assignment.ServiceOrderId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(order => order.DeviceId).HasDatabaseName("IX_ServiceOrders_DeviceId");
         builder.HasIndex(order => order.TechnicianId).HasDatabaseName("IX_ServiceOrders_TechnicianId");
 

@@ -32,6 +32,7 @@ public sealed class DashboardServiceTests
             .AddSingleton<ITechnicianRepository>(new FakeTechnicianRepository(_store))
             .AddSingleton<ICustomerRepository>(new FakeCustomerRepository(_store))
             .AddSingleton<IUnitOfWork>(new FakeUnitOfWork(_store))
+            .AddSingleton<ICurrentUser>(FakeCurrentUser.Instance)
             .AddSingleton<TimeProvider>(new FixedClock(Now))
             .BuildServiceProvider();
     }

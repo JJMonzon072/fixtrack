@@ -11,6 +11,14 @@ using FixTrack.Domain.Technicians;
 
 namespace FixTrack.Tests.Application;
 
+/// <summary>Usuario fijo que hace las operaciones en las pruebas de casos de uso.</summary>
+public sealed class FakeCurrentUser : ICurrentUser
+{
+    public static FakeCurrentUser Instance { get; } = new();
+
+    public Actor Actor { get; } = new("cuenta-de-prueba", "Ana Recepción");
+}
+
 /// <summary>Reloj fijo para pruebas deterministas; solo avanza cuando la prueba lo indica.</summary>
 public sealed class FixedClock(DateTimeOffset now) : TimeProvider
 {

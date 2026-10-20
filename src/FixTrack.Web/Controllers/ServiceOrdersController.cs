@@ -177,7 +177,7 @@ public sealed class ServiceOrdersController(
         [FromForm] int version,
         CancellationToken cancellationToken)
     {
-        var result = await orders.AssignTechnicianAsync(id, technicianId, version, cancellationToken);
+        var result = await orders.AssignTechnicianAsync(id, technicianId, null, version, cancellationToken);
         if (Completed(result, id, "Técnico asignado correctamente.") is { } done)
         {
             return done;

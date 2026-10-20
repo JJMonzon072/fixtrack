@@ -1,8 +1,8 @@
 using System.Threading.RateLimiting;
+using FixTrack.Application.Common;
 using FixTrack.Infrastructure.Identity;
 using FixTrack.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 
 namespace FixTrack.Web.Security;
@@ -58,6 +58,10 @@ public static class SecurityServiceCollectionExtensions
 
         services.AddAuthorization(AuthorizationPolicies.Configure);
         services.AddScoped<FailedLoginEqualizer>();
+
+        // Autor de los cambios para el historial y la auditoría.
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUser, HttpCurrentUser>();
 
         // Claves que cifran cookies y tokens: en la base (cifradas con un certificado) fuera de Desarrollo.
         services.AddFixTrackDataProtection(configuration, environment);

@@ -24,7 +24,7 @@ public sealed class MigrationTests
 
         Assert.False(
             context.Database.HasPendingModelChanges(),
-            "El modelo cambió sin una migración. Ejecuta: dotnet ef migrations add <Nombre> --project src/FixTrack.Infrastructure --startup-project src/FixTrack.Web");
+            "El modelo cambió sin una migración. Ejecuta: dotnet ef migrations add <Nombre> --context FixTrackDbContext --project src/FixTrack.Infrastructure --startup-project src/FixTrack.Web");
     }
 
     [Fact]
@@ -33,12 +33,13 @@ public sealed class MigrationTests
         using var context = CreateSqlServerContext();
         var script = context.GetService<IMigrator>().GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
 
-        foreach (var table in new[] { "Customers", "Devices", "Technicians", "ServiceOrders", "ServiceOrderStatusHistory" })
+        foreach (var table in new[] { "Customers", "Devices", "Technicians", "ServiceOrders", "ServiceOrderStatusHistory", "ServiceOrderAssignments" })
         {
             Assert.Contains($"CREATE TABLE [{table}]", script);
         }
 
         Assert.Contains("TR_ServiceOrderStatusHistory_AppendOnly", script);
+        Assert.Contains("TR_ServiceOrderAssignments_AppendOnly", script);
 
         foreach (var forbidden in new[] { "DROP TABLE", "DROP COLUMN", "DROP INDEX", "TRUNCATE", "DELETE FROM", "UPDATE [" })
         {
@@ -92,6 +93,25 @@ public sealed class MigrationTests
         Assert.Contains("CK_ServiceOrders_TechnicianAssignment", script);
         Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ALTER COLUMN", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void The_phase_4_assignments_migration_only_adds_authors_and_an_append_only_table()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: "20261020071400_IdentityAndDataProtectionKeys",
+            toMigration: "20261020162649_ServiceOrderAuthorsAndAssignments");
+
+        // Columnas nuevas que admiten NULL: los registros de historial existentes no se modifican.
+        Assert.Contains("ALTER TABLE [ServiceOrderStatusHistory] ADD [ChangedByName] nvarchar(150) NULL", script);
+        Assert.Contains("ALTER TABLE [ServiceOrderStatusHistory] ADD [ChangedByUserId] nvarchar(450) NULL", script);
+        Assert.Contains("CREATE TABLE [ServiceOrderAssignments]", script);
+        Assert.Contains("CK_ServiceOrderAssignments_DifferentTechnician", script);
+        Assert.Contains("TR_ServiceOrderAssignments_AppendOnly", script);
+        Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ALTER COLUMN", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE [", script, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

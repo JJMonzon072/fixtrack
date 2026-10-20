@@ -12,11 +12,13 @@ internal sealed class ServiceOrderService(
     IDeviceRepository devices,
     ITechnicianRepository technicians,
     IUnitOfWork unitOfWork,
+    ICurrentUser currentUser,
     TimeProvider clock) : IServiceOrderService
 {
     internal const string CustomerField = "CustomerId";
     internal const string DeviceField = "DeviceId";
     internal const string TechnicianField = "TechnicianId";
+    internal const string AssignmentNoteField = "Note";
 
     internal const string StaleMessage =
         "Otra persona modificó esta orden mientras la revisabas. Revisa los datos actuales y vuelve a intentarlo.";
@@ -131,7 +133,7 @@ internal sealed class ServiceOrderService(
                 }
 
                 var order = new ServiceOrder(
-                    device!, issue, input.Priority!.Value, receivedAt, input.PromisedAtUtc, input.EstimatedCost, notes, technician);
+                    device!, issue, input.Priority!.Value, receivedAt, input.PromisedAtUtc, input.EstimatedCost, notes, technician, currentUser.Actor);
                 orders.Add(order);
                 await unitOfWork.SaveChangesAsync(token);
                 return CommandResult<int>.Success(order.Id);
@@ -139,7 +141,7 @@ internal sealed class ServiceOrderService(
             cancellationToken);
     }
 
-    public Task<CommandResult> AssignTechnicianAsync(int id, int? technicianId, int version, CancellationToken cancellationToken) =>
+    public Task<CommandResult> AssignTechnicianAsync(int id, int? technicianId, string? note, int version, CancellationToken cancellationToken) =>
         unitOfWork.ExecuteInTransactionAsync(
             async token =>
             {
@@ -159,13 +161,19 @@ internal sealed class ServiceOrderService(
                     errors[TechnicianField] = "La orden ya está asignada a este técnico.";
                 }
 
+                if (Text.CleanOrNull(note) is { Length: > ServiceOrderAssignment.NoteMaxLength })
+                {
+                    errors[AssignmentNoteField] = $"El motivo no puede superar {ServiceOrderAssignment.NoteMaxLength} caracteres.";
+                }
+
                 var technician = errors.Count == 0 ? await FindAssignableTechnicianAsync(technicianId!.Value, errors, token) : null;
                 if (errors.Count > 0)
                 {
                     return CommandResult.Invalid(errors);
                 }
 
-                order.AssignTechnician(technician!, UtcNow);
+                // La asignación y su registro (técnico anterior y nuevo, quién y por qué) se guardan juntos.
+                order.AssignTechnician(technician!, UtcNow, currentUser.Actor, note);
                 return await SaveAsync(token);
             },
             cancellationToken);
@@ -231,7 +239,7 @@ internal sealed class ServiceOrderService(
 
         try
         {
-            order.ChangeStatus(newStatus, UtcNow, input.Note, input.FinalCost);
+            order.ChangeStatus(newStatus, UtcNow, input.Note, input.FinalCost, currentUser.Actor);
         }
         catch (DomainException exception)
         {

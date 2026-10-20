@@ -76,6 +76,21 @@ public sealed class SqlServerBehaviorTests(DisposableSqlServerDatabase disposabl
         // El error del trigger ya revirtió la transacción en el servidor; al liberarla no queda nada pendiente.
     }
 
+    [Theory]
+    [InlineData("UPDATE [ServiceOrderAssignments] SET [Note] = N'modificada' WHERE [Id] = {0}")]
+    [InlineData("DELETE FROM [ServiceOrderAssignments] WHERE [Id] = {0}")]
+    public async Task The_assignment_record_rejects_updates_and_deletes(string sql)
+    {
+        await using var context = CreateContext(ConnectionString());
+        await using var transaction = await context.Database.BeginTransactionAsync(Token);
+        var assignmentId = await context.ServiceOrderAssignments.Select(assignment => assignment.Id).FirstOrDefaultAsync(Token);
+        Assert.SkipWhen(assignmentId == 0, "No hay asignaciones para probar el trigger.");
+
+        var error = await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlRawAsync(sql, [assignmentId], Token));
+
+        Assert.Equal(50001, error.Number);
+    }
+
     [Fact]
     public async Task The_technician_lock_makes_a_second_locker_wait_but_not_plain_readers()
     {

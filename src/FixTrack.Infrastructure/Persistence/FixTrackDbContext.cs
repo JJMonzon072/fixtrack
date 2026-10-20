@@ -27,6 +27,8 @@ public sealed class FixTrackDbContext(DbContextOptions<FixTrackDbContext> option
 
     public DbSet<ServiceOrderStatusChange> ServiceOrderStatusHistory => Set<ServiceOrderStatusChange>();
 
+    public DbSet<ServiceOrderAssignment> ServiceOrderAssignments => Set<ServiceOrderAssignment>();
+
     /// <summary>
     /// Claves de Data Protection. Guardarlas en la base permite que las sesiones sobrevivan a reinicios y
     /// redespliegues del contenedor (por ejemplo, en Render).

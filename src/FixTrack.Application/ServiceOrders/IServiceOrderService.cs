@@ -21,8 +21,11 @@ public interface IServiceOrderService
     /// <summary>Registra la recepción de un equipo. Si tiene éxito, devuelve el Id de la orden.</summary>
     Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken);
 
-    /// <summary>Asigna o reasigna el técnico responsable (solo técnicos activos).</summary>
-    Task<CommandResult> AssignTechnicianAsync(int id, int? technicianId, int version, CancellationToken cancellationToken);
+    /// <summary>
+    /// Asigna o reasigna el técnico responsable (solo técnicos activos). Queda registrado quién lo hizo, cuándo, el
+    /// técnico anterior y el motivo (opcional, hasta 200 caracteres).
+    /// </summary>
+    Task<CommandResult> AssignTechnicianAsync(int id, int? technicianId, string? note, int version, CancellationToken cancellationToken);
 
     Task<CommandResult> RecordDiagnosisAsync(int id, string? diagnosis, int version, CancellationToken cancellationToken);
 

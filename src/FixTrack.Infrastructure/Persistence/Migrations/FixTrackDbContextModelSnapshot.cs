@@ -255,6 +255,58 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FixTrack.Domain.ServiceOrders.ServiceOrderAssignment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("AssignedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("AssignedByName")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("AssignedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int?>("FromTechnicianId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("ServiceOrderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ToTechnicianId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromTechnicianId");
+
+                    b.HasIndex("ToTechnicianId");
+
+                    b.HasIndex("ServiceOrderId", "AssignedAtUtc")
+                        .HasDatabaseName("IX_ServiceOrderAssignments_ServiceOrderId_AssignedAtUtc");
+
+                    b.ToTable("ServiceOrderAssignments", null, t =>
+                        {
+                            t.HasTrigger("TR_ServiceOrderAssignments_AppendOnly");
+
+                            t.HasCheckConstraint("CK_ServiceOrderAssignments_DifferentTechnician", "[FromTechnicianId] IS NULL OR [FromTechnicianId] <> [ToTechnicianId]");
+                        });
+
+                    b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
+                });
+
             modelBuilder.Entity("FixTrack.Domain.ServiceOrders.ServiceOrderStatusChange", b =>
                 {
                     b.Property<int>("Id")
@@ -266,6 +318,14 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("ChangedAtUtc")
                         .HasPrecision(3)
                         .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("ChangedByName")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("ChangedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<int?>("FromStatus")
                         .HasColumnType("int");
@@ -640,6 +700,28 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
                     b.Navigation("Technician");
                 });
 
+            modelBuilder.Entity("FixTrack.Domain.ServiceOrders.ServiceOrderAssignment", b =>
+                {
+                    b.HasOne("FixTrack.Domain.Technicians.Technician", null)
+                        .WithMany()
+                        .HasForeignKey("FromTechnicianId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FixTrack.Domain.ServiceOrders.ServiceOrder", null)
+                        .WithMany("Assignments")
+                        .HasForeignKey("ServiceOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FixTrack.Domain.Technicians.Technician", "ToTechnician")
+                        .WithMany()
+                        .HasForeignKey("ToTechnicianId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ToTechnician");
+                });
+
             modelBuilder.Entity("FixTrack.Domain.ServiceOrders.ServiceOrderStatusChange", b =>
                 {
                     b.HasOne("FixTrack.Domain.ServiceOrders.ServiceOrder", null)
@@ -707,6 +789,8 @@ namespace FixTrack.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FixTrack.Domain.ServiceOrders.ServiceOrder", b =>
                 {
+                    b.Navigation("Assignments");
+
                     b.Navigation("StatusHistory");
                 });
 #pragma warning restore 612, 618

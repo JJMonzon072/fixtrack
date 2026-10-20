@@ -94,8 +94,9 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
         return new ServiceOrderSearchResult(new PagedResult<ServiceOrderListItem>(items, page, ServiceOrderSearch.PageSize, total), counts);
     }
 
-    public Task<ServiceOrderDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken) =>
-        db.ServiceOrders
+    public async Task<ServiceOrderDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken)
+    {
+        var details = await db.ServiceOrders
             .AsNoTracking()
             .Where(order => order.Id == id)
             .Select(order => new ServiceOrderDetails(
@@ -130,9 +131,30 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
                 order.StatusHistory
                     .OrderBy(change => change.ChangedAtUtc)
                     .ThenBy(change => change.Id)
-                    .Select(change => new ServiceOrderHistoryEntry(change.FromStatus, change.ToStatus, change.ChangedAtUtc, change.Note))
-                    .ToList()))
+                    .Select(change => new ServiceOrderHistoryEntry(change.FromStatus, change.ToStatus, change.ChangedAtUtc, change.Note, change.ChangedByName))
+                    .ToList(),
+                Array.Empty<ServiceOrderAssignmentEntry>()))
             .SingleOrDefaultAsync(cancellationToken);
+        if (details is null)
+        {
+            return null;
+        }
+
+        // Segunda consulta: dos colecciones en la misma multiplicarían las filas (historial × asignaciones).
+        var assignments = await db.ServiceOrderAssignments
+            .AsNoTracking()
+            .Where(assignment => assignment.ServiceOrderId == id)
+            .OrderBy(assignment => assignment.AssignedAtUtc)
+            .ThenBy(assignment => assignment.Id)
+            .Select(assignment => new ServiceOrderAssignmentEntry(
+                db.Technicians.Where(technician => technician.Id == assignment.FromTechnicianId).Select(technician => technician.FullName).FirstOrDefault(),
+                assignment.ToTechnician!.FullName,
+                assignment.AssignedAtUtc,
+                assignment.AssignedByName,
+                assignment.Note))
+            .ToListAsync(cancellationToken);
+        return details with { Assignments = assignments };
+    }
 
     public async Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, int take, CancellationToken cancellationToken)
     {
