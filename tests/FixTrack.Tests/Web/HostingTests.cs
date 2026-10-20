@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
@@ -245,6 +246,18 @@ public sealed class HostingTests(FixTrackWebApplicationFactory factory)
         var result = await check.CheckHealthAsync(new HealthCheckContext(), Token);
 
         Assert.Equal(HealthStatus.Healthy, result.Status);
+    }
+
+    [Fact]
+    public void Production_does_not_log_every_sql_command()
+    {
+        using var production = factory.WithWebHostBuilder(builder => builder
+            .UseEnvironment("Production")
+            .UseSetting("ReverseProxy:IgnoreForwardedHeaders", "true"));
+
+        var configuration = production.Services.GetRequiredService<IConfiguration>();
+
+        Assert.Equal("Warning", configuration["Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command"]);
     }
 
     private static async Task<List<HttpStatusCode>> LoginStatusesAsync(HttpClient client, string header, params string[] values)
