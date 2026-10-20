@@ -494,3 +494,6 @@ secrets.json
 *.p12
 *.crt
 docker-compose.override.yml
+
+# Evidencias locales de QA (capturas de pantalla), no se versionan
+qa-evidence/
