@@ -1,3 +1,4 @@
+using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 
 namespace FixTrack.Web.Models.Customers;
@@ -8,25 +9,25 @@ public sealed record CustomerEditorViewModel(int? CustomerId, string? CustomerNa
     public bool IsNew => CustomerId is null;
 }
 
-public sealed record CustomerIndexViewModel(string? SearchText, CustomerStatusFilter Status, CustomerSearchResult Result)
+public sealed record CustomerIndexViewModel(string? SearchText, StatusFilter Status, CustomerSearchResult Result)
 {
     public bool HasSearch => !string.IsNullOrEmpty(SearchText);
 
     /// <summary>No existe ningún cliente registrado todavía.</summary>
     public bool IsFirstUse => !HasSearch && Result.ActiveCount + Result.InactiveCount == 0;
 
-    public static string StatusParameter(CustomerStatusFilter status) => status switch
+    public static string StatusParameter(StatusFilter status) => status switch
     {
-        CustomerStatusFilter.Inactive => "inactivos",
-        CustomerStatusFilter.All => "todos",
+        StatusFilter.Inactive => "inactivos",
+        StatusFilter.All => "todos",
         _ => "activos",
     };
 
-    public static CustomerStatusFilter ParseStatus(string? value) => value?.Trim().ToLowerInvariant() switch
+    public static StatusFilter ParseStatus(string? value) => value?.Trim().ToLowerInvariant() switch
     {
-        "inactivos" => CustomerStatusFilter.Inactive,
-        "todos" => CustomerStatusFilter.All,
-        _ => CustomerStatusFilter.Active,
+        "inactivos" => StatusFilter.Inactive,
+        "todos" => StatusFilter.All,
+        _ => StatusFilter.Active,
     };
 }
 

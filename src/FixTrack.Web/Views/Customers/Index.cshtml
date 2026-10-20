@@ -6,11 +6,11 @@
     var paging = Model.Result.Page;
     var statusValue = CustomerIndexViewModel.StatusParameter(Model.Status);
 
-    (CustomerStatusFilter Filter, string Label, int Count)[] tabs =
+    (StatusFilter Filter, string Label, int Count)[] tabs =
     [
-        (CustomerStatusFilter.Active, "Activos", Model.Result.ActiveCount),
-        (CustomerStatusFilter.Inactive, "Inactivos", Model.Result.InactiveCount),
-        (CustomerStatusFilter.All, "Todos", Model.Result.ActiveCount + Model.Result.InactiveCount),
+        (StatusFilter.Active, "Activos", Model.Result.ActiveCount),
+        (StatusFilter.Inactive, "Inactivos", Model.Result.InactiveCount),
+        (StatusFilter.All, "Todos", Model.Result.ActiveCount + Model.Result.InactiveCount),
     ];
 
     string PageUrl(int number) => Url.Action("Index", new
@@ -92,7 +92,7 @@ else
                 }
                 else
                 {
-                    <h3 class="empty-state__title">@(Model.Status == CustomerStatusFilter.Inactive ? "No hay clientes inactivos" : "No hay clientes activos")</h3>
+                    <h3 class="empty-state__title">@(Model.Status == StatusFilter.Inactive ? "No hay clientes inactivos" : "No hay clientes activos")</h3>
                     <p class="empty-state__text">Cambia el filtro de estado para ver el resto de clientes.</p>
                 }
             </div>

@@ -116,11 +116,11 @@ public sealed class CustomerServiceTests
     [Fact]
     public async Task Search_criteria_are_normalized_before_querying()
     {
-        await _service.SearchAsync(new CustomerSearch("   " + new string('a', 150), (CustomerStatusFilter)42, Page: -3), Token);
+        await _service.SearchAsync(new CustomerSearch("   " + new string('a', 150), (StatusFilter)42, Page: -3), Token);
 
         var search = _repository.LastSearch!;
         Assert.Equal(CustomerSearch.TextMaxLength, search.Text!.Length);
-        Assert.Equal(CustomerStatusFilter.Active, search.Status);
+        Assert.Equal(StatusFilter.Active, search.Status);
         Assert.Equal(1, search.Page);
     }
 

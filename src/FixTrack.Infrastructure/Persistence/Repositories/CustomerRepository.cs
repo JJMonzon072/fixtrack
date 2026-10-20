@@ -31,8 +31,8 @@ internal sealed class CustomerRepository(FixTrackDbContext db) : ICustomerReposi
 
         var (filtered, total) = search.Status switch
         {
-            CustomerStatusFilter.Inactive => (matching.Where(customer => !customer.IsActive), inactiveCount),
-            CustomerStatusFilter.All => (matching, activeCount + inactiveCount),
+            StatusFilter.Inactive => (matching.Where(customer => !customer.IsActive), inactiveCount),
+            StatusFilter.All => (matching, activeCount + inactiveCount),
             _ => (matching.Where(customer => customer.IsActive), activeCount),
         };
 

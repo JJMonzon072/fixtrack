@@ -19,7 +19,7 @@ internal sealed class CustomerService(
         var normalized = search with
         {
             Text = text is { Length: > CustomerSearch.TextMaxLength } ? text[..CustomerSearch.TextMaxLength] : text,
-            Status = Enum.IsDefined(search.Status) ? search.Status : CustomerStatusFilter.Active,
+            Status = Enum.IsDefined(search.Status) ? search.Status : StatusFilter.Active,
             Page = Math.Max(1, search.Page),
         };
 
