@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Capa de presentación: ASP.NET Core MVC. Es la raíz de composición de la aplicación. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\FixTrack.Application\FixTrack.Application.csproj" />
+    <ProjectReference Include="..\FixTrack.Infrastructure\FixTrack.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

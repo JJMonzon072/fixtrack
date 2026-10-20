@@ -1,0 +1,61 @@
+@model ModulePlaceholderViewModel
+@{
+    var module = Model.Module;
+    var route = ModuleNavigation.For(module.Key);
+    ViewData["Title"] = module.Name;
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <div class="page-header__title-row">
+            <h1 class="page-title">@module.Name</h1>
+            <span class="badge badge--neutral">
+                <icon name="circle-dashed" />
+                En preparación
+            </span>
+        </div>
+        <p class="page-description">@module.Description</p>
+    </div>
+</header>
+
+<section class="table-card" aria-labelledby="empty-title">
+    <div class="table-scroll">
+        <table class="data-table">
+            <caption class="visually-hidden">Columnas previstas para el listado de @module.Name.ToLowerInvariant()</caption>
+            <thead>
+                <tr>
+                    @foreach (var column in Model.Columns)
+                    {
+                        <th scope="col">@column</th>
+                    }
+                </tr>
+            </thead>
+        </table>
+    </div>
+
+    <div class="empty-state">
+        <div class="empty-state__icon">
+            <icon name="@route.Icon" />
+        </div>
+        <h2 class="empty-state__title" id="empty-title">@Model.EmptyTitle</h2>
+        <p class="empty-state__text">Este módulo se habilitará en una próxima fase del proyecto. Cuando esté disponible podrás:</p>
+
+        <ul class="feature-list" role="list">
+            @foreach (var feature in module.PlannedFeatures)
+            {
+                <li>
+                    <icon name="circle-dashed" />
+                    <span>@feature</span>
+                </li>
+            }
+        </ul>
+
+        <div class="empty-state__actions">
+            <button class="button button--primary" type="button" disabled aria-describedby="create-hint">
+                <icon name="plus" />
+                @Model.CreateLabel
+            </button>
+            <p class="empty-state__hint" id="create-hint">Acción no disponible todavía</p>
+        </div>
+    </div>
+</section>

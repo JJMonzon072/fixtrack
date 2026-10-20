@@ -1,0 +1,49 @@
+@model SidebarViewModel
+
+<aside id="sidebar" class="sidebar" aria-label="Menú principal" data-sidebar>
+    <div class="sidebar__header">
+        <a class="brand" asp-controller="Dashboard" asp-action="Index" aria-label="FixTrack, ir al panel">
+            <partial name="_LogoMark" />
+            <span class="brand__text">
+                <span class="brand__name">FixTrack</span>
+                <span class="brand__tagline">Servicio técnico</span>
+            </span>
+        </a>
+        <button class="icon-button sidebar__close" type="button" aria-label="Cerrar menú de navegación" data-sidebar-close>
+            <icon name="x" />
+        </button>
+    </div>
+
+    <nav class="sidebar__nav" aria-label="Módulos">
+        @foreach (var group in Model.Groups)
+        {
+            <div class="nav-group">
+                @if (group.Title is not null)
+                {
+                    <h2 class="nav-group__title">@group.Title</h2>
+                }
+                <ul class="nav-list" role="list">
+                    @foreach (var item in group.Items)
+                    {
+                        <li>
+                            <a class="nav-link" asp-controller="@item.Controller" asp-action="Index"
+                               aria-current="@(item.IsActive ? "page" : null)">
+                                <icon name="@item.Icon" />
+                                <span class="nav-link__label">@item.Name</span>
+                                @if (!item.IsAvailable)
+                                {
+                                    <span class="nav-link__tag" title="Disponible en una próxima fase">Pronto</span>
+                                }
+                            </a>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+    </nav>
+
+    <div class="sidebar__footer">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>Versión <span class="mono">@Model.Version</span></span>
+    </div>
+</aside>
