@@ -24,7 +24,10 @@ public sealed class DatabaseUnavailableHandler(ILogger<DatabaseUnavailableHandle
             return false;
         }
 
-        logger.LogWarning(exception, "La base de datos no está disponible: se respondió 503 a {Method} {Path}.", context.Request.Method, context.Request.Path);
+        // Una línea por solicitud, sin la traza: el detalle del error lo registra el disyuntor una vez por caída.
+        // El middleware de errores ya cambió la ruta a /error: se registra la original.
+        var path = context.Features.Get<IExceptionHandlerPathFeature>()?.Path ?? context.Request.Path.Value;
+        logger.LogWarning("Base de datos no disponible ({Cause}): se respondió 503 a {Method} {Path}.", Cause(exception), context.Request.Method, path);
 
         var seconds = (int)Math.Ceiling(Math.Max(retryAfter.TotalSeconds, 5));
         var requestId = Activity.Current?.Id ?? context.TraceIdentifier;
@@ -35,6 +38,26 @@ public sealed class DatabaseUnavailableHandler(ILogger<DatabaseUnavailableHandle
         context.Response.ContentType = "text/html; charset=utf-8";
         await context.Response.WriteAsync(Page(requestId, seconds), cancellationToken);
         return true;
+    }
+
+    /// <summary>Causa breve para la bitácora: el número de error de SQL Server o el tipo de la excepción más interna.</summary>
+    internal static string Cause(Exception exception)
+    {
+        var innermost = exception;
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            switch (current)
+            {
+                case DatabaseUnavailableException:
+                    return "disyuntor abierto";
+                case Microsoft.Data.SqlClient.SqlException sql:
+                    return $"SQL Server {sql.Number}";
+            }
+
+            innermost = current;
+        }
+
+        return innermost.GetType().Name;
     }
 
     /// <summary>¿La excepción (o alguna interna) indica que la base no responde?</summary>

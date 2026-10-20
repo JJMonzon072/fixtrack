@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data.Common;
 using System.Net;
 using System.Security.Cryptography;
@@ -7,7 +8,9 @@ using FixTrack.Infrastructure.Persistence;
 using FixTrack.Infrastructure.Persistence.Resilience;
 using FixTrack.Tests.Application;
 using FixTrack.Web.Hosting;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -18,6 +21,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace FixTrack.Tests.Web;
@@ -59,6 +63,76 @@ public sealed class ResilienceTests(FixTrackWebApplicationFactory factory) : ICl
         availability.RecordFailure(new TimeoutException());
 
         Assert.False(availability.IsOpen(out _));
+    }
+
+    [Fact]
+    public void An_outage_is_logged_with_its_detail_once_and_the_recovery_in_one_line()
+    {
+        var clock = new FixedClock(DateTimeOffset.UtcNow);
+        var logger = new CapturingLogger<DatabaseAvailability>();
+        var availability = new DatabaseAvailability(clock, logger);
+
+        // Tres aperturas seguidas del disyuntor durante la misma caída.
+        for (var opening = 0; opening < 3; opening++)
+        {
+            for (var failure = 0; failure < DatabaseAvailability.FailureThreshold; failure++)
+            {
+                availability.RecordFailure(new TimeoutException("sin respuesta"));
+            }
+
+            clock.Advance(DatabaseAvailability.BreakDuration);
+        }
+
+        availability.RecordSuccess();
+        availability.RecordSuccess();
+
+        Assert.Collection(
+            logger.Entries,
+            warning =>
+            {
+                Assert.Equal(LogLevel.Warning, warning.Level);
+                Assert.IsType<TimeoutException>(warning.Exception);
+            },
+            recovered =>
+            {
+                Assert.Equal(LogLevel.Information, recovered.Level);
+                Assert.Null(recovered.Exception);
+                Assert.Contains("volvió a responder después de 45 s", recovered.Message);
+            });
+    }
+
+    [Theory]
+    [MemberData(nameof(Causes))]
+    public async Task Each_rejected_request_logs_one_short_line_without_the_stack_trace(Exception exception, string cause)
+    {
+        var logger = new CapturingLogger<DatabaseUnavailableHandler>();
+        var context = new DefaultHttpContext { Response = { Body = Stream.Null } };
+        context.Request.Method = "GET";
+        context.Request.Path = "/error";
+        context.Features.Set<IExceptionHandlerPathFeature>(new ExceptionHandlerFeature { Path = "/clientes", Error = exception });
+
+        var handled = await new DatabaseUnavailableHandler(logger).TryHandleAsync(context, exception, Token);
+
+        Assert.True(handled);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Null(entry.Exception);
+        Assert.Equal($"Base de datos no disponible ({cause}): se respondió 503 a GET /clientes.", entry.Message);
+    }
+
+    public static TheoryData<Exception, string> Causes() => new()
+    {
+        { new DatabaseUnavailableException("abierto", TimeSpan.FromSeconds(10)), "disyuntor abierto" },
+        { new RetryLimitExceededException("agotados", new TimeoutException()), "TimeoutException" },
+        { new CryptographicException("claves", new InvalidOperationException("envoltorio", new TimeoutException())), "TimeoutException" },
+    };
+
+    [Fact]
+    public void Data_protection_does_not_repeat_its_key_ring_error_on_every_request()
+    {
+        var configuration = factory.Services.GetRequiredService<IConfiguration>();
+
+        Assert.Equal("Critical", configuration["Logging:LogLevel:Microsoft.AspNetCore.DataProtection.KeyManagement.KeyRingProvider"]);
     }
 
     [Fact]
@@ -138,6 +212,13 @@ public sealed class ResilienceTests(FixTrackWebApplicationFactory factory) : ICl
         Assert.Equal(DependencyInjection.ConnectTimeoutSeconds, new SqlConnectionStringBuilder(context.Database.GetConnectionString()).ConnectTimeout);
         Assert.Contains(interceptors, interceptor => interceptor is DatabaseCircuitInterceptor);
         Assert.True(context.Database.CreateExecutionStrategy().RetriesOnFailure);
+
+        // Una caída no repite la traza en cada conexión, consulta o guardado fallido (ver QuietExpectedFailures).
+        var warnings = options.FindExtension<CoreOptionsExtension>()!.WarningsConfiguration;
+        Assert.Equal(LogLevel.Debug, warnings.GetLevel(RelationalEventId.ConnectionError));
+        Assert.Equal(LogLevel.Debug, warnings.GetLevel(CoreEventId.QueryIterationFailed));
+        Assert.Equal(LogLevel.Debug, warnings.GetLevel(CoreEventId.SaveChangesFailed));
+        Assert.Null(warnings.GetLevel(RelationalEventId.CommandError));
     }
 
     [Fact]
@@ -147,6 +228,23 @@ public sealed class ResilienceTests(FixTrackWebApplicationFactory factory) : ICl
 
         Assert.Equal(TimeSpan.FromSeconds(30), policy.Timeout);
         Assert.Equal(503, policy.TimeoutStatusCode);
+    }
+
+    private sealed record LogEntry(LogLevel Level, string Message, Exception? Exception);
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        private readonly ConcurrentQueue<LogEntry> _entries = new();
+
+        public IReadOnlyCollection<LogEntry> Entries => _entries;
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            _entries.Enqueue(new LogEntry(logLevel, formatter(state, exception), exception));
     }
 
     /// <summary>Hace que la base "deje de responder" mientras está activa.</summary>

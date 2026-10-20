@@ -1,4 +1,6 @@
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FixTrack.Infrastructure.Persistence.Resilience;
 
@@ -8,8 +10,10 @@ namespace FixTrack.Infrastructure.Persistence.Resilience;
 /// <see cref="Application.Common.DatabaseUnavailableException"/>, en lugar de esperar el tiempo de conexión y los
 /// reintentos de cada una (lo que multiplicaría los intentos contra una base caída). Pasado ese tiempo, la siguiente
 /// solicitud vuelve a probar; una conexión correcta lo restablece.
+/// <para>Registra el detalle del error una sola vez por caída (al abrirse por primera vez) y una línea cuando la base
+/// vuelve a responder: durante la caída, cada solicitud rechazada deja solo una línea breve (ver el manejador de 503).</para>
 /// </summary>
-public sealed class DatabaseAvailability(TimeProvider clock)
+public sealed class DatabaseAvailability(TimeProvider clock, ILogger<DatabaseAvailability> logger)
 {
     public const int FailureThreshold = 3;
     public static readonly TimeSpan BreakDuration = TimeSpan.FromSeconds(15);
@@ -20,6 +24,12 @@ public sealed class DatabaseAvailability(TimeProvider clock)
     private readonly Lock _lock = new();
     private int _failures;
     private DateTimeOffset _openUntil = DateTimeOffset.MinValue;
+    private DateTimeOffset? _outageSince;
+
+    public DatabaseAvailability(TimeProvider clock)
+        : this(clock, NullLogger<DatabaseAvailability>.Instance)
+    {
+    }
 
     /// <summary>¿Está abierto el disyuntor? Si lo está, cuánto falta para volver a probar.</summary>
     public bool IsOpen(out TimeSpan retryAfter)
@@ -42,6 +52,11 @@ public sealed class DatabaseAvailability(TimeProvider clock)
         lock (_lock)
         {
             _failures = 0;
+            if (_outageSince is { } since)
+            {
+                _outageSince = null;
+                logger.LogInformation("La base de datos volvió a responder después de {Seconds:0} s.", (clock.GetUtcNow() - since).TotalSeconds);
+            }
         }
     }
 
@@ -55,10 +70,22 @@ public sealed class DatabaseAvailability(TimeProvider clock)
 
         lock (_lock)
         {
-            if (++_failures >= FailureThreshold)
+            if (++_failures < FailureThreshold)
             {
-                _openUntil = clock.GetUtcNow() + BreakDuration;
-                _failures = 0;
+                return;
+            }
+
+            var now = clock.GetUtcNow();
+            _openUntil = now + BreakDuration;
+            _failures = 0;
+            if (_outageSince is null)
+            {
+                _outageSince = now;
+                logger.LogWarning(
+                    exception,
+                    "La base de datos no responde ({Failures} fallos de conexión seguidos). Las solicitudes reciben 503 sin intentar conectar y se vuelve a probar cada {Seconds} s.",
+                    FailureThreshold,
+                    BreakDuration.TotalSeconds);
             }
         }
     }

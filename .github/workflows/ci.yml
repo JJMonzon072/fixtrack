@@ -147,6 +147,22 @@ jobs:
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/salud/bd)" = "503"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/clientes)" = "302"
 
+      - name: Sin base, las páginas responden 503 breve y la bitácora no se inunda
+        run: |
+          # El inicio de sesión necesita las claves de Data Protection, guardadas en la base: debe responder 503 con
+          # Retry-After y una página sin detalles técnicos.
+          headers="$(curl --silent --dump-header - --output pagina.html http://localhost:8080/cuenta/iniciar-sesion)"
+          echo "$headers" | grep -qi "^HTTP/1.1 503"
+          echo "$headers" | grep -qi "^retry-after:"
+          grep -q "Servicio temporalmente no disponible" pagina.html
+          if grep -qi "exception" pagina.html; then echo "La página 503 muestra detalles técnicos"; exit 1; fi
+          # Con el disyuntor abierto, cada solicitud rechazada deja una línea breve (antes, cuatro trazas completas).
+          antes="$(docker logs fixtrack 2>&1 | wc -l)"
+          for _ in $(seq 1 10); do curl --silent --output /dev/null http://localhost:8080/cuenta/iniciar-sesion; done
+          despues="$(docker logs fixtrack 2>&1 | wc -l)"
+          echo "Líneas de bitácora por 10 solicitudes rechazadas: $((despues - antes))"
+          test $((despues - antes)) -le 30
+
       - name: Un contenedor mal configurado termina con error
         run: |
           # Sin certificado de Data Protection, producción no arranca. Como PID 1, el proceso debe salir con un código

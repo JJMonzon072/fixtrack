@@ -13,9 +13,11 @@ using FixTrack.Infrastructure.Persistence.Repositories;
 using FixTrack.Infrastructure.Persistence.Resilience;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace FixTrack.Infrastructure;
 
@@ -61,7 +63,8 @@ public static class DependencyInjection
                 sql => sql
                     .CommandTimeout(CommandTimeoutSeconds)
                     .EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorNumbersToAdd: null))
-            .AddInterceptors(provider.GetRequiredService<DatabaseCircuitInterceptor>()));
+            .AddInterceptors(provider.GetRequiredService<DatabaseCircuitInterceptor>())
+            .ConfigureWarnings(QuietExpectedFailures));
 
         // Claves de Data Protection: falla rápido si la base no responde (ver DataProtectionKeysDbContext).
         var keysConnection = new SqlConnectionStringBuilder(connectionString);
@@ -72,7 +75,8 @@ public static class DependencyInjection
                 sql => sql
                     .CommandTimeout(DataProtectionKeysTimeoutSeconds)
                     .EnableRetryOnFailure(maxRetryCount: 1, maxRetryDelay: TimeSpan.FromSeconds(1), errorNumbersToAdd: null))
-            .AddInterceptors(provider.GetRequiredService<DatabaseCircuitInterceptor>()));
+            .AddInterceptors(provider.GetRequiredService<DatabaseCircuitInterceptor>())
+            .ConfigureWarnings(QuietExpectedFailures));
 
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IAuditLog, EfAuditLog>();
@@ -89,4 +93,17 @@ public static class DependencyInjection
 
         return services;
     }
+
+    /// <summary>
+    /// EF Core registra como error, con la traza completa, cada conexión fallida, cada consulta que falla y cada
+    /// SaveChanges que falla. La misma excepción llega después a quien la maneja: el manejador de 503 (una línea por
+    /// solicitud), el código que la convierte en un resultado (por ejemplo, la orden duplicada) o el middleware de
+    /// errores, que registra las no manejadas. Se bajan a Debug para que una caída de la base no repita cuatro trazas
+    /// por solicitud. Los errores de comando (Database.Command) se conservan: incluyen el SQL que falló.
+    /// </summary>
+    private static void QuietExpectedFailures(WarningsConfigurationBuilder warnings) => warnings.Log(
+        (RelationalEventId.ConnectionError, LogLevel.Debug),
+        (CoreEventId.QueryIterationFailed, LogLevel.Debug),
+        (CoreEventId.SaveChangesFailed, LogLevel.Debug));
+
 }
