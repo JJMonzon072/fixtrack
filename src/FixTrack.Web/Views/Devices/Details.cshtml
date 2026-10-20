@@ -1,0 +1,189 @@
+@using FixTrack.Application.Devices
+@using FixTrack.Web.Services
+@model DeviceDetails
+@inject DateDisplay Dates
+@{
+    var title = DomainDisplay.DeviceTitle(Model.Brand, Model.Model);
+    ViewData["Title"] = title;
+    ViewData["ParentTitle"] = "Equipos";
+    ViewData["ParentUrl"] = Url.Action("Index");
+    var owner = Model.Owner;
+}
+
+<header class="page-header page-header--entity">
+    <div class="entity">
+        <span class="thing-icon thing-icon--large" aria-hidden="true"><icon name="@DomainDisplay.Icon(Model.Type)" /></span>
+        <div class="page-header__text">
+            <div class="page-header__title-row">
+                <h1 class="page-title">@title</h1>
+                <span class="badge badge--neutral">@DomainDisplay.Name(Model.Type)</span>
+            </div>
+            <p class="page-description">
+                Registrado el <time datetime="@DateDisplay.Iso(Model.CreatedAtUtc)">@Dates.Short(Model.CreatedAtUtc)</time>
+                · Propietario: <a class="link" asp-controller="Customers" asp-action="Details" asp-route-id="@owner.Id">@owner.FullName</a>
+            </p>
+        </div>
+    </div>
+
+    <div class="page-header__actions">
+        <a class="button button--secondary" asp-action="Edit" asp-route-id="@Model.Id">
+            <icon name="pencil" />
+            Editar
+        </a>
+    </div>
+</header>
+
+<div class="detail-grid">
+    <section class="card" aria-labelledby="device-title">
+        <header class="card__header">
+            <h2 class="card__title" id="device-title">Datos del equipo</h2>
+        </header>
+        <dl class="meta-list meta-list--stacked">
+            <div class="meta-list__row">
+                <dt><icon name="@DomainDisplay.Icon(Model.Type)" />Tipo</dt>
+                <dd>@DomainDisplay.Name(Model.Type)</dd>
+            </div>
+            <div class="meta-list__row">
+                <dt><icon name="briefcase" />Marca</dt>
+                <dd>@Model.Brand</dd>
+            </div>
+            <div class="meta-list__row">
+                <dt><icon name="cpu" />Modelo</dt>
+                <dd>
+                    @if (Model.Model is { } deviceModel)
+                    {
+                        @deviceModel
+                    }
+                    else
+                    {
+                        <span class="meta-list__muted">Sin registrar</span>
+                    }
+                </dd>
+            </div>
+            <div class="meta-list__row">
+                <dt><icon name="hash" />Número de serie</dt>
+                <dd>
+                    @if (Model.SerialNumber is { } serial)
+                    {
+                        <span class="mono">@serial</span>
+                    }
+                    else
+                    {
+                        <span class="meta-list__muted">Sin número de serie</span>
+                    }
+                </dd>
+            </div>
+            <div class="meta-list__row">
+                <dt><icon name="calendar" />Registrado</dt>
+                <dd><time datetime="@DateDisplay.Iso(Model.CreatedAtUtc)">@Dates.Long(Model.CreatedAtUtc)</time></dd>
+            </div>
+            <div class="meta-list__row">
+                <dt><icon name="clock" />Última actualización</dt>
+                <dd>
+                    @if (Model.UpdatedAtUtc is { } updatedAt)
+                    {
+                        <time datetime="@DateDisplay.Iso(updatedAt)">@Dates.Long(updatedAt)</time>
+                    }
+                    else
+                    {
+                        <span class="meta-list__muted">Sin cambios desde el registro</span>
+                    }
+                </dd>
+            </div>
+        </dl>
+    </section>
+
+    <div class="detail-grid__stack">
+        <section class="card" aria-labelledby="owner-title">
+            <header class="card__header">
+                <h2 class="card__title" id="owner-title">Propietario</h2>
+                @if (!owner.IsActive)
+                {
+                    <span class="badge badge--neutral">Cliente inactivo</span>
+                }
+            </header>
+            <div class="card__body">
+                <div class="owner-box owner-box--plain">
+                    <span class="avatar" aria-hidden="true">@ContactDisplay.Initials(owner.FullName)</span>
+                    <span class="owner-box__text">
+                        <a class="link" asp-controller="Customers" asp-action="Details" asp-route-id="@owner.Id">@owner.FullName</a>
+                        <span class="owner-box__meta">
+                            <a class="link mono" href="@ContactDisplay.PhoneHref(owner.Phone)">@owner.Phone</a>
+                            @if (owner.Email is { } email)
+                            {
+                                @:·
+                                <a class="link" href="mailto:@email">@email</a>
+                            }
+                        </span>
+                    </span>
+                </div>
+                @if (!owner.IsActive)
+                {
+                    <p class="card__hint">El cliente está inactivo. El equipo y su historial se conservan y pueden consultarse.</p>
+                }
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="notes-title">
+            <header class="card__header">
+                <h2 class="card__title" id="notes-title">Observaciones</h2>
+            </header>
+            @if (Model.Notes is { } notes)
+            {
+                <p class="card__body notes">@notes</p>
+            }
+            else
+            {
+                <p class="card__body meta-list__muted">Sin observaciones.</p>
+            }
+        </section>
+    </div>
+
+    <section class="card card--full" aria-labelledby="orders-title">
+        <header class="card__header">
+            <div class="card__title-row">
+                <h2 class="card__title" id="orders-title">Órdenes de servicio</h2>
+                <span class="badge badge--neutral mono">@Model.ServiceOrders.Count</span>
+            </div>
+        </header>
+        @if (Model.ServiceOrders.Count == 0)
+        {
+            <div class="card__body inline-empty">
+                <icon name="clipboard-list" />
+                <p>
+                    Este equipo todavía no tiene órdenes de servicio.
+                    Las reparaciones se registrarán cuando se habilite el módulo Órdenes de servicio.
+                </p>
+            </div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="data-table">
+                    <caption class="visually-hidden">Órdenes de servicio del equipo, de la más reciente a la más antigua</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Orden</th>
+                            <th scope="col">Estado</th>
+                            <th scope="col">Prioridad</th>
+                            <th scope="col">Recibida</th>
+                            <th scope="col">Entrega comprometida</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var order in Model.ServiceOrders)
+                        {
+                            <tr>
+                                <td class="mono">@order.Number</td>
+                                <td><span class="badge @DomainDisplay.BadgeClass(order.Status)">@DomainDisplay.Name(order.Status)</span></td>
+                                <td>@DomainDisplay.Name(order.Priority)</td>
+                                <td>@Dates.Short(order.ReceivedAtUtc)</td>
+                                <td>@(order.PromisedAtUtc is { } promised ? Dates.Short(promised) : "Sin fecha")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>

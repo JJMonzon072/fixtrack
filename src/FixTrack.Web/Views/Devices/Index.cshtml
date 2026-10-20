@@ -1,0 +1,153 @@
+@using FixTrack.Application.Devices
+@using FixTrack.Web.Models.Devices
+@model DeviceIndexViewModel
+@inject FixTrack.Web.Services.DateDisplay Dates
+@{
+    ViewData["Title"] = "Equipos";
+    var paging = Model.Result;
+    var typeValue = Model.Type is { } selected ? DomainDisplay.Slug(selected) : null;
+
+    string PageUrl(int number) => Url.Action("Index", new
+    {
+        buscar = Model.SearchText,
+        tipo = typeValue,
+        pagina = number > 1 ? number : (int?)null,
+    })!;
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">Equipos</h1>
+        <p class="page-description">Computadoras, laptops y otros dispositivos recibidos en el taller, cada uno vinculado a su propietario.</p>
+    </div>
+    @if (!Model.IsFirstUse)
+    {
+        <a class="button button--primary" asp-action="Create">
+            <icon name="plus" />
+            Registrar equipo
+        </a>
+    }
+</header>
+
+@if (Model.IsFirstUse)
+{
+    <section class="table-card">
+        <div class="empty-state">
+            <div class="empty-state__icon"><icon name="laptop" /></div>
+            <h2 class="empty-state__title">Todavía no hay equipos registrados</h2>
+            <p class="empty-state__text">Cada equipo se registra a nombre de un cliente activo. También puedes registrarlo desde el detalle del cliente.</p>
+            <div class="empty-state__actions">
+                <a class="button button--primary" asp-action="Create">
+                    <icon name="plus" />
+                    Registrar el primer equipo
+                </a>
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    <section class="table-card" aria-labelledby="devices-list-title">
+        <h2 class="visually-hidden" id="devices-list-title">Listado de equipos</h2>
+
+        <form class="toolbar" method="get" asp-action="Index" role="search">
+            <div class="search">
+                <label class="visually-hidden" for="buscar">Buscar equipos</label>
+                <icon name="search" class="search__icon" />
+                <input class="input search__input" type="search" id="buscar" name="buscar" value="@Model.SearchText"
+                       maxlength="@DeviceSearch.TextMaxLength" placeholder="Marca, modelo, serie o cliente" autocomplete="off" />
+            </div>
+            <div class="toolbar__filters">
+                <label class="visually-hidden" for="tipo">Tipo de equipo</label>
+                <div class="select select--compact">
+                    <select class="input select__control" id="tipo" name="tipo" data-autosubmit>
+                        <option value="">Todos los tipos</option>
+                        @foreach (var type in DomainDisplay.DeviceTypes)
+                        {
+                            <option value="@DomainDisplay.Slug(type)" selected="@(type == Model.Type)">@DomainDisplay.Name(type)</option>
+                        }
+                    </select>
+                    <icon name="chevron-down" class="select__icon" />
+                </div>
+                <button class="button button--secondary" type="submit">Buscar</button>
+            </div>
+        </form>
+
+        @if (paging.TotalCount == 0)
+        {
+            <div class="empty-state empty-state--compact">
+                <div class="empty-state__icon"><icon name="search" /></div>
+                <h3 class="empty-state__title">
+                    @if (Model.SearchText is { Length: > 0 } text)
+                    {
+                        @:No hay equipos que coincidan con «@text»
+                    }
+                    else
+                    {
+                        @:No hay equipos de este tipo
+                    }
+                </h3>
+                <p class="empty-state__text">Prueba con otra marca, modelo, número de serie o nombre de cliente, o quita el filtro de tipo.</p>
+                <div class="empty-state__actions">
+                    <a class="button button--secondary" asp-action="Index">Limpiar filtros</a>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="data-table data-table--interactive data-table--stack data-table--devices">
+                    <caption class="visually-hidden">Equipos, del más reciente al más antiguo</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Equipo</th>
+                            <th scope="col">Número de serie</th>
+                            <th scope="col">Propietario</th>
+                            <th scope="col" class="data-table__numeric">Órdenes</th>
+                            <th scope="col">Registrado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var device in paging.Items)
+                        {
+                            <tr>
+                                <td data-label="Equipo">
+                                    <div class="person">
+                                        <span class="thing-icon" aria-hidden="true"><icon name="@DomainDisplay.Icon(device.Type)" /></span>
+                                        <span class="person__text">
+                                            <a class="person__name row-link" asp-action="Details" asp-route-id="@device.Id">@DomainDisplay.DeviceTitle(device.Brand, device.Model)</a>
+                                            <span class="person__meta">@DomainDisplay.Name(device.Type)</span>
+                                        </span>
+                                    </div>
+                                </td>
+                                <td data-label="Número de serie" data-hide-mobile>
+                                    @if (device.SerialNumber is { } serial)
+                                    {
+                                        <span class="mono">@serial</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="meta-list__muted">Sin número de serie</span>
+                                    }
+                                </td>
+                                <td data-label="Propietario" data-indent>
+                                    <a class="link link--above-row" asp-controller="Customers" asp-action="Details" asp-route-id="@device.CustomerId">@device.CustomerName</a>
+                                    @if (!device.CustomerIsActive)
+                                    {
+                                        <span class="badge badge--neutral">Inactivo</span>
+                                    }
+                                </td>
+                                <td data-label="Órdenes" class="data-table__numeric mono" data-hide-mobile>@device.ServiceOrderCount</td>
+                                <td data-label="Registrado">
+                                    <time datetime="@FixTrack.Web.Services.DateDisplay.Iso(device.CreatedAtUtc)">@Dates.Short(device.CreatedAtUtc)</time>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <partial name="_Pagination" model="new PaginationViewModel(paging, PageUrl)" />
+        }
+    </section>
+}

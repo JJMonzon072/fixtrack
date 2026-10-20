@@ -38,12 +38,8 @@ internal sealed class ModuleCatalog : IModuleCatalog
                 ModuleKey.Devices,
                 "Equipos",
                 "Computadoras, laptops y otros dispositivos recibidos, vinculados a su propietario.",
-                ModuleStatus.Planned,
-                [
-                    "Registro por tipo, marca, modelo y número de serie",
-                    "Vinculación con el cliente propietario",
-                    "Historial de reparaciones por equipo",
-                ]),
+                ModuleStatus.Available,
+                []),
             new ModuleInfo(
                 ModuleKey.Technicians,
                 "Técnicos",

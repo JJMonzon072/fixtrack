@@ -1850,6 +1850,114 @@ button {
     color: var(--color-text-secondary);
 }
 
+/* Ícono de un equipo (equivalente al avatar de una persona) */
+.thing-icon {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-subtle);
+    color: var(--color-text-secondary);
+}
+
+.thing-icon--large {
+    width: 3rem;
+    height: 3rem;
+    border-radius: var(--radius-md);
+}
+
+.thing-icon--large .icon {
+    width: 1.375rem;
+    height: 1.375rem;
+}
+
+/* Un enlace dentro de una fila clicable queda por encima del enlace de la fila. */
+.link--above-row {
+    position: relative;
+    z-index: 1;
+}
+
+.card--full {
+    grid-column: 1 / -1;
+}
+
+.detail-grid__stack {
+    display: grid;
+    align-content: start;
+    gap: var(--space-5);
+    min-width: 0;
+}
+
+.card__title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.card__header > .button {
+    flex-shrink: 0;
+}
+
+.card__note {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: 0 var(--space-4) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-subtle);
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+}
+
+.card__note .icon {
+    margin-top: 0.15rem;
+    width: 0.875rem;
+    height: 0.875rem;
+}
+
+.card__hint {
+    margin-top: var(--space-3);
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+}
+
+/* Propietario de un equipo */
+.owner-box {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-top: var(--space-1);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-subtle);
+}
+
+.owner-box--plain {
+    margin-top: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+}
+
+.owner-box__text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+    font-size: var(--text-sm);
+}
+
+.owner-box__meta {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    overflow-wrap: anywhere;
+}
+
 /* 9. Utilidades ------------------------------------------------------------ */
 
 .mono {
@@ -2116,6 +2224,14 @@ button {
 
     .data-table--stack td[data-hide-mobile] {
         display: none;
+    }
+
+    .toolbar__filters {
+        width: 100%;
+    }
+
+    .toolbar__filters .select {
+        flex: 1;
     }
 }
 

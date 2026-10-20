@@ -1,0 +1,136 @@
+@using FixTrack.Domain.Devices
+@using FixTrack.Web.Models.Devices
+@using FixTrack.Web.Models.Forms
+@model DeviceEditorViewModel
+@{
+    var isNew = Model.IsNew;
+    ViewData["Title"] = isNew ? "Registrar equipo" : "Editar equipo";
+    ViewData["ParentTitle"] = "Equipos";
+    ViewData["ParentUrl"] = Url.Action("Index");
+
+    var form = Model.Form;
+    var errors = FormErrors.From(ViewData.ModelState,
+        (nameof(form.CustomerId), "Cliente propietario", "CustomerSearch"),
+        (nameof(form.Type), "Tipo de equipo", null),
+        (nameof(form.Brand), "Marca", null),
+        (nameof(form.Model), "Modelo", null),
+        (nameof(form.SerialNumber), "Número de serie", null),
+        (nameof(form.Notes), "Observaciones", null));
+
+    var owner = Model.Owner;
+    var customerError = errors.For(nameof(form.CustomerId));
+    var typeOptions = DomainDisplay.DeviceTypes.Select(type => (((int)type).ToString(), DomainDisplay.Name(type))).ToList();
+    var cancelUrl = isNew ? Url.Action("Index") : Url.Action("Details", new { id = Model.DeviceId });
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">@(isNew ? "Registrar equipo" : "Editar equipo")</h1>
+        <p class="page-description">
+            @if (isNew)
+            {
+                @:Registra un equipo a nombre de un cliente activo.
+            }
+            else
+            {
+                @:Actualiza los datos técnicos de <strong>@Model.DeviceTitle</strong>.
+            }
+        </p>
+    </div>
+</header>
+
+@if (Model.OwnerNotice is { } notice)
+{
+    <div class="alert alert--warning" role="status">
+        <icon name="triangle-alert" />
+        <p class="alert__text">@notice</p>
+    </div>
+}
+
+<div class="form-layout">
+    @* novalidate: la validación la hace el servidor, con mensajes en español y el mismo estilo en todos los navegadores. *@
+    <form class="form-card" method="post" novalidate asp-antiforgery="true"
+          asp-action="@(isNew ? "Create" : "Edit")" asp-route-id="@Model.DeviceId">
+
+        <partial name="_ErrorSummary" model="errors" />
+
+        <div class="form-grid">
+            @if (isNew)
+            {
+                <div class="field field--wide combobox" data-combobox data-source="@Url.Action("Options", "Customers")">
+                    <label class="field__label" for="CustomerSearch">Cliente propietario</label>
+                    <p class="field__hint" id="CustomerId-hint">Busca por nombre, teléfono o correo. Solo aparecen clientes activos.</p>
+                    <div class="combobox__control">
+                        <icon name="search" class="combobox__icon" />
+                        <input class="input combobox__input" id="CustomerSearch" type="text" role="combobox"
+                               value="@owner?.FullName" autocomplete="off" spellcheck="false"
+                               aria-autocomplete="list" aria-expanded="false" aria-controls="customer-options"
+                               aria-invalid="@(customerError is null ? null : "true")"
+                               aria-describedby="CustomerId-hint@(customerError is null ? string.Empty : " CustomerId-error") customer-selected" />
+                        <input type="hidden" name="CustomerId" value="@form.CustomerId" data-combobox-value />
+                    </div>
+                    <ul class="combobox__list" id="customer-options" role="listbox" aria-label="Clientes activos" hidden></ul>
+                    <p class="combobox__selected" id="customer-selected" data-combobox-selected hidden="@(owner is null)">
+                        @if (owner is not null)
+                        {
+                            @owner.Phone@(owner.Email is { } ownerEmail ? $" · {ownerEmail}" : string.Empty)
+                        }
+                    </p>
+                    @if (customerError is not null)
+                    {
+                        <p class="field__error" id="CustomerId-error"><icon name="triangle-alert" />@customerError</p>
+                    }
+                </div>
+            }
+            else if (owner is not null)
+            {
+                <div class="field field--wide">
+                    <span class="field__label">Cliente propietario</span>
+                    <div class="owner-box">
+                        <span class="avatar" aria-hidden="true">@ContactDisplay.Initials(owner.FullName)</span>
+                        <span class="owner-box__text">
+                            <a class="link" asp-controller="Customers" asp-action="Details" asp-route-id="@owner.Id">@owner.FullName</a>
+                            <span class="owner-box__meta">El propietario no se puede cambiar: el historial de reparaciones queda vinculado a este equipo.</span>
+                        </span>
+                    </div>
+                </div>
+            }
+
+            <partial name="_FormField" model='new FormField(nameof(form.Type), "Tipo de equipo")
+            {
+                Value = form.Type is { } type ? ((int)type).ToString() : null, Error = errors.For(nameof(form.Type)),
+                Options = typeOptions, Placeholder = "Selecciona el tipo",
+            }' />
+            <partial name="_FormField" model='new FormField(nameof(form.Brand), "Marca")
+            {
+                Value = form.Brand, Error = errors.For(nameof(form.Brand)),
+                Hint = "Por ejemplo: Dell, HP, Lenovo, Apple.", MaxLength = DeviceRules.BrandMaxLength, Autocomplete = "off",
+            }' />
+            <partial name="_FormField" model='new FormField(nameof(form.Model), "Modelo")
+            {
+                Value = form.Model, Error = errors.For(nameof(form.Model)), Optional = true,
+                Hint = "Tal como aparece en la etiqueta del equipo.", MaxLength = DeviceRules.ModelMaxLength, Autocomplete = "off",
+            }' />
+            <partial name="_FormField" model='new FormField(nameof(form.SerialNumber), "Número de serie")
+            {
+                Value = form.SerialNumber, Error = errors.For(nameof(form.SerialNumber)), Optional = true, Mono = true,
+                Hint = "Se guarda en mayúsculas. No puede repetirse dentro de la misma marca.",
+                MaxLength = DeviceRules.SerialNumberMaxLength, Autocomplete = "off", Spellcheck = false,
+            }' />
+            <partial name="_FormField" model='new FormField(nameof(form.Notes), "Observaciones")
+            {
+                Value = form.Notes, Error = errors.For(nameof(form.Notes)), Optional = true, Wide = true,
+                Hint = "Estado físico, accesorios entregados (cargador, funda) u otros detalles.",
+                Rows = 4, MaxLength = DeviceRules.NotesMaxLength,
+            }' />
+        </div>
+
+        <footer class="form-card__actions">
+            <a class="button button--secondary" href="@cancelUrl">Cancelar</a>
+            <button class="button button--primary" type="submit">
+                <icon name="check" />
+                @(isNew ? "Registrar equipo" : "Guardar cambios")
+            </button>
+        </footer>
+    </form>
+</div>
