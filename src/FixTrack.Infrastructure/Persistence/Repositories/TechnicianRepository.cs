@@ -83,7 +83,8 @@ internal sealed class TechnicianRepository(FixTrackDbContext db) : ITechnicianRe
                 technician.DeactivatedAtUtc,
                 db.ServiceOrders.WhereOpen().Count(order => order.TechnicianId == technician.Id),
                 db.ServiceOrders.Count(order => order.TechnicianId == technician.Id),
-                Array.Empty<ServiceOrderSummary>()))
+                Array.Empty<ServiceOrderSummary>(),
+                technician.Version))
             .SingleOrDefaultAsync(cancellationToken);
         if (details is null)
         {

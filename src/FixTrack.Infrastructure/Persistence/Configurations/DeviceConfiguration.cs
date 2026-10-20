@@ -19,6 +19,9 @@ internal sealed class DeviceConfiguration : IEntityTypeConfiguration<Device>
 
         builder.HasKey(device => device.Id);
 
+        // Concurrencia optimista: el UPDATE incluye "WHERE Version = <versión leída>" (ver ServiceOrderConfiguration).
+        builder.Property(device => device.Version).IsConcurrencyToken();
+
         builder.Property(device => device.Brand).HasMaxLength(DeviceRules.BrandMaxLength);
         builder.Property(device => device.Model).HasMaxLength(DeviceRules.ModelMaxLength);
         builder.Property(device => device.SerialNumber).HasMaxLength(DeviceRules.SerialNumberMaxLength).IsUnicode(false);

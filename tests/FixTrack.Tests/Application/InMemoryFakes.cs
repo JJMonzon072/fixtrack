@@ -161,7 +161,7 @@ public sealed class FakeCustomerRepository(InMemoryStore store) : ICustomerRepos
 
     public Task<CustomerDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken) =>
         Task.FromResult(store.Customers.Where(c => c.Id == id)
-            .Select(c => new CustomerDetails(c.Id, c.FullName, c.Phone, c.Email, c.Notes, c.IsActive, 0, c.CreatedAtUtc, c.UpdatedAtUtc, c.DeactivatedAtUtc))
+            .Select(c => new CustomerDetails(c.Id, c.FullName, c.Phone, c.Email, c.Notes, c.IsActive, 0, c.CreatedAtUtc, c.UpdatedAtUtc, c.DeactivatedAtUtc, c.Version))
             .SingleOrDefault());
 
     public Task<Customer?> FindAsync(int id, CancellationToken cancellationToken) =>

@@ -37,7 +37,8 @@ public sealed record CustomerDetails(
     int DeviceCount,
     DateTime CreatedAtUtc,
     DateTime? UpdatedAtUtc,
-    DateTime? DeactivatedAtUtc);
+    DateTime? DeactivatedAtUtc,
+    int Version);
 
 /// <summary>Cliente que puede elegirse como propietario de un equipo.</summary>
 public sealed record CustomerOption(int Id, string FullName, string Phone, string? Email, bool IsActive);

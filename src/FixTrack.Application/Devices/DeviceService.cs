@@ -11,6 +11,9 @@ internal sealed class DeviceService(
     IUnitOfWork unitOfWork,
     TimeProvider clock) : IDeviceService
 {
+    internal const string StaleMessage =
+        "Otra persona modificó este equipo mientras lo editabas. Revisa los datos actuales y vuelve a intentarlo.";
+
     internal const string CustomerField = "CustomerId";
     internal const string DuplicateSerialMessage = "Ya existe un equipo de esta marca con el mismo número de serie.";
 
@@ -67,12 +70,18 @@ internal sealed class DeviceService(
         return CommandResult<int>.Success(device.Id);
     }
 
-    public async Task<CommandResult> UpdateAsync(int id, DeviceInput input, CancellationToken cancellationToken)
+    public async Task<CommandResult> UpdateAsync(int id, DeviceInput input, int version, CancellationToken cancellationToken)
     {
         var device = id > 0 ? await devices.FindAsync(id, cancellationToken) : null;
         if (device is null)
         {
             return CommandResult.NotFound();
+        }
+
+        // Concurrencia optimista: si otra persona guardó después de abrir el formulario, no se sobrescribe su cambio.
+        if (device.Version != version)
+        {
+            return CommandResult.Conflict(StaleMessage);
         }
 
         var data = Normalize(input);
@@ -84,7 +93,14 @@ internal sealed class DeviceService(
         }
 
         device.UpdateDetails(data.Type!.Value, data.Brand!, data.Model, data.SerialNumber, data.Notes, UtcNow);
-        return await TrySaveAsync(cancellationToken) ? CommandResult.Success() : CommandResult.Invalid(DuplicateSerial());
+        try
+        {
+            return await TrySaveAsync(cancellationToken) ? CommandResult.Success() : CommandResult.Invalid(DuplicateSerial());
+        }
+        catch (ConcurrencyConflictException)
+        {
+            return CommandResult.Conflict(StaleMessage);
+        }
     }
 
     private static DeviceInput Normalize(DeviceInput input) => new(

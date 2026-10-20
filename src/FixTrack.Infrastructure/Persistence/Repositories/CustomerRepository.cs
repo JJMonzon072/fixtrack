@@ -69,7 +69,8 @@ internal sealed class CustomerRepository(FixTrackDbContext db) : ICustomerReposi
                 customer.Devices.Count,
                 customer.CreatedAtUtc,
                 customer.UpdatedAtUtc,
-                customer.DeactivatedAtUtc))
+                customer.DeactivatedAtUtc,
+                customer.Version))
             .SingleOrDefaultAsync(cancellationToken);
 
     public Task<Customer?> FindAsync(int id, CancellationToken cancellationToken) =>

@@ -21,6 +21,9 @@ internal sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
 
         builder.HasKey(customer => customer.Id);
 
+        // Concurrencia optimista: el UPDATE incluye "WHERE Version = <versión leída>" (ver ServiceOrderConfiguration).
+        builder.Property(customer => customer.Version).IsConcurrencyToken();
+
         builder.Property(customer => customer.FullName)
             .HasMaxLength(ContactRules.NameMaxLength)
             .UseCollation(Collations.SpanishAccentInsensitive);

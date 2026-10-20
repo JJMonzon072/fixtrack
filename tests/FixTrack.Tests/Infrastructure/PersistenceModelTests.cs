@@ -197,6 +197,47 @@ public sealed class PersistenceModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Concurrent_edits_of_customers_devices_and_technicians_are_detected()
+    {
+        int customerId, deviceId, technicianId;
+        await using (var setup = _database.CreateContext())
+        {
+            var customer = new Customer("Ana López", "5555-1234", null, null, Now);
+            var technician = new Technician("Luis Pérez", "Laptops", null, null, Now);
+            setup.AddRange(customer, technician);
+            await setup.SaveChangesAsync(Token);
+            var device = customer.RegisterDevice(DeviceType.Laptop, "Lenovo", null, null, null, Now);
+            await setup.SaveChangesAsync(Token);
+            (customerId, deviceId, technicianId) = (customer.Id, device.Id, technician.Id);
+        }
+
+        // Dos personas leen la misma versión y guardan por separado: la segunda no sobrescribe a la primera.
+        await using var first = _database.CreateContext();
+        await using var second = _database.CreateContext();
+        (await first.Customers.SingleAsync(c => c.Id == customerId, Token)).UpdateDetails("Ana María López", "5555-1234", null, null, Now.AddHours(1));
+        (await first.Devices.SingleAsync(d => d.Id == deviceId, Token)).UpdateDetails(DeviceType.Laptop, "Lenovo", "T14", null, null, Now.AddHours(1));
+        (await first.Technicians.SingleAsync(t => t.Id == technicianId, Token)).UpdateDetails("Luis A. Pérez", "Laptops", null, null, Now.AddHours(1));
+        var staleCustomer = await second.Customers.SingleAsync(c => c.Id == customerId, Token);
+        var staleDevice = await second.Devices.SingleAsync(d => d.Id == deviceId, Token);
+        var staleTechnician = await second.Technicians.SingleAsync(t => t.Id == technicianId, Token);
+        await first.SaveChangesAsync(Token);
+
+        staleCustomer.UpdateDetails("Ana Desactualizada", "5555-0000", null, null, Now.AddHours(2));
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync(Token));
+        second.ChangeTracker.Clear();
+        second.Attach(staleDevice).Entity.UpdateDetails(DeviceType.Laptop, "Lenovo", "Viejo", null, null, Now.AddHours(2));
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync(Token));
+        second.ChangeTracker.Clear();
+        second.Attach(staleTechnician).Entity.UpdateDetails("Luis Desactualizado", "Laptops", null, null, Now.AddHours(2));
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync(Token));
+
+        await using var reader = _database.CreateContext();
+        Assert.Equal(("Ana María López", 1), await reader.Customers.Where(c => c.Id == customerId).Select(c => ValueTuple.Create(c.FullName, c.Version)).SingleAsync(Token));
+        Assert.Equal("T14", await reader.Devices.Where(d => d.Id == deviceId).Select(d => d.Model).SingleAsync(Token));
+        Assert.Equal("Luis A. Pérez", await reader.Technicians.Where(t => t.Id == technicianId).Select(t => t.FullName).SingleAsync(Token));
+    }
+
+    [Fact]
     public async Task Concurrent_changes_to_the_same_order_are_detected()
     {
         int orderId;

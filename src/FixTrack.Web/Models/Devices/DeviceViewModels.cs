@@ -23,10 +23,14 @@ public sealed class DeviceFormModel
 
     public string? Notes { get; set; }
 
+    /// <summary>Versión del registro cuando se abrió el formulario (concurrencia optimista).</summary>
+    public int Version { get; set; }
+
     public DeviceInput ToInput() => new(Type, Brand, Model, SerialNumber, Notes);
 
     public static DeviceFormModel From(DeviceDetails device) => new()
     {
+        Version = device.Version,
         CustomerId = device.Owner.Id,
         Type = device.Type,
         Brand = device.Brand,

@@ -77,7 +77,7 @@ public sealed class CustomerServiceTests
     {
         var created = await _service.CreateAsync(new("Ana López", "5555-1234", "ana@example.com", null), Token);
 
-        var result = await _service.UpdateAsync(created.Value, new("Ana María López", "5555-1234", "ana@example.com", "Cliente frecuente"), Token);
+        var result = await _service.UpdateAsync(created.Value, new("Ana María López", "5555-1234", "ana@example.com", "Cliente frecuente"), version: 0, Token);
 
         Assert.True(result.Succeeded);
         Assert.Equal("Ana María López", _store.Customers[0].FullName);
@@ -93,6 +93,19 @@ public sealed class CustomerServiceTests
 
         Assert.Equal(CommandStatus.Invalid, result.Status);
         Assert.True(result.Errors.ContainsKey(nameof(Customer.Email)));
+    }
+
+    [Fact]
+    public async Task A_stale_edit_is_rejected_without_changes()
+    {
+        var created = await _service.CreateAsync(new("Ana López", "5555-1234", null, null), Token);
+        Assert.True((await _service.UpdateAsync(created.Value, new("Ana María López", "5555-1234", null, null), version: 0, Token)).Succeeded);
+
+        var stale = await _service.UpdateAsync(created.Value, new("Ana Desactualizada", "5555-9999", null, null), version: 0, Token);
+
+        Assert.Equal(CommandStatus.Conflict, stale.Status);
+        Assert.Equal(CustomerService.StaleMessage, stale.Message);
+        Assert.Equal("Ana María López", _store.Customers.Single().FullName);
     }
 
     [Fact]
@@ -113,7 +126,7 @@ public sealed class CustomerServiceTests
     [Fact]
     public async Task Unknown_customers_are_reported_as_not_found()
     {
-        Assert.Equal(CommandStatus.NotFound, (await _service.UpdateAsync(99, new("Ana López", "5555-1234", null, null), Token)).Status);
+        Assert.Equal(CommandStatus.NotFound, (await _service.UpdateAsync(99, new("Ana López", "5555-1234", null, null), version: 0, Token)).Status);
         Assert.Equal(CommandStatus.NotFound, (await _service.DeactivateAsync(99, Token)).Status);
         Assert.Equal(CommandStatus.NotFound, (await _service.ReactivateAsync(0, Token)).Status);
         Assert.Null(await _service.GetAsync(-1, Token));

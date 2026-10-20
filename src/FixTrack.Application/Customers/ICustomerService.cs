@@ -18,7 +18,8 @@ public interface ICustomerService
     /// <summary>Registra un cliente. Si tiene éxito, devuelve su Id.</summary>
     Task<CommandResult<int>> CreateAsync(CustomerInput input, CancellationToken cancellationToken);
 
-    Task<CommandResult> UpdateAsync(int id, CustomerInput input, CancellationToken cancellationToken);
+    /// <param name="version">Versión que vio quien edita: si cambió, se devuelve un conflicto sin guardar.</param>
+    Task<CommandResult> UpdateAsync(int id, CustomerInput input, int version, CancellationToken cancellationToken);
 
     Task<CommandResult> DeactivateAsync(int id, CancellationToken cancellationToken);
 

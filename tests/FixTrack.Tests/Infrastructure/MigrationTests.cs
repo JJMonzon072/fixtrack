@@ -130,6 +130,29 @@ public sealed class MigrationTests
     }
 
     [Fact]
+    public void The_phase_4_versions_migration_only_adds_columns_with_a_default()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: "20261020164604_AuditEvents",
+            toMigration: MigrationId("RecordVersions"));
+
+        foreach (var table in new[] { "Customers", "Devices", "Technicians" })
+        {
+            Assert.Contains($"ALTER TABLE [{table}] ADD [Version] int NOT NULL DEFAULT 0", script);
+        }
+
+        Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE [", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string MigrationId(string name)
+    {
+        using var context = CreateSqlServerContext();
+        return context.Database.GetMigrations().Single(id => id.EndsWith("_" + name, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void The_identity_migration_creates_the_account_tables_and_both_roles()
     {
         using var context = CreateSqlServerContext();

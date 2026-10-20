@@ -16,10 +16,14 @@ public sealed class CustomerFormModel
 
     public string? Notes { get; set; }
 
+    /// <summary>Versión del registro cuando se abrió el formulario (concurrencia optimista).</summary>
+    public int Version { get; set; }
+
     public CustomerInput ToInput() => new(FullName, Phone, Email, Notes);
 
     public static CustomerFormModel From(CustomerDetails customer) => new()
     {
+        Version = customer.Version,
         FullName = customer.FullName,
         Phone = customer.Phone,
         Email = customer.Email,

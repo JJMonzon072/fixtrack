@@ -73,7 +73,8 @@ internal sealed class DeviceRepository(FixTrackDbContext db) : IDeviceRepository
                     device.Customer.Phone,
                     device.Customer.Email,
                     device.Customer.IsActive),
-                Array.Empty<ServiceOrderSummary>()))
+                Array.Empty<ServiceOrderSummary>(),
+                device.Version))
             .SingleOrDefaultAsync(cancellationToken);
         if (details is null)
         {

@@ -12,6 +12,9 @@ internal sealed class TechnicianService(
     IAuditLog audit,
     TimeProvider clock) : ITechnicianService
 {
+    internal const string StaleMessage =
+        "Otra persona modificó este técnico mientras lo editabas. Revisa los datos actuales y vuelve a intentarlo.";
+
     internal const string DuplicateEmailMessage = "Ya existe un técnico registrado con este correo electrónico.";
 
     private DateTime UtcNow => clock.GetUtcNow().UtcDateTime;
@@ -55,12 +58,18 @@ internal sealed class TechnicianService(
         return CommandResult<int>.Success(technician.Id);
     }
 
-    public async Task<CommandResult> UpdateAsync(int id, TechnicianInput input, CancellationToken cancellationToken)
+    public async Task<CommandResult> UpdateAsync(int id, TechnicianInput input, int version, CancellationToken cancellationToken)
     {
         var technician = await FindAsync(id, cancellationToken);
         if (technician is null)
         {
             return CommandResult.NotFound();
+        }
+
+        // Concurrencia optimista: si otra persona guardó después de abrir el formulario, no se sobrescribe su cambio.
+        if (technician.Version != version)
+        {
+            return CommandResult.Conflict(StaleMessage);
         }
 
         var data = Normalize(input);
@@ -71,7 +80,14 @@ internal sealed class TechnicianService(
         }
 
         technician.UpdateDetails(data.FullName!, data.Specialty!, data.Phone, data.Email, UtcNow);
-        return await TrySaveAsync(cancellationToken) ? CommandResult.Success() : CommandResult.Invalid(EmailTaken());
+        try
+        {
+            return await TrySaveAsync(cancellationToken) ? CommandResult.Success() : CommandResult.Invalid(EmailTaken());
+        }
+        catch (ConcurrencyConflictException)
+        {
+            return CommandResult.Conflict(StaleMessage);
+        }
     }
 
     public Task<CommandResult> DeactivateAsync(int id, CancellationToken cancellationToken) =>

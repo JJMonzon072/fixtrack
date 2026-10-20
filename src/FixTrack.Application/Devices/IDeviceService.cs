@@ -15,5 +15,6 @@ public interface IDeviceService
     Task<CommandResult<int>> RegisterAsync(RegisterDeviceInput input, CancellationToken cancellationToken);
 
     /// <summary>Actualiza los datos técnicos. El propietario no se modifica.</summary>
-    Task<CommandResult> UpdateAsync(int id, DeviceInput input, CancellationToken cancellationToken);
+    /// <param name="version">Versión que vio quien edita: si cambió, se devuelve un conflicto sin guardar.</param>
+    Task<CommandResult> UpdateAsync(int id, DeviceInput input, int version, CancellationToken cancellationToken);
 }
