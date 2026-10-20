@@ -258,6 +258,15 @@ public sealed class FakeServiceOrderRepository(InMemoryStore store) : IServiceOr
     public Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, int take, CancellationToken cancellationToken) =>
         Task.FromResult(new CustomerServiceOrders(0, 0, []));
 
+    public Task<IReadOnlyList<OpenOrderSnapshot>> ListOpenAsync(int limit, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OpenOrderSnapshot>>([.. store.ServiceOrders
+            .Where(order => !order.IsClosed)
+            .OrderBy(order => order.ReceivedAtUtc)
+            .Take(limit)
+            .Select(order => new OpenOrderSnapshot(
+                order.Id, order.Status, order.Priority, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId,
+                order.Technician?.FullName, order.Device!.Customer!.FullName, order.Device.Type, order.Device.Brand, order.Device.Model))]);
+
     public Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken) =>
         Task.FromResult(store.ServiceOrders.SingleOrDefault(order => order.Id == id));
 

@@ -15,6 +15,9 @@ public interface IServiceOrderService
     /// <summary>Órdenes de los equipos de un cliente: cantidades y las 10 más recientes.</summary>
     Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, CancellationToken cancellationToken);
 
+    /// <summary>Cola de trabajo: órdenes abiertas puntuadas con <see cref="Domain.ServiceOrders.WorkPrioritizer"/> en este momento.</summary>
+    Task<WorkQueueResult> GetWorkQueueAsync(CancellationToken cancellationToken);
+
     /// <summary>Registra la recepción de un equipo. Si tiene éxito, devuelve el Id de la orden.</summary>
     Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken);
 

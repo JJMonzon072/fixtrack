@@ -1,8 +1,6 @@
 using FixTrack.Application.ServiceOrders;
-using FixTrack.Domain.Customers;
 using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
-using FixTrack.Domain.Technicians;
 using FixTrack.Infrastructure.Persistence.Repositories;
 
 namespace FixTrack.Tests.Infrastructure;
@@ -18,54 +16,7 @@ public sealed class ServiceOrderRepositoryTests : IDisposable
 
     public void Dispose() => _database.Dispose();
 
-    /// <summary>
-    /// Cinco órdenes, insertadas en este orden (Id 1 a 5):
-    /// 1 Ana · Dell · Alta · Carla · En reparación · vencida;
-    /// 2 Mario · HP · Normal · sin técnico · Recibida · entrega mañana;
-    /// 3 Ana · Dell · Baja · Carla · Entregada;
-    /// 4 Mario · HP · Urgente · Luis · Cancelada;
-    /// 5 Ana · Lenovo · Urgente · Luis · En diagnóstico · entrega en 5 días.
-    /// </summary>
-    private async Task SeedAsync()
-    {
-        await using var context = _database.CreateContext();
-        var ana = new Customer("Ana Morales", "5555-0001", null, null, Now.AddDays(-60));
-        var mario = new Customer("Mario Castillo", "5555-0002", null, null, Now.AddDays(-60));
-        var carla = new Technician("Carla Ruiz", "Laptops", null, null, Now.AddDays(-90));
-        var luis = new Technician("Luis Pérez", "Impresoras", null, null, Now.AddDays(-90));
-        context.AddRange(ana, mario, carla, luis);
-        await context.SaveChangesAsync(Token);
-
-        var dell = ana.RegisterDevice(DeviceType.Laptop, "Dell", "Latitude 5440", "SN-DELL-1", null, Now.AddDays(-60));
-        var lenovo = ana.RegisterDevice(DeviceType.Desktop, "Lenovo", "ThinkCentre", null, null, Now.AddDays(-60));
-        var hp = mario.RegisterDevice(DeviceType.Printer, "HP", "LaserJet", "SN-HP-9", null, Now.AddDays(-60));
-        await context.SaveChangesAsync(Token);
-
-        var inRepair = new ServiceOrder(dell, "No enciende", ServiceOrderPriority.High, Now.AddDays(-5), Now.AddDays(-1), 400m, null, carla);
-        inRepair.ChangeStatus(ServiceOrderStatus.Diagnosing, Now.AddDays(-4));
-        inRepair.RecordDiagnosis("Fuente dañada", Now.AddDays(-4));
-        inRepair.ChangeStatus(ServiceOrderStatus.InRepair, Now.AddDays(-3));
-
-        var received = new ServiceOrder(hp, "Atasco de papel", ServiceOrderPriority.Normal, Now.AddDays(-2), Now.AddDays(1), null, null);
-
-        var delivered = new ServiceOrder(dell, "Teclado", ServiceOrderPriority.Low, Now.AddDays(-10), Now.AddDays(-8), 150m, null, carla);
-        delivered.ChangeStatus(ServiceOrderStatus.Diagnosing, Now.AddDays(-10));
-        delivered.RecordDiagnosis("Teclado con derrame", Now.AddDays(-10));
-        delivered.ChangeStatus(ServiceOrderStatus.ReadyForPickup, Now.AddDays(-9));
-        delivered.ChangeStatus(ServiceOrderStatus.Delivered, Now.AddDays(-7), "Pagado", 175m);
-
-        var cancelled = new ServiceOrder(hp, "No imprime", ServiceOrderPriority.Urgent, Now.AddDays(-1), null, null, null, luis);
-        cancelled.ChangeStatus(ServiceOrderStatus.Cancelled, Now.AddHours(-20), "Duplicada");
-
-        var diagnosing = new ServiceOrder(lenovo, "Lento", ServiceOrderPriority.Urgent, Now.AddHours(-3), Now.AddDays(5), null, null, luis);
-        diagnosing.ChangeStatus(ServiceOrderStatus.Diagnosing, Now.AddHours(-2));
-
-        foreach (var order in new[] { inRepair, received, delivered, cancelled, diagnosing })
-        {
-            context.ServiceOrders.Add(order);
-            await context.SaveChangesAsync(Token);
-        }
-    }
+    private Task SeedAsync() => ServiceOrderSeed.SeedAsync(_database, Now, Token);
 
     private async Task<ServiceOrderSearchResult> SearchAsync(ServiceOrderSearch search)
     {
@@ -244,5 +195,21 @@ public sealed class ServiceOrderRepositoryTests : IDisposable
 
         Assert.Equal(["Carla Ruiz", "Luis Pérez"], workload.Select(t => t.FullName));
         Assert.Equal([1, 1], workload.Select(t => t.OpenOrderCount));
+    }
+
+    [Fact]
+    public async Task Open_orders_for_prioritization_start_with_the_oldest()
+    {
+        await ServiceOrderSeed.SeedAsync(_database, Now, Token);
+        await using var context = _database.CreateContext();
+        var repository = new ServiceOrderRepository(context);
+
+        var all = await repository.ListOpenAsync(10, Token);
+        var limited = await repository.ListOpenAsync(2, Token);
+
+        Assert.Equal([1, 2, 5], all.Select(order => order.Id));
+        Assert.Equal([1, 2], limited.Select(order => order.Id));
+        Assert.Equal(("Carla Ruiz", "Ana Morales", "Dell"), (all[0].TechnicianName, all[0].CustomerName, all[0].DeviceBrand));
+        Assert.Null(all[1].TechnicianName);
     }
 }

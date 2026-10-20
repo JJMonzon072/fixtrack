@@ -159,6 +159,27 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
         return new CustomerServiceOrders(counts.Total, counts.Open, recent);
     }
 
+    public async Task<IReadOnlyList<OpenOrderSnapshot>> ListOpenAsync(int limit, CancellationToken cancellationToken) =>
+        await db.ServiceOrders
+            .AsNoTracking()
+            .WhereOpen()
+            .OrderBy(order => order.ReceivedAtUtc)
+            .ThenBy(order => order.Id)
+            .Take(limit)
+            .Select(order => new OpenOrderSnapshot(
+                order.Id,
+                order.Status,
+                order.Priority,
+                order.ReceivedAtUtc,
+                order.PromisedAtUtc,
+                order.TechnicianId,
+                order.Technician != null ? order.Technician.FullName : null,
+                order.Device!.Customer!.FullName,
+                order.Device.Type,
+                order.Device.Brand,
+                order.Device.Model))
+            .ToListAsync(cancellationToken);
+
     public Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken) =>
         db.ServiceOrders.SingleOrDefaultAsync(order => order.Id == id, cancellationToken);
 

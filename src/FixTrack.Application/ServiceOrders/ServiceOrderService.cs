@@ -24,6 +24,9 @@ internal sealed class ServiceOrderService(
     internal const string ClosedMessage = "La orden está cerrada (entregada o cancelada) y ya no admite cambios.";
     internal const int RecentCustomerOrders = 10;
 
+    /// <summary>Máximo de órdenes abiertas que se priorizan en una consulta (el trabajo en curso de un taller).</summary>
+    internal const int MaxPrioritizedOrders = 500;
+
     private DateTime UtcNow => clock.GetUtcNow().UtcDateTime;
 
     public Task<ServiceOrderSearchResult> SearchAsync(ServiceOrderSearch search, CancellationToken cancellationToken)
@@ -50,6 +53,36 @@ internal sealed class ServiceOrderService(
 
     public Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, CancellationToken cancellationToken) =>
         orders.ListByCustomerAsync(customerId, RecentCustomerOrders, cancellationToken);
+
+    public async Task<WorkQueueResult> GetWorkQueueAsync(CancellationToken cancellationToken)
+    {
+        var now = UtcNow;
+        var open = await orders.ListOpenAsync(MaxPrioritizedOrders + 1, cancellationToken);
+        var scored = open
+            .Take(MaxPrioritizedOrders)
+            .Select(order => (Order: order, Score: WorkPrioritizer.Score(
+                order.Priority, order.Status, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId is not null, now)))
+            .ToList();
+
+        IReadOnlyList<PrioritizedOrder> Ranked(WorkQueue queue) =>
+        [
+            .. WorkPrioritizer
+                .Rank(
+                    scored.Where(item => item.Score.Queue == queue),
+                    item => item.Score.Total,
+                    item => item.Order.PromisedAtUtc,
+                    item => item.Order.ReceivedAtUtc,
+                    item => item.Order.Id)
+                .Select((item, index) => new PrioritizedOrder(item.Order, item.Score, index + 1)),
+        ];
+
+        return new WorkQueueResult(
+            Ranked(WorkQueue.Repair),
+            Ranked(WorkQueue.AwaitingParts),
+            Ranked(WorkQueue.ReadyForPickup),
+            now,
+            open.Count > MaxPrioritizedOrders);
+    }
 
     public Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken)
     {
