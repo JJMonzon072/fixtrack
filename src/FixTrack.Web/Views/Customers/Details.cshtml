@@ -10,7 +10,7 @@
 
 <header class="page-header page-header--entity">
     <div class="entity">
-        <span class="avatar avatar--large" aria-hidden="true">@CustomerDisplay.Initials(Model.FullName)</span>
+        <span class="avatar avatar--large" aria-hidden="true">@ContactDisplay.Initials(Model.FullName)</span>
         <div class="page-header__text">
             <div class="page-header__title-row">
                 <h1 class="page-title">@Model.FullName</h1>
@@ -72,7 +72,7 @@
         <dl class="meta-list meta-list--stacked">
             <div class="meta-list__row">
                 <dt><icon name="phone" />Teléfono</dt>
-                <dd><a class="link mono" href="@CustomerDisplay.PhoneHref(Model.Phone)">@Model.Phone</a></dd>
+                <dd><a class="link mono" href="@ContactDisplay.PhoneHref(Model.Phone)">@Model.Phone</a></dd>
             </div>
             <div class="meta-list__row">
                 <dt><icon name="mail" />Correo electrónico</dt>

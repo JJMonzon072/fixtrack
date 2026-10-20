@@ -104,7 +104,7 @@ else
                             <tr>
                                 <td data-label="Cliente">
                                     <div class="person">
-                                        <span class="avatar" aria-hidden="true">@CustomerDisplay.Initials(customer.FullName)</span>
+                                        <span class="avatar" aria-hidden="true">@ContactDisplay.Initials(customer.FullName)</span>
                                         <span class="person__text">
                                             <a class="person__name row-link" asp-action="Details" asp-route-id="@customer.Id">@customer.FullName</a>
                                             <span class="person__meta">@(customer.Email ?? "Sin correo electrónico")</span>

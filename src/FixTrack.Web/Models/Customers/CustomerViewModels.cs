@@ -16,22 +16,3 @@ public sealed record CustomerIndexViewModel(string? SearchText, StatusFilter Sta
     /// <summary>No existe ningún cliente registrado todavía.</summary>
     public bool IsFirstUse => !HasSearch && Result.ActiveCount + Result.InactiveCount == 0;
 }
-
-public static class CustomerDisplay
-{
-    /// <summary>Iniciales para el avatar: primera letra de las dos primeras palabras.</summary>
-    public static string Initials(string fullName)
-    {
-        var letters = fullName
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Select(word => word.FirstOrDefault(char.IsLetterOrDigit))
-            .Where(letter => letter != default)
-            .Take(2)
-            .Select(char.ToUpperInvariant);
-        return string.Concat(letters);
-    }
-
-    /// <summary>Número para enlaces tel: (solo dígitos y '+').</summary>
-    public static string PhoneHref(string phone) =>
-        "tel:" + string.Concat(phone.Where(c => char.IsAsciiDigit(c) || c == '+'));
-}
