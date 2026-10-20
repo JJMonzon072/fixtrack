@@ -1,0 +1,170 @@
+@using FixTrack.Web.Models.Customers
+@using FixTrack.Web.Services
+@model CustomerDetails
+@inject DateDisplay Dates
+@{
+    ViewData["Title"] = Model.FullName;
+    ViewData["ParentTitle"] = "Clientes";
+    ViewData["ParentUrl"] = Url.Action("Index");
+}
+
+<header class="page-header page-header--entity">
+    <div class="entity">
+        <span class="avatar avatar--large" aria-hidden="true">@CustomerDisplay.Initials(Model.FullName)</span>
+        <div class="page-header__text">
+            <div class="page-header__title-row">
+                <h1 class="page-title">@Model.FullName</h1>
+                @if (Model.IsActive)
+                {
+                    <span class="badge badge--accent">Activo</span>
+                }
+                else
+                {
+                    <span class="badge badge--neutral">Inactivo</span>
+                }
+            </div>
+            <p class="page-description">
+                Cliente desde <time datetime="@DateDisplay.Iso(Model.CreatedAtUtc)">@Dates.Short(Model.CreatedAtUtc)</time>
+            </p>
+        </div>
+    </div>
+
+    <div class="page-header__actions">
+        <a class="button button--secondary" asp-action="Edit" asp-route-id="@Model.Id">
+            <icon name="pencil" />
+            Editar
+        </a>
+        @if (Model.IsActive)
+        {
+            <button class="button button--secondary button--danger-text" type="button" data-dialog-open="deactivate-dialog">
+                <icon name="user-x" />
+                Desactivar
+            </button>
+        }
+        else
+        {
+            <form method="post" asp-action="Reactivate" asp-route-id="@Model.Id" asp-antiforgery="true">
+                <button class="button button--primary" type="submit">
+                    <icon name="user-check" />
+                    Reactivar
+                </button>
+            </form>
+        }
+    </div>
+</header>
+
+@if (!Model.IsActive && Model.DeactivatedAtUtc is { } deactivatedAt)
+{
+    <div class="alert alert--neutral" role="note">
+        <icon name="info" />
+        <p class="alert__text">
+            Este cliente está inactivo desde el <time datetime="@DateDisplay.Iso(deactivatedAt)">@Dates.Long(deactivatedAt)</time>.
+            No aparece en el listado de activos, pero sus datos e historial se conservan.
+        </p>
+    </div>
+}
+
+<div class="detail-grid">
+    <section class="card" aria-labelledby="contact-title">
+        <header class="card__header">
+            <h2 class="card__title" id="contact-title">Contacto</h2>
+        </header>
+        <dl class="meta-list meta-list--stacked">
+            <div class="meta-list__row">
+                <dt><icon name="phone" />Teléfono</dt>
+                <dd><a class="link mono" href="@CustomerDisplay.PhoneHref(Model.Phone)">@Model.Phone</a></dd>
+            </div>
+            <div class="meta-list__row">
+                <dt><icon name="mail" />Correo electrónico</dt>
+                <dd>
+                    @if (Model.Email is { } email)
+                    {
+                        <a class="link" href="mailto:@email">@email</a>
+                    }
+                    else
+                    {
+                        <span class="meta-list__muted">Sin registrar</span>
+                    }
+                </dd>
+            </div>
+        </dl>
+    </section>
+
+    <section class="card" aria-labelledby="record-title">
+        <header class="card__header">
+            <h2 class="card__title" id="record-title">Registro</h2>
+        </header>
+        <dl class="meta-list meta-list--stacked">
+            <div class="meta-list__row">
+                <dt><icon name="calendar" />Registrado</dt>
+                <dd><time datetime="@DateDisplay.Iso(Model.CreatedAtUtc)">@Dates.Long(Model.CreatedAtUtc)</time></dd>
+            </div>
+            <div class="meta-list__row">
+                <dt><icon name="clock" />Última actualización</dt>
+                <dd>
+                    @if (Model.UpdatedAtUtc is { } updatedAt)
+                    {
+                        <time datetime="@DateDisplay.Iso(updatedAt)">@Dates.Long(updatedAt)</time>
+                    }
+                    else
+                    {
+                        <span class="meta-list__muted">Sin cambios desde el registro</span>
+                    }
+                </dd>
+            </div>
+        </dl>
+    </section>
+
+    <section class="card" aria-labelledby="notes-title">
+        <header class="card__header">
+            <h2 class="card__title" id="notes-title">Notas</h2>
+        </header>
+        @if (Model.Notes is { } notes)
+        {
+            <p class="card__body notes">@notes</p>
+        }
+        else
+        {
+            <p class="card__body meta-list__muted">Sin notas.</p>
+        }
+    </section>
+
+    <section class="card" aria-labelledby="devices-title">
+        <header class="card__header">
+            <h2 class="card__title" id="devices-title">Equipos</h2>
+            <span class="badge badge--neutral mono">@Model.DeviceCount</span>
+        </header>
+        <div class="card__body inline-empty">
+            <icon name="laptop" />
+            <p>
+                @if (Model.DeviceCount == 0)
+                {
+                    @:Este cliente aún no tiene equipos registrados.
+                }
+                else
+                {
+                    @:Este cliente tiene @Model.DeviceCount equipos registrados.
+                }
+                El registro de equipos estará disponible cuando se habilite el módulo Equipos.
+            </p>
+        </div>
+    </section>
+</div>
+
+@if (Model.IsActive)
+{
+    <dialog class="dialog" id="deactivate-dialog" aria-labelledby="deactivate-title" aria-describedby="deactivate-text">
+        <form method="post" asp-action="Deactivate" asp-route-id="@Model.Id" asp-antiforgery="true">
+            <div class="dialog__icon dialog__icon--danger"><icon name="user-x" /></div>
+            <h2 class="dialog__title" id="deactivate-title">¿Desactivar a @Model.FullName?</h2>
+            <p class="dialog__text" id="deactivate-text">
+                El cliente dejará de aparecer en el listado de activos. No se elimina ningún dato: su información,
+                equipos e historial se conservan y puedes reactivarlo en cualquier momento.
+            </p>
+            <div class="dialog__actions">
+                <button class="button button--secondary" type="button" data-dialog-close>Cancelar</button>
+                <button class="button button--danger" type="submit">Desactivar cliente</button>
+            </div>
+        </form>
+    </dialog>
+}

@@ -1,0 +1,175 @@
+@using FixTrack.Web.Models.Customers
+@model CustomerIndexViewModel
+@inject FixTrack.Web.Services.DateDisplay Dates
+@{
+    ViewData["Title"] = "Clientes";
+    var paging = Model.Result.Page;
+    var statusValue = CustomerIndexViewModel.StatusParameter(Model.Status);
+
+    (CustomerStatusFilter Filter, string Label, int Count)[] tabs =
+    [
+        (CustomerStatusFilter.Active, "Activos", Model.Result.ActiveCount),
+        (CustomerStatusFilter.Inactive, "Inactivos", Model.Result.InactiveCount),
+        (CustomerStatusFilter.All, "Todos", Model.Result.ActiveCount + Model.Result.InactiveCount),
+    ];
+
+    string PageUrl(int number) => Url.Action("Index", new
+    {
+        buscar = Model.SearchText,
+        estado = statusValue,
+        pagina = number > 1 ? number : (int?)null,
+    })!;
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">Clientes</h1>
+        <p class="page-description">Registro y datos de contacto de las personas y empresas que traen sus equipos al taller.</p>
+    </div>
+    @if (!Model.IsFirstUse)
+    {
+        <a class="button button--primary" asp-action="Create">
+            <icon name="plus" />
+            Nuevo cliente
+        </a>
+    }
+</header>
+
+@if (Model.IsFirstUse)
+{
+    <section class="table-card">
+        <div class="empty-state">
+            <div class="empty-state__icon"><icon name="users" /></div>
+            <h2 class="empty-state__title">Todavía no hay clientes registrados</h2>
+            <p class="empty-state__text">Registra a la persona o empresa que trae un equipo al taller. Después podrás asociarle equipos y órdenes de servicio.</p>
+            <div class="empty-state__actions">
+                <a class="button button--primary" asp-action="Create">
+                    <icon name="user-plus" />
+                    Registrar el primer cliente
+                </a>
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    <section class="table-card" aria-labelledby="customers-list-title">
+        <h2 class="visually-hidden" id="customers-list-title">Listado de clientes</h2>
+
+        <div class="toolbar">
+            <form class="search" method="get" asp-action="Index" role="search">
+                <label class="visually-hidden" for="buscar">Buscar clientes</label>
+                <icon name="search" class="search__icon" />
+                <input class="input search__input" type="search" id="buscar" name="buscar" value="@Model.SearchText"
+                       maxlength="@CustomerSearch.TextMaxLength" placeholder="Nombre, teléfono o correo" autocomplete="off" />
+                <input type="hidden" name="estado" value="@statusValue" />
+                <button class="button button--secondary" type="submit">Buscar</button>
+            </form>
+
+            <nav class="tabs" aria-label="Filtrar por estado">
+                @foreach (var tab in tabs)
+                {
+                    <a class="tabs__item" aria-current="@(tab.Filter == Model.Status ? "page" : null)"
+                       href="@Url.Action("Index", new { buscar = Model.SearchText, estado = CustomerIndexViewModel.StatusParameter(tab.Filter) })">
+                        @tab.Label
+                        <span class="tabs__count">@tab.Count</span>
+                    </a>
+                }
+            </nav>
+        </div>
+
+        @if (paging.TotalCount == 0)
+        {
+            <div class="empty-state empty-state--compact">
+                <div class="empty-state__icon"><icon name="search" /></div>
+                @if (Model.HasSearch)
+                {
+                    <h3 class="empty-state__title">No hay resultados para «@Model.SearchText»</h3>
+                    <p class="empty-state__text">Revisa la ortografía o busca por otro dato, como el teléfono o el correo electrónico.</p>
+                    <div class="empty-state__actions">
+                        <a class="button button--secondary" href="@Url.Action("Index", new { estado = statusValue })">Limpiar búsqueda</a>
+                    </div>
+                }
+                else
+                {
+                    <h3 class="empty-state__title">@(Model.Status == CustomerStatusFilter.Inactive ? "No hay clientes inactivos" : "No hay clientes activos")</h3>
+                    <p class="empty-state__text">Cambia el filtro de estado para ver el resto de clientes.</p>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="data-table data-table--interactive data-table--stack">
+                    <caption class="visually-hidden">Clientes, ordenados por nombre</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Cliente</th>
+                            <th scope="col">Teléfono</th>
+                            <th scope="col" class="data-table__numeric">Equipos</th>
+                            <th scope="col">Registrado</th>
+                            <th scope="col">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var customer in paging.Items)
+                        {
+                            <tr>
+                                <td data-label="Cliente">
+                                    <div class="person">
+                                        <span class="avatar" aria-hidden="true">@CustomerDisplay.Initials(customer.FullName)</span>
+                                        <span class="person__text">
+                                            <a class="person__name row-link" asp-action="Details" asp-route-id="@customer.Id">@customer.FullName</a>
+                                            <span class="person__meta">@(customer.Email ?? "Sin correo electrónico")</span>
+                                        </span>
+                                    </div>
+                                </td>
+                                <td data-label="Teléfono" class="mono">@customer.Phone</td>
+                                <td data-label="Equipos" class="data-table__numeric mono">@customer.DeviceCount</td>
+                                <td data-label="Registrado">
+                                    <time datetime="@FixTrack.Web.Services.DateDisplay.Iso(customer.CreatedAtUtc)">@Dates.Short(customer.CreatedAtUtc)</time>
+                                </td>
+                                <td data-label="Estado">
+                                    @if (customer.IsActive)
+                                    {
+                                        <span class="badge badge--accent">Activo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge badge--neutral">Inactivo</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <footer class="pagination">
+                <p class="pagination__summary">
+                    Mostrando <span class="mono">@paging.FirstItemNumber–@paging.LastItemNumber</span> de <span class="mono">@paging.TotalCount</span>
+                </p>
+                @if (paging.TotalPages > 1)
+                {
+                    <nav class="pagination__nav" aria-label="Paginación">
+                        @if (paging.HasPrevious)
+                        {
+                            <a class="button button--secondary button--small" href="@PageUrl(paging.Page - 1)" rel="prev">
+                                <icon name="chevron-left" />
+                                Anterior
+                            </a>
+                        }
+                        <span class="pagination__current">Página @paging.Page de @paging.TotalPages</span>
+                        @if (paging.HasNext)
+                        {
+                            <a class="button button--secondary button--small" href="@PageUrl(paging.Page + 1)" rel="next">
+                                Siguiente
+                                <icon name="chevron-right" />
+                            </a>
+                        }
+                    </nav>
+                }
+            </footer>
+        }
+    </section>
+}

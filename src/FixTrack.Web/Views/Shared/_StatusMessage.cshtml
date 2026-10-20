@@ -1,0 +1,15 @@
+@using FixTrack.Web.Services
+@{
+    var message = StatusMessage.Read(TempData);
+}
+@if (message is { } status)
+{
+    var isWarning = status.Kind == "warning";
+    <div class="alert @(isWarning ? "alert--warning" : "alert--success")" role="status" data-alert>
+        <icon name="@(isWarning ? "triangle-alert" : "circle-check")" />
+        <p class="alert__text">@status.Text</p>
+        <button class="icon-button alert__close" type="button" aria-label="Cerrar mensaje" data-alert-close>
+            <icon name="x" />
+        </button>
+    </div>
+}
