@@ -25,13 +25,21 @@ public sealed record PrioritizedOrder(OpenOrderSnapshot Order, WorkPriorityScore
 
 /// <summary>Órdenes abiertas repartidas en sus tres listas y ordenadas por el algoritmo de priorización.</summary>
 /// <param name="CalculatedAtUtc">Momento del cálculo: la antigüedad y los bonos de fecha dependen de él.</param>
-/// <param name="IsTruncated">Hay más órdenes abiertas que el máximo que se prioriza en una consulta.</param>
+/// <param name="Totals">Órdenes abiertas en cada lista. Cada lista muestra como máximo las de mayor puntuación.</param>
 public sealed record WorkQueueResult(
     IReadOnlyList<PrioritizedOrder> Repair,
     IReadOnlyList<PrioritizedOrder> AwaitingParts,
     IReadOnlyList<PrioritizedOrder> ReadyForPickup,
     DateTime CalculatedAtUtc,
-    bool IsTruncated)
+    IReadOnlyDictionary<WorkQueue, int> Totals)
 {
     public int Count => Repair.Count + AwaitingParts.Count + ReadyForPickup.Count;
+
+    public int TotalOf(WorkQueue queue) => Totals.GetValueOrDefault(queue);
+
+    /// <summary>¿Alguna lista tiene más órdenes de las que se muestran?</summary>
+    public bool IsTruncated =>
+        Repair.Count < TotalOf(WorkQueue.Repair)
+        || AwaitingParts.Count < TotalOf(WorkQueue.AwaitingParts)
+        || ReadyForPickup.Count < TotalOf(WorkQueue.ReadyForPickup);
 }

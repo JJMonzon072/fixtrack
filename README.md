@@ -424,7 +424,7 @@ Para desarrollar sin Somee se puede usar cualquier SQL Server 2022 compatible y 
 - **Las claves de Data Protection se guardan sin cifrar** en la tabla `DataProtectionKeys`. Quien tenga acceso de escritura a la base ya podría modificar cualquier dato, así que el riesgo depende de proteger la cadena de conexión. Una mejora futura es cifrarlas con un certificado.
 - **La regla "siempre queda un administrador habilitado" se verifica en la aplicación**, sin bloqueo. Si dos administradores se deshabilitan entre sí en el mismo instante, podrían quedar ambos deshabilitados. En ese caso, el comando `crear-administrador` vuelve a funcionar porque no queda ningún administrador habilitado.
 - **El aviso de cuenta bloqueada** confirma, tras 5 intentos fallidos, que el correo tiene una cuenta. Es el comportamiento estándar de Identity y se mantuvo para que el personal entienda por qué no puede entrar.
-- **La cola prioriza como máximo 500 órdenes abiertas** por consulta (las más antiguas) y muestra un aviso si hay más.
+- **Cada lista de la cola muestra como máximo 100 órdenes:** la base calcula la puntuación de todas las órdenes abiertas de la lista y devuelve las 100 más altas. La página indica el total y dónde ver las demás.
 - **Los buscadores con sugerencias y el selector de equipos de una nueva orden requieren JavaScript.** Sin JavaScript, se puede registrar desde el detalle del cliente o del equipo, que preseleccionan los datos.
 - **Un POST a una ruta inexistente responde 405** en lugar de 404.
 - **No incluye** facturación, cobros, inventario de repuestos, notificaciones al cliente ni reportes exportables: quedan fuera del alcance de la fase.

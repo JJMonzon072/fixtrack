@@ -127,6 +127,29 @@ public sealed class DashboardServiceTests
     }
 
     [Fact]
+    public async Task Each_list_shows_at_most_its_highest_scores_and_keeps_the_real_total()
+    {
+        var luis = AddTechnician("Luis Pérez");
+        var lowest = Enumerable.Range(0, 3).Select(_ => AddOrder(ServiceOrderPriority.Low, ServiceOrderStatus.Received, 0, null, luis)).ToList();
+        for (var order = 0; order < ServiceOrderService.MaxPerQueue; order++)
+        {
+            AddOrder(ServiceOrderPriority.High, ServiceOrderStatus.Diagnosing, order % 20, null, luis);
+        }
+
+        var parts = AddOrder(ServiceOrderPriority.Low, ServiceOrderStatus.AwaitingParts, 1, null, luis);
+
+        var queue = await _services.GetRequiredService<IServiceOrderService>().GetWorkQueueAsync(Token);
+
+        Assert.Equal(ServiceOrderService.MaxPerQueue, queue.Repair.Count);
+        Assert.Equal(ServiceOrderService.MaxPerQueue + lowest.Count, queue.TotalOf(WorkQueue.Repair));
+        Assert.DoesNotContain(queue.Repair, item => lowest.Any(order => order.Id == item.Order.Id));
+        Assert.Equal([parts.Id], queue.AwaitingParts.Select(item => item.Order.Id));
+        Assert.Equal(1, queue.TotalOf(WorkQueue.AwaitingParts));
+        Assert.Equal(0, queue.TotalOf(WorkQueue.ReadyForPickup));
+        Assert.True(queue.IsTruncated);
+    }
+
+    [Fact]
     public async Task Recommended_actions_combine_every_list_with_the_same_ranking()
     {
         var luis = AddTechnician("Luis Pérez");

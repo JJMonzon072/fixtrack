@@ -71,7 +71,7 @@ internal sealed class ServiceOrderConfiguration : IEntityTypeConfiguration<Servi
         builder.HasIndex(order => order.DeviceId).HasDatabaseName("IX_ServiceOrders_DeviceId");
         builder.HasIndex(order => order.TechnicianId).HasDatabaseName("IX_ServiceOrders_TechnicianId");
 
-        // Consulta principal de la priorización: órdenes por estado ordenadas por fecha comprometida.
+        // Cola de trabajo, panel y conteos: filtran por estado. La puntuación se calcula sobre las órdenes de esos estados.
         builder.HasIndex(order => new { order.Status, order.PromisedAtUtc })
             .HasDatabaseName("IX_ServiceOrders_Status_PromisedAtUtc");
 

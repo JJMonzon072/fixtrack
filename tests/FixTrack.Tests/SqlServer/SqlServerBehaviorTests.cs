@@ -7,8 +7,10 @@ using FixTrack.Domain.ServiceOrders;
 using FixTrack.Infrastructure.Persistence;
 using FixTrack.Infrastructure.Persistence.Repositories;
 using FixTrack.Tests.Application;
+using FixTrack.Tests.Infrastructure;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FixTrack.Tests.SqlServer;
@@ -108,6 +110,29 @@ public sealed class SqlServerBehaviorTests(DisposableSqlServerDatabase disposabl
         var error = await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlRawAsync(sql, [audit.Id], Token));
 
         Assert.Equal(50001, error.Number);
+    }
+
+    [Fact]
+    public async Task The_database_ranks_open_orders_exactly_like_the_prioritizer()
+    {
+        // Dentro de una transacción revertida: la rejilla no queda en la base.
+        await using var context = CreateContext(ConnectionString());
+        await using var transaction = await context.Database.BeginTransactionAsync(Token);
+        var now = new DateTime(2026, 10, 20, 15, 30, 45, 123, DateTimeKind.Utc);
+        var seeded = await PrioritizationGrid.SeedAsync(() => ShareTransaction(context), now, Token);
+
+        var ranked = await PrioritizationGrid.RankedByDatabaseAsync(context, now, take: 5000, Token);
+
+        Assert.True(seeded > 250);
+        Assert.Equal(PrioritizationGrid.ExpectedOrder(ranked, now), ranked.Select(order => order.Id));
+    }
+
+    /// <summary>Un contexto que usa la misma conexión y transacción que <paramref name="context"/>.</summary>
+    private static FixTrackDbContext ShareTransaction(FixTrackDbContext context)
+    {
+        var shared = CreateContext((SqlConnection)context.Database.GetDbConnection());
+        shared.Database.UseTransaction(context.Database.CurrentTransaction!.GetDbTransaction());
+        return shared;
     }
 
     [Fact]

@@ -200,13 +200,21 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
         return new CustomerServiceOrders(counts.Total, counts.Open, recent);
     }
 
-    public async Task<IReadOnlyList<OpenOrderSnapshot>> ListOpenAsync(int limit, CancellationToken cancellationToken) =>
+    public async Task<IReadOnlyList<OpenOrderSnapshot>> ListMostUrgentAsync(
+        IReadOnlyCollection<ServiceOrderStatus> statuses,
+        DateTime nowUtc,
+        int take,
+        CancellationToken cancellationToken) =>
         await db.ServiceOrders
             .AsNoTracking()
             .WhereOpen()
-            .OrderBy(order => order.ReceivedAtUtc)
+            .Where(order => statuses.Contains(order.Status))
+            .OrderByDescending(ServiceOrderQueries.PriorityScore(nowUtc))
+            .ThenBy(order => order.PromisedAtUtc == null)
+            .ThenBy(order => order.PromisedAtUtc)
+            .ThenBy(order => order.ReceivedAtUtc)
             .ThenBy(order => order.Id)
-            .Take(limit)
+            .Take(take)
             .Select(order => new OpenOrderSnapshot(
                 order.Id,
                 order.Status,
@@ -220,6 +228,14 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
                 order.Device.Brand,
                 order.Device.Model))
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<ServiceOrderStatus, int>> CountOpenByStatusAsync(CancellationToken cancellationToken) =>
+        await db.ServiceOrders
+            .AsNoTracking()
+            .WhereOpen()
+            .GroupBy(order => order.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(row => row.Status, row => row.Count, cancellationToken);
 
     public Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken) =>
         db.ServiceOrders.SingleOrDefaultAsync(order => order.Id == id, cancellationToken);

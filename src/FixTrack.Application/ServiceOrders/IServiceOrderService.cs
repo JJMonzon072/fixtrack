@@ -18,6 +18,9 @@ public interface IServiceOrderService
     /// <summary>Cola de trabajo: órdenes abiertas puntuadas con <see cref="Domain.ServiceOrders.WorkPrioritizer"/> en este momento.</summary>
     Task<WorkQueueResult> GetWorkQueueAsync(CancellationToken cancellationToken);
 
+    /// <summary>Las <paramref name="take"/> órdenes abiertas de mayor puntuación, de cualquier lista.</summary>
+    Task<IReadOnlyList<PrioritizedOrder>> GetMostUrgentAsync(int take, CancellationToken cancellationToken);
+
     /// <summary>Registra la recepción de un equipo. Si tiene éxito, devuelve el Id de la orden.</summary>
     Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken);
 

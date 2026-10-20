@@ -30,8 +30,11 @@ internal sealed class ServiceOrderService(
     internal const string ClosedMessage = "La orden está cerrada (entregada o cancelada) y ya no admite cambios.";
     internal const int RecentCustomerOrders = 10;
 
-    /// <summary>Máximo de órdenes abiertas que se priorizan en una consulta (el trabajo en curso de un taller).</summary>
-    internal const int MaxPrioritizedOrders = 500;
+    /// <summary>
+    /// Máximo de órdenes que muestra cada lista de la cola: las de mayor puntuación, elegidas por la base entre todas las
+    /// órdenes abiertas de la lista.
+    /// </summary>
+    internal const int MaxPerQueue = 100;
 
     private DateTime UtcNow => clock.GetUtcNow().UtcDateTime;
 
@@ -62,33 +65,57 @@ internal sealed class ServiceOrderService(
 
     public async Task<WorkQueueResult> GetWorkQueueAsync(CancellationToken cancellationToken)
     {
-        var now = UtcNow;
-        var open = await orders.ListOpenAsync(MaxPrioritizedOrders + 1, cancellationToken);
-        var scored = open
-            .Take(MaxPrioritizedOrders)
-            .Select(order => (Order: order, Score: WorkPrioritizer.Score(
-                order.Priority, order.Status, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId is not null, now)))
-            .ToList();
+        var now = PrioritizationNow();
+        var counts = await orders.CountOpenByStatusAsync(cancellationToken);
+        var totals = Enum.GetValues<WorkQueue>().ToDictionary(
+            queue => queue,
+            queue => StatusesOf(queue).Sum(status => counts.GetValueOrDefault(status)));
 
-        IReadOnlyList<PrioritizedOrder> Ranked(WorkQueue queue) =>
-        [
-            .. WorkPrioritizer
-                .Rank(
-                    scored.Where(item => item.Score.Queue == queue),
-                    item => item.Score.Total,
-                    item => item.Order.PromisedAtUtc,
-                    item => item.Order.ReceivedAtUtc,
-                    item => item.Order.Id)
-                .Select((item, index) => new PrioritizedOrder(item.Order, item.Score, index + 1)),
-        ];
+        async Task<IReadOnlyList<PrioritizedOrder>> ListAsync(WorkQueue queue) =>
+            totals[queue] == 0
+                ? []
+                : Ranked(await orders.ListMostUrgentAsync(StatusesOf(queue), now, MaxPerQueue, cancellationToken), now);
 
         return new WorkQueueResult(
-            Ranked(WorkQueue.Repair),
-            Ranked(WorkQueue.AwaitingParts),
-            Ranked(WorkQueue.ReadyForPickup),
+            await ListAsync(WorkQueue.Repair),
+            await ListAsync(WorkQueue.AwaitingParts),
+            await ListAsync(WorkQueue.ReadyForPickup),
             now,
-            open.Count > MaxPrioritizedOrders);
+            totals);
     }
+
+    public async Task<IReadOnlyList<PrioritizedOrder>> GetMostUrgentAsync(int take, CancellationToken cancellationToken)
+    {
+        var now = PrioritizationNow();
+        return Ranked(await orders.ListMostUrgentAsync(ServiceOrderWorkflow.OpenStatuses, now, take, cancellationToken), now);
+    }
+
+    /// <summary>
+    /// Instante del cálculo truncado a milisegundos, la precisión de las columnas: la base y <see cref="WorkPrioritizer"/>
+    /// comparan exactamente los mismos valores.
+    /// </summary>
+    private DateTime PrioritizationNow()
+    {
+        var now = UtcNow;
+        return now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMillisecond));
+    }
+
+    private static ServiceOrderStatus[] StatusesOf(WorkQueue queue) =>
+        [.. ServiceOrderWorkflow.OpenStatuses.Where(status => WorkPrioritizer.QueueFor(status) == queue)];
+
+    /// <summary>Puntúa las órdenes (con su explicación) y las ordena con los desempates del algoritmo.</summary>
+    private static IReadOnlyList<PrioritizedOrder> Ranked(IEnumerable<OpenOrderSnapshot> snapshots, DateTime now) =>
+    [
+        .. WorkPrioritizer
+            .Rank(
+                snapshots.Select(order => (Order: order, Score: WorkPrioritizer.Score(
+                    order.Priority, order.Status, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId is not null, now))),
+                item => item.Score.Total,
+                item => item.Order.PromisedAtUtc,
+                item => item.Order.ReceivedAtUtc,
+                item => item.Order.Id)
+            .Select((item, index) => new PrioritizedOrder(item.Order, item.Score, index + 1)),
+    ];
 
     public async Task<CommandResult<int>> CreateAsync(ServiceOrderInput input, CancellationToken cancellationToken)
     {

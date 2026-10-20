@@ -14,10 +14,18 @@ public interface IServiceOrderRepository
     Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, int take, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Órdenes abiertas para priorizarlas, como máximo <paramref name="limit"/>, empezando por las recibidas hace más
-    /// tiempo. Las órdenes abiertas son el trabajo en curso del taller, así que su cantidad es acotada.
+    /// Las órdenes abiertas más urgentes en los estados indicados, como máximo <paramref name="take"/>. La base calcula
+    /// la puntuación del algoritmo de priorización para <paramref name="nowUtc"/> y ordena con sus mismos desempates, así
+    /// que no hace falta cargar todas las órdenes abiertas para obtener las primeras.
     /// </summary>
-    Task<IReadOnlyList<OpenOrderSnapshot>> ListOpenAsync(int limit, CancellationToken cancellationToken);
+    Task<IReadOnlyList<OpenOrderSnapshot>> ListMostUrgentAsync(
+        IReadOnlyCollection<ServiceOrderStatus> statuses,
+        DateTime nowUtc,
+        int take,
+        CancellationToken cancellationToken);
+
+    /// <summary>Cantidad de órdenes abiertas en cada estado (una sola consulta agrupada).</summary>
+    Task<IReadOnlyDictionary<ServiceOrderStatus, int>> CountOpenByStatusAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Obtiene la orden para modificarla. Su historial no se carga: los cambios de estado solo agregan registros.

@@ -279,14 +279,29 @@ public sealed class FakeServiceOrderRepository(InMemoryStore store) : IServiceOr
     public Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, int take, CancellationToken cancellationToken) =>
         Task.FromResult(new CustomerServiceOrders(0, 0, []));
 
-    public Task<IReadOnlyList<OpenOrderSnapshot>> ListOpenAsync(int limit, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<OpenOrderSnapshot>>([.. store.ServiceOrders
-            .Where(order => !order.IsClosed)
-            .OrderBy(order => order.ReceivedAtUtc)
-            .Take(limit)
+    /// <summary>Mismo orden que la consulta real, calculado en memoria con <see cref="WorkPrioritizer"/>.</summary>
+    public Task<IReadOnlyList<OpenOrderSnapshot>> ListMostUrgentAsync(
+        IReadOnlyCollection<ServiceOrderStatus> statuses,
+        DateTime nowUtc,
+        int take,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OpenOrderSnapshot>>([.. WorkPrioritizer
+            .Rank(
+                store.ServiceOrders.Where(order => !order.IsClosed && statuses.Contains(order.Status)),
+                order => WorkPrioritizer.Score(order.Priority, order.Status, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId is not null, nowUtc).Total,
+                order => order.PromisedAtUtc,
+                order => order.ReceivedAtUtc,
+                order => order.Id)
+            .Take(take)
             .Select(order => new OpenOrderSnapshot(
                 order.Id, order.Status, order.Priority, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId,
                 order.Technician?.FullName, order.Device!.Customer!.FullName, order.Device.Type, order.Device.Brand, order.Device.Model))]);
+
+    public Task<IReadOnlyDictionary<ServiceOrderStatus, int>> CountOpenByStatusAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<ServiceOrderStatus, int>>(store.ServiceOrders
+            .Where(order => !order.IsClosed)
+            .GroupBy(order => order.Status)
+            .ToDictionary(group => group.Key, group => group.Count()));
 
     public Task<int?> FindIdByCreationRequestAsync(Guid requestId, CancellationToken cancellationToken) =>
         Task.FromResult(store.ServiceOrders.FirstOrDefault(order => order.CreationRequestId == requestId)?.Id);

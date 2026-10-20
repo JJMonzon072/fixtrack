@@ -23,17 +23,8 @@ internal sealed class DashboardService(
             return new DashboardSummary(counts, RecentDays, [], [], [], await ActiveWorkloadAsync(cancellationToken), now);
         }
 
-        var queue = await orders.GetWorkQueueAsync(cancellationToken);
-        // Las tres listas se combinan con el mismo criterio de orden del algoritmo de priorización.
-        var recommended = WorkPrioritizer
-            .Rank(
-                queue.Repair.Concat(queue.ReadyForPickup).Concat(queue.AwaitingParts),
-                item => item.Score.Total,
-                item => item.Order.PromisedAtUtc,
-                item => item.Order.ReceivedAtUtc,
-                item => item.Order.Id)
-            .Take(ItemsPerList)
-            .ToList();
+        // Las órdenes de mayor puntuación de las tres listas: la base elige solo las primeras.
+        var recommended = await orders.GetMostUrgentAsync(ItemsPerList, cancellationToken);
 
         return new DashboardSummary(
             counts,

@@ -42,20 +42,12 @@
     </a>
 </header>
 
-@if (Model.IsTruncated)
-{
-    <div class="alert alert--warning" role="status">
-        <icon name="triangle-alert" />
-        <p class="alert__text">Hay más órdenes abiertas de las que se priorizan en una consulta; se muestran las 500 recibidas hace más tiempo.</p>
-    </div>
-}
-
 <nav class="queue-summary" aria-label="Listas de la cola de trabajo">
     @foreach (var list in lists)
     {
         <a class="queue-summary__item" href="#@SectionId(list.Queue)">
             <span class="queue-summary__label">@DomainDisplay.Name(list.Queue)</span>
-            <span class="queue-summary__value mono">@list.Items.Count</span>
+            <span class="queue-summary__value mono">@Model.TotalOf(list.Queue)</span>
         </a>
     }
 </nav>
@@ -84,10 +76,21 @@ else
             <header class="queue-section__header">
                 <div class="card__title-row">
                     <h2 class="card__title" id="@SectionId(list.Queue)-title">@DomainDisplay.Name(list.Queue)</h2>
-                    <span class="badge badge--neutral mono">@list.Items.Count</span>
+                    <span class="badge badge--neutral mono">@Model.TotalOf(list.Queue)</span>
                 </div>
                 <p class="card__description">@list.Description</p>
             </header>
+            @if (list.Items.Count < Model.TotalOf(list.Queue))
+            {
+                <p class="card__note" role="status">
+                    <icon name="info" />
+                    <span>
+                        Se muestran las <span class="mono">@list.Items.Count</span> de mayor puntuación de
+                        <span class="mono">@Model.TotalOf(list.Queue)</span> órdenes. Las demás están en
+                        <a asp-controller="ServiceOrders" asp-action="Index">Órdenes</a>.
+                    </span>
+                </p>
+            }
             @if (list.Items.Count == 0)
             {
                 <div class="card__body inline-empty">
