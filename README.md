@@ -1,5 +1,7 @@
 # FixTrack
 
+[![CI](https://github.com/JJMonzon072/fixtrack/actions/workflows/ci.yml/badge.svg?branch=JJ)](https://github.com/JJMonzon072/fixtrack/actions/workflows/ci.yml)
+
 Sistema web de gestión y seguimiento de órdenes de servicio técnico para un taller dedicado al mantenimiento y la reparación de computadoras, laptops y otros equipos tecnológicos.
 
 Proyecto integrador de Programación II, desarrollado con C# y ASP.NET Core MVC.
@@ -56,7 +58,17 @@ Abre **http://localhost:5104** en el navegador.
 | Ejecutar con HTTPS | `dotnet dev-certs https --trust` (solo la primera vez) y después `dotnet run --project src/FixTrack.Web --launch-profile https` → https://localhost:7171 |
 | Ejecutar la compilación Release | `dotnet run --project src/FixTrack.Web -c Release` |
 
-Con el perfil `http` aparece en la consola la advertencia `Failed to determine the https port for redirect`. Es esperada: el perfil no expone un puerto HTTPS y la aplicación sigue funcionando.
+### HTTPS por entorno
+
+| Entorno | Redirección a HTTPS | HSTS |
+| --- | --- | --- |
+| Desarrollo con el perfil `http` (predeterminado) | No: el perfil no expone un puerto HTTPS al cual redirigir | No |
+| Desarrollo con el perfil `https` | Sí: `http://localhost:5104` → `https://localhost:7171` | No |
+| Cualquier otro entorno (Producción, Preproducción) | Siempre | Sí |
+
+La decisión se toma en `Program.cs` con `HttpsEndpoint.IsConfigured`. Esa función revisa las mismas fuentes que Kestrel: `ASPNETCORE_URLS`, `--urls`, `HTTPS_PORTS`, `HTTPS_PORT` y la sección `Kestrel:Endpoints`. Así el perfil `http` arranca sin la advertencia `Failed to determine the https port for redirect`.
+
+Si el certificado de desarrollo no es de confianza, Kestrel muestra `The ASP.NET Core developer certificate is not trusted` al usar el perfil `https`. Para resolverlo, ejecuta una vez `dotnet dev-certs https --trust`.
 
 ## Rutas disponibles
 
@@ -75,6 +87,7 @@ FixTrack sigue una **arquitectura por capas** con las dependencias apuntando hac
 
 ```
 fixtrack/
+├── .github/workflows/ci.yml     Integración continua (GitHub Actions)
 ├── FixTrack.sln
 ├── global.json                  Versión del SDK y runner de pruebas
 ├── Directory.Build.props        Configuración común (net10.0, nullable, advertencias como errores)
@@ -142,6 +155,7 @@ Cuando un módulo se implemente, basta con cambiar su estado a `ModuleStatus.Ava
 - **Recursos servidos localmente**, sin CDN: fuentes, íconos y estilos funcionan sin conexión. `MapStaticAssets` añade compresión y huellas de versión para la caché.
 - **Páginas de error propias** para el código 404 y las excepciones (`UseStatusCodePagesWithReExecute` y `UseExceptionHandler`), integradas en el diseño.
 - **Pruebas con xUnit v3 sobre Microsoft.Testing.Platform**, el runner recomendado para `dotnet test` desde el SDK de .NET 10 (se activa en `global.json`).
+- **Integración continua con GitHub Actions** (`.github/workflows/ci.yml`). Se ejecuta en cada push a `JJ` y en cada pull request hacia `main`: instala .NET 10, restaura, compila en Release y ejecuta todas las pruebas. Usa permisos de solo lectura, no necesita secretos y fija las acciones por SHA.
 
 ## Sistema de diseño
 
@@ -161,7 +175,7 @@ Toda la interfaz se construye desde `src/FixTrack.Web/wwwroot/css/site.css`, org
 dotnet test
 ```
 
-Hay 35 pruebas en `tests/FixTrack.Tests`:
+Hay 46 pruebas en `tests/FixTrack.Tests`:
 
 | Grupo | Archivo | Qué verifica |
 | --- | --- | --- |
@@ -169,6 +183,7 @@ Hay 35 pruebas en `tests/FixTrack.Tests`:
 | Aplicación | `Application/ModuleCatalogTests.cs` | El catálogo registra cada módulo una sola vez, devuelve el módulo pedido y documenta las funciones previstas |
 | Web (integración) | `Web/PageTests.cs` | Cada ruta responde 200 con HTML en español, el menú marca solo el módulo actual, los módulos pendientes muestran su estado vacío con la acción deshabilitada, el panel no presenta datos de ejemplo, una ruta inexistente devuelve 404 y los recursos estáticos se sirven con el tipo correcto |
 | Web (composición) | `Web/CompositionTests.cs` | Los servicios de las tres capas están registrados y el panel usa el reloj inyectado |
+| Web (HTTPS) | `Web/HttpsTests.cs` | Detección de endpoints HTTPS. En Desarrollo con `http` no hay redirección ni advertencia; con un endpoint HTTPS, y en Producción, hay redirección |
 
 Las pruebas de integración levantan la aplicación en memoria con `WebApplicationFactory`; no hace falta ejecutarla aparte.
 
