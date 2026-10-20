@@ -43,13 +43,9 @@ internal sealed class ModuleCatalog : IModuleCatalog
             new ModuleInfo(
                 ModuleKey.Technicians,
                 "Técnicos",
-                "Personal técnico del taller y su carga de trabajo.",
-                ModuleStatus.Planned,
-                [
-                    "Registro de técnicos y especialidades",
-                    "Asignación a órdenes de servicio",
-                    "Seguimiento de la carga de trabajo",
-                ]),
+                "Personal técnico del taller, su especialidad y su disponibilidad.",
+                ModuleStatus.Available,
+                []),
         ];
 
         _modulesByKey = Modules.ToDictionary(module => module.Key);

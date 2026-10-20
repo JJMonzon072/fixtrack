@@ -1,0 +1,80 @@
+@using FixTrack.Domain.Common
+@using FixTrack.Domain.Technicians
+@using FixTrack.Web.Models.Forms
+@using FixTrack.Web.Models.Technicians
+@model TechnicianEditorViewModel
+@{
+    var isNew = Model.IsNew;
+    ViewData["Title"] = isNew ? "Nuevo técnico" : "Editar técnico";
+    ViewData["ParentTitle"] = "Técnicos";
+    ViewData["ParentUrl"] = Url.Action("Index");
+
+    var form = Model.Form;
+    var errors = FormErrors.From(ViewData.ModelState,
+        (nameof(form.FullName), "Nombre completo", null),
+        (nameof(form.Specialty), "Especialidad", null),
+        (nameof(form.Phone), "Teléfono", null),
+        (nameof(form.Email), "Correo electrónico", null));
+
+    var cancelUrl = isNew ? Url.Action("Index") : Url.Action("Details", new { id = Model.TechnicianId });
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">@(isNew ? "Nuevo técnico" : "Editar técnico")</h1>
+        <p class="page-description">
+            @if (isNew)
+            {
+                @:Registra los datos de contacto y la especialidad del técnico. Se registra como activo.
+            }
+            else
+            {
+                @:Actualiza los datos de <strong>@Model.TechnicianName</strong>.
+            }
+        </p>
+    </div>
+</header>
+
+<div class="form-layout">
+    @* novalidate: la validación la hace el servidor, con mensajes en español y el mismo estilo en todos los navegadores. *@
+    <form class="form-card" method="post" novalidate asp-antiforgery="true"
+          asp-action="@(isNew ? "Create" : "Edit")" asp-route-id="@Model.TechnicianId">
+
+        <partial name="_ErrorSummary" model="errors" />
+
+        <div class="form-grid">
+            <partial name="_FormField" model='new FormField(nameof(form.FullName), "Nombre completo")
+            {
+                Value = form.FullName, Error = errors.For(nameof(form.FullName)),
+                MaxLength = ContactRules.NameMaxLength, Autocomplete = "name",
+            }' />
+            <partial name="_FormField" model='new FormField(nameof(form.Specialty), "Especialidad")
+            {
+                Value = form.Specialty, Error = errors.For(nameof(form.Specialty)),
+                Hint = "Por ejemplo: laptops y equipos de escritorio, impresoras, redes.",
+                MaxLength = TechnicianRules.SpecialtyMaxLength, Autocomplete = "off",
+            }' />
+            <partial name="_FormField" model='new FormField(nameof(form.Phone), "Teléfono")
+            {
+                Value = form.Phone, Error = errors.For(nameof(form.Phone)), Optional = true, Mono = true,
+                Hint = "De 7 a 15 dígitos. Incluye el código de país si no es local.",
+                InputType = "tel", InputMode = "tel", Autocomplete = "tel", MaxLength = ContactRules.PhoneMaxLength,
+            }' />
+            <partial name="_FormField" model='new FormField(nameof(form.Email), "Correo electrónico")
+            {
+                Value = form.Email, Error = errors.For(nameof(form.Email)), Optional = true,
+                Hint = "No puede estar registrado en otro técnico.",
+                InputType = "email", InputMode = "email", Autocomplete = "email", Spellcheck = false,
+                MaxLength = ContactRules.EmailMaxLength,
+            }' />
+        </div>
+
+        <footer class="form-card__actions">
+            <a class="button button--secondary" href="@cancelUrl">Cancelar</a>
+            <button class="button button--primary" type="submit">
+                <icon name="check" />
+                @(isNew ? "Registrar técnico" : "Guardar cambios")
+            </button>
+        </footer>
+    </form>
+</div>

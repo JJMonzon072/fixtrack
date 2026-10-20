@@ -2019,6 +2019,29 @@ button {
     overflow-wrap: anywhere;
 }
 
+/* Contadores reales (por ejemplo, órdenes de un técnico) */
+.stat-row {
+    display: flex;
+    gap: var(--space-8);
+    padding: 0 var(--space-4) var(--space-3);
+}
+
+.stat-row__item dt {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+}
+
+.stat-row__item dd {
+    font-size: var(--text-xl);
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.dialog__icon--warning {
+    background: var(--color-warning-subtle);
+    color: var(--color-warning-text);
+}
+
 /* 9. Utilidades ------------------------------------------------------------ */
 
 .mono {
@@ -2293,6 +2316,10 @@ button {
 
     .toolbar__filters .select {
         flex: 1;
+    }
+
+    .stat-row {
+        gap: var(--space-6);
     }
 }
 

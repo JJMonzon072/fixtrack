@@ -1,0 +1,145 @@
+@using FixTrack.Application.Technicians
+@using FixTrack.Web.Models.Technicians
+@model TechnicianIndexViewModel
+@{
+    ViewData["Title"] = "Técnicos";
+    var paging = Model.Result.Page;
+    var statusValue = StatusFilterQuery.ToParameter(Model.Status);
+
+    var tabs = new StatusTabsViewModel(Model.Status, Model.Result.ActiveCount, Model.Result.InactiveCount,
+        filter => Url.Action("Index", new { buscar = Model.SearchText, estado = StatusFilterQuery.ToParameter(filter) })!);
+
+    string PageUrl(int number) => Url.Action("Index", new
+    {
+        buscar = Model.SearchText,
+        estado = statusValue,
+        pagina = number > 1 ? number : (int?)null,
+    })!;
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">Técnicos</h1>
+        <p class="page-description">Personal técnico del taller, su especialidad y su disponibilidad para nuevas órdenes.</p>
+    </div>
+    @if (!Model.IsFirstUse)
+    {
+        <a class="button button--primary" asp-action="Create">
+            <icon name="plus" />
+            Nuevo técnico
+        </a>
+    }
+</header>
+
+@if (Model.IsFirstUse)
+{
+    <section class="table-card">
+        <div class="empty-state">
+            <div class="empty-state__icon"><icon name="wrench" /></div>
+            <h2 class="empty-state__title">Todavía no hay técnicos registrados</h2>
+            <p class="empty-state__text">Registra al personal que repara los equipos. Más adelante podrás asignarles órdenes de servicio.</p>
+            <div class="empty-state__actions">
+                <a class="button button--primary" asp-action="Create">
+                    <icon name="user-plus" />
+                    Registrar el primer técnico
+                </a>
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    <section class="table-card" aria-labelledby="technicians-list-title">
+        <h2 class="visually-hidden" id="technicians-list-title">Listado de técnicos</h2>
+
+        <div class="toolbar">
+            <form class="search" method="get" asp-action="Index" role="search">
+                <label class="visually-hidden" for="buscar">Buscar técnicos</label>
+                <icon name="search" class="search__icon" />
+                <input class="input search__input" type="search" id="buscar" name="buscar" value="@Model.SearchText"
+                       maxlength="@TechnicianSearch.TextMaxLength" placeholder="Nombre, especialidad, teléfono o correo" autocomplete="off" />
+                <input type="hidden" name="estado" value="@statusValue" />
+                <button class="button button--secondary" type="submit">Buscar</button>
+            </form>
+
+            <partial name="_StatusTabs" model="tabs" />
+        </div>
+
+        @if (paging.TotalCount == 0)
+        {
+            <div class="empty-state empty-state--compact">
+                <div class="empty-state__icon"><icon name="search" /></div>
+                @if (Model.HasSearch)
+                {
+                    <h3 class="empty-state__title">No hay resultados para «@Model.SearchText»</h3>
+                    <p class="empty-state__text">Busca por otro dato, como la especialidad, el teléfono o el correo electrónico.</p>
+                    <div class="empty-state__actions">
+                        <a class="button button--secondary" href="@Url.Action("Index", new { estado = statusValue })">Limpiar búsqueda</a>
+                    </div>
+                }
+                else
+                {
+                    <h3 class="empty-state__title">@(Model.Status == StatusFilter.Inactive ? "No hay técnicos inactivos" : "No hay técnicos activos")</h3>
+                    <p class="empty-state__text">Cambia el filtro de estado para ver el resto de técnicos.</p>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="data-table data-table--interactive data-table--stack data-table--technicians">
+                    <caption class="visually-hidden">Técnicos, ordenados por nombre</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Técnico</th>
+                            <th scope="col">Especialidad</th>
+                            <th scope="col">Teléfono</th>
+                            <th scope="col" class="data-table__numeric">Órdenes abiertas</th>
+                            <th scope="col">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var technician in paging.Items)
+                        {
+                            <tr>
+                                <td data-label="Técnico">
+                                    <div class="person">
+                                        <span class="avatar" aria-hidden="true">@ContactDisplay.Initials(technician.FullName)</span>
+                                        <span class="person__text">
+                                            <a class="person__name row-link" asp-action="Details" asp-route-id="@technician.Id">@technician.FullName</a>
+                                            <span class="person__meta">@(technician.Email ?? "Sin correo electrónico")</span>
+                                        </span>
+                                    </div>
+                                </td>
+                                <td data-label="Especialidad" data-indent>@technician.Specialty</td>
+                                <td data-label="Teléfono" data-hide-mobile>
+                                    @if (technician.Phone is { } phone)
+                                    {
+                                        <span class="mono">@phone</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="meta-list__muted">Sin teléfono</span>
+                                    }
+                                </td>
+                                <td data-label="Órdenes abiertas" class="data-table__numeric mono" data-hide-mobile>@technician.OpenOrderCount</td>
+                                <td data-label="Estado">
+                                    @if (technician.IsActive)
+                                    {
+                                        <span class="badge badge--accent">Activo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge badge--neutral">Inactivo</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <partial name="_Pagination" model="new PaginationViewModel(paging, PageUrl)" />
+        }
+    </section>
+}
