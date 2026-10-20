@@ -16,6 +16,8 @@ namespace FixTrack.Tests.Application;
 /// <summary>Panel y cola de trabajo con repositorios en memoria.</summary>
 public sealed class DashboardServiceTests
 {
+    private readonly FakeAuditLog _audit = new();
+
     private static readonly DateTimeOffset Now = new(2026, 10, 20, 15, 0, 0, TimeSpan.Zero);
 
     private readonly InMemoryStore _store = new();
@@ -33,6 +35,7 @@ public sealed class DashboardServiceTests
             .AddSingleton<ICustomerRepository>(new FakeCustomerRepository(_store))
             .AddSingleton<IUnitOfWork>(new FakeUnitOfWork(_store))
             .AddSingleton<ICurrentUser>(FakeCurrentUser.Instance)
+            .AddSingleton<IAuditLog>(_audit)
             .AddSingleton<TimeProvider>(new FixedClock(Now))
             .BuildServiceProvider();
     }

@@ -274,6 +274,46 @@ public sealed class AccountAdministrationTests(FixTrackWebApplicationFactory fac
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, reset.StatusCode);
     }
 
+    [Fact]
+    public async Task Account_changes_are_audited_with_their_author_and_without_passwords()
+    {
+        using var admin = await factory.CreateAuthenticatedClientAsync();
+        var email = NewEmail("auditada");
+        var initial = TestAccounts.RandomPassword();
+        await FormPost.SendAsync(admin, "/usuarios/nueva", new()
+        {
+            ["FullName"] = "Rosa Auditada",
+            ["Email"] = email,
+            ["Role"] = Roles.Operator,
+            ["Password"] = initial,
+            ["ConfirmPassword"] = initial,
+        });
+        string id;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            id = await IdAsync(scope.ServiceProvider.GetRequiredService<IUserAccountService>(), email);
+        }
+
+        var reset = TestAccounts.RandomPassword();
+        await FormPost.SendAsync(admin, $"/usuarios/{id}/contrasena", new() { ["Password"] = reset, ["ConfirmPassword"] = reset });
+        await FormPost.SendAsync(admin, $"/usuarios/{id}/deshabilitar", []);
+
+        await using var check = factory.Services.CreateAsyncScope();
+        var events = await check.ServiceProvider.GetRequiredService<FixTrackDbContext>().AuditEvents
+            .Where(audit => audit.EntityType == "cuenta" && audit.EntityId == id)
+            .OrderBy(audit => audit.Id)
+            .ToListAsync(Token);
+        Assert.Equal(["cuenta.creada", "cuenta.contrasena-restablecida", "cuenta.deshabilitada"], events.Select(audit => audit.Action));
+        Assert.All(events, audit =>
+        {
+            Assert.Equal(TestAccounts.Administrator.FullName, audit.UserName);
+            Assert.Contains(email, audit.Summary);
+            Assert.DoesNotContain(initial, audit.Summary);
+            Assert.DoesNotContain(reset, audit.Summary);
+        });
+        Assert.Contains("creada con rol Operador", events[0].Summary);
+    }
+
     private static WebApplicationFactory<Program> WithFailingValidator(ArmedFailure failure) =>
         new FixTrackWebApplicationFactory().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
             services.AddScoped<IUserValidator<FixTrackUser>>(_ => new FailingUserValidator(failure))));

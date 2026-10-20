@@ -1,4 +1,6 @@
+using System.Globalization;
 using FixTrack.Application.Common;
+using FixTrack.Domain.Auditing;
 using FixTrack.Domain.Common;
 using FixTrack.Domain.Technicians;
 
@@ -7,6 +9,7 @@ namespace FixTrack.Application.Technicians;
 internal sealed class TechnicianService(
     ITechnicianRepository technicians,
     IUnitOfWork unitOfWork,
+    IAuditLog audit,
     TimeProvider clock) : ITechnicianService
 {
     internal const string DuplicateEmailMessage = "Ya existe un técnico registrado con este correo electrónico.";
@@ -100,6 +103,7 @@ internal sealed class TechnicianService(
                     }
 
                     technician.Deactivate(UtcNow);
+                    Record(technician, AuditActions.TechnicianDeactivated, "desactivado");
                     await unitOfWork.SaveChangesAsync(token);
                     return CommandResult.Success();
                 },
@@ -119,6 +123,7 @@ internal sealed class TechnicianService(
         }
 
         technician.Reactivate(UtcNow);
+        Record(technician, AuditActions.TechnicianReactivated, "reactivado");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return CommandResult.Success();
     }
@@ -165,4 +170,7 @@ internal sealed class TechnicianService(
 
     private static Dictionary<string, string> EmailTaken() =>
         new() { [nameof(Technician.Email)] = DuplicateEmailMessage };
+
+    private void Record(Technician technician, string action, string what) =>
+        audit.Record(action, AuditActions.Technician, technician.Id.ToString(CultureInfo.InvariantCulture), $"Técnico {technician.FullName} {what}.");
 }

@@ -11,6 +11,15 @@ using FixTrack.Domain.Technicians;
 
 namespace FixTrack.Tests.Application;
 
+/// <summary>Registro de auditoría en memoria: guarda los eventos para comprobarlos.</summary>
+public sealed class FakeAuditLog : IAuditLog
+{
+    public List<(string Action, string EntityType, string EntityId, string Summary)> Events { get; } = [];
+
+    public void Record(string action, string entityType, string entityId, string summary) =>
+        Events.Add((action, entityType, entityId, summary));
+}
+
 /// <summary>Usuario fijo que hace las operaciones en las pruebas de casos de uso.</summary>
 public sealed class FakeCurrentUser : ICurrentUser
 {

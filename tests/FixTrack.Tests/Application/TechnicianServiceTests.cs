@@ -9,6 +9,8 @@ namespace FixTrack.Tests.Application;
 /// <summary>Casos de uso de técnicos con un repositorio en memoria: sin base de datos.</summary>
 public sealed class TechnicianServiceTests
 {
+    private readonly FakeAuditLog _audit = new();
+
     private static readonly DateTimeOffset Now = new(2026, 10, 19, 15, 0, 0, TimeSpan.Zero);
 
     private readonly InMemoryStore _store = new();
@@ -24,6 +26,7 @@ public sealed class TechnicianServiceTests
             .AddApplication()
             .AddSingleton<ITechnicianRepository>(_technicians)
             .AddSingleton<IUnitOfWork>(_unitOfWork)
+            .AddSingleton<IAuditLog>(_audit)
             .AddSingleton<TimeProvider>(new FixedClock(Now))
             .BuildServiceProvider()
             .GetRequiredService<ITechnicianService>();
@@ -98,6 +101,12 @@ public sealed class TechnicianServiceTests
         Assert.True(_store.Technicians[0].IsActive);
         Assert.Equal(CommandStatus.Conflict, (await _service.ReactivateAsync(id, Token)).Status);
         Assert.Single(_store.Technicians);
+
+        // Solo los cambios realizados quedan en la auditoría, no los intentos rechazados.
+        Assert.Equal(
+            [("tecnico.desactivado", id.ToString()), ("tecnico.reactivado", id.ToString())],
+            _audit.Events.Select(entry => (entry.Action, entry.EntityId)));
+        Assert.All(_audit.Events, entry => Assert.Equal("tecnico", entry.EntityType));
     }
 
     [Fact]

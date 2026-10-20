@@ -4,6 +4,7 @@ using FixTrack.Application.Customers;
 using FixTrack.Application.Devices;
 using FixTrack.Application.ServiceOrders;
 using FixTrack.Application.Technicians;
+using FixTrack.Domain.Auditing;
 using FixTrack.Domain.Customers;
 using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
@@ -15,6 +16,8 @@ namespace FixTrack.Tests.Application;
 /// <summary>Casos de uso de órdenes de servicio con repositorios en memoria: sin base de datos.</summary>
 public sealed class ServiceOrderServiceTests
 {
+    private readonly FakeAuditLog _audit = new();
+
     private static readonly DateTimeOffset Now = new(2026, 10, 19, 15, 0, 0, TimeSpan.Zero);
 
     private readonly InMemoryStore _store = new();
@@ -37,6 +40,7 @@ public sealed class ServiceOrderServiceTests
             .AddSingleton<ICustomerRepository>(new FakeCustomerRepository(_store))
             .AddSingleton<IUnitOfWork>(_unitOfWork)
             .AddSingleton<ICurrentUser>(FakeCurrentUser.Instance)
+            .AddSingleton<IAuditLog>(_audit)
             .AddSingleton<TimeProvider>(new FixedClock(Now))
             .BuildServiceProvider()
             .GetRequiredService<IServiceOrderService>();
@@ -318,6 +322,65 @@ public sealed class ServiceOrderServiceTests
         Assert.Equal(380m, order.FinalCost);
         Assert.Equal(29.50m, order.CostVariance);
         Assert.Equal(ServiceOrderStatus.Delivered, order.StatusHistory.Last().ToStatus);
+    }
+
+    [Fact]
+    public async Task Each_important_operation_leaves_one_audit_event()
+    {
+        var order = await CreateOrderAsync();
+        var second = AddTechnician("Andrea Castillo");
+        await _service.AssignTechnicianAsync(order.Id, _technician.Id, null, order.Version, Token);
+        await _service.AssignTechnicianAsync(order.Id, second.Id, "Luis está de vacaciones", order.Version, Token);
+        await _service.UpdatePlanAsync(order.Id, new(ServiceOrderPriority.Urgent, order.PromisedAtUtc, 500m), order.Version, Token);
+        await _service.ChangeStatusAsync(order.Id, new(ServiceOrderStatus.Diagnosing, null, null), order.Version, Token);
+        await _service.RecordDiagnosisAsync(order.Id, "Fuente dañada", order.Version, Token);
+        await _service.ChangeStatusAsync(order.Id, new(ServiceOrderStatus.Cancelled, "El cliente desistió", null), order.Version, Token);
+
+        Assert.All(_audit.Events, entry => Assert.Equal(("orden", order.Id.ToString()), (entry.EntityType, entry.EntityId)));
+        Assert.Equal(
+            [
+                AuditActions.OrderRegistered,
+                AuditActions.TechnicianAssigned,
+                AuditActions.TechnicianReassigned,
+                AuditActions.PlanChanged,
+                AuditActions.StatusChanged,
+                AuditActions.DiagnosisRecorded,
+                AuditActions.OrderCancelled,
+            ],
+            _audit.Events.Select(entry => entry.Action));
+        var summaries = _audit.Events.Select(entry => entry.Summary).ToList();
+        Assert.StartsWith($"{order.Number}: registrada para Dell", summaries[0]);
+        Assert.Contains("Reasignada de Luis Pérez a Andrea Castillo. Motivo: Luis está de vacaciones", summaries[2]);
+        Assert.Contains("Prioridad Alta → Urgente; costo estimado Q 350.50 → Q 500.00", summaries[3]);
+        Assert.Contains("Recibida → En diagnóstico.", summaries[4]);
+        Assert.Contains("Cancelada desde En diagnóstico. Motivo: El cliente desistió", summaries[6]);
+    }
+
+    [Fact]
+    public async Task A_delivery_records_the_final_and_estimated_cost()
+    {
+        var order = await DiagnosedOrderAsync();
+        await _service.ChangeStatusAsync(order.Id, new(ServiceOrderStatus.ReadyForPickup, null, null), order.Version, Token);
+
+        await _service.ChangeStatusAsync(order.Id, new(ServiceOrderStatus.Delivered, null, 380m), order.Version, Token);
+
+        var delivery = _audit.Events.Last();
+        Assert.Equal(AuditActions.OrderDelivered, delivery.Action);
+        Assert.Contains("Entregada con costo final Q 380.00 (estimado: Q 350.50)", delivery.Summary);
+    }
+
+    [Fact]
+    public async Task Rejected_or_unchanged_operations_leave_no_audit_event()
+    {
+        var order = await CreateOrderAsync();
+        var before = _audit.Events.Count;
+
+        await _service.ChangeStatusAsync(order.Id, new(ServiceOrderStatus.Delivered, null, 100m), order.Version, Token);
+        await _service.AssignTechnicianAsync(order.Id, null, null, order.Version, Token);
+        await _service.UpdatePlanAsync(order.Id, new(order.Priority, order.PromisedAtUtc, order.EstimatedCost), order.Version, Token);
+        await _service.UpdatePlanAsync(order.Id, new(ServiceOrderPriority.Urgent, null, null), version: 99, Token);
+
+        Assert.Equal(before, _audit.Events.Count);
     }
 
     [Fact]

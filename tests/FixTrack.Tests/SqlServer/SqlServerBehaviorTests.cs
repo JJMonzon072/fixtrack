@@ -6,6 +6,7 @@ using FixTrack.Application.Technicians;
 using FixTrack.Domain.ServiceOrders;
 using FixTrack.Infrastructure.Persistence;
 using FixTrack.Infrastructure.Persistence.Repositories;
+using FixTrack.Tests.Application;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -87,6 +88,24 @@ public sealed class SqlServerBehaviorTests(DisposableSqlServerDatabase disposabl
         Assert.SkipWhen(assignmentId == 0, "No hay asignaciones para probar el trigger.");
 
         var error = await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlRawAsync(sql, [assignmentId], Token));
+
+        Assert.Equal(50001, error.Number);
+    }
+
+    [Theory]
+    [InlineData("UPDATE [AuditEvents] SET [Summary] = N'modificado' WHERE [Id] = {0}")]
+    [InlineData("DELETE FROM [AuditEvents] WHERE [Id] = {0}")]
+    public async Task The_audit_log_rejects_updates_and_deletes(string sql)
+    {
+        await using var context = CreateContext(ConnectionString());
+        await using var transaction = await context.Database.BeginTransactionAsync(Token);
+
+        // Un evento propio dentro de la transacción revertida: la prueba no deja datos.
+        var audit = new FixTrack.Domain.Auditing.AuditEvent("prueba.trigger", "prueba", "1", "Evento de prueba.", FakeCurrentUser.Instance.Actor, DateTime.UtcNow);
+        context.AuditEvents.Add(audit);
+        await context.SaveChangesAsync(Token);
+
+        var error = await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlRawAsync(sql, [audit.Id], Token));
 
         Assert.Equal(50001, error.Number);
     }
@@ -228,6 +247,8 @@ public sealed class SqlServerBehaviorTests(DisposableSqlServerDatabase disposabl
             .AddApplication()
             .AddSingleton<ITechnicianRepository>(new TechnicianRepository(context))
             .AddSingleton<IUnitOfWork>(new EfUnitOfWork(context))
+            .AddSingleton<ICurrentUser>(FakeCurrentUser.Instance)
+            .AddSingleton<IAuditLog>(new EfAuditLog(context, FakeCurrentUser.Instance, TimeProvider.System))
             .AddSingleton(TimeProvider.System)
             .BuildServiceProvider()
             .GetRequiredService<ITechnicianService>();

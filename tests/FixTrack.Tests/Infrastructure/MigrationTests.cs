@@ -115,6 +115,21 @@ public sealed class MigrationTests
     }
 
     [Fact]
+    public void The_phase_4_audit_migration_only_adds_an_append_only_table()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: "20261020162649_ServiceOrderAuthorsAndAssignments",
+            toMigration: "20261020164604_AuditEvents");
+
+        Assert.Contains("CREATE TABLE [AuditEvents]", script);
+        Assert.Contains("TR_AuditEvents_AppendOnly", script);
+        Assert.Contains("CREATE INDEX [IX_AuditEvents_OccurredAtUtc]", script);
+        Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ALTER TABLE [", script.Replace("ALTER TABLE [AuditEvents]", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_identity_migration_creates_the_account_tables_and_both_roles()
     {
         using var context = CreateSqlServerContext();

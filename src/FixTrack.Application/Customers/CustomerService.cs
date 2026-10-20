@@ -1,4 +1,6 @@
+using System.Globalization;
 using FixTrack.Application.Common;
+using FixTrack.Domain.Auditing;
 using FixTrack.Domain.Common;
 using FixTrack.Domain.Customers;
 
@@ -7,6 +9,7 @@ namespace FixTrack.Application.Customers;
 internal sealed class CustomerService(
     ICustomerRepository customers,
     IUnitOfWork unitOfWork,
+    IAuditLog audit,
     TimeProvider clock) : ICustomerService
 {
     internal const string DuplicateEmailMessage = "Ya existe un cliente registrado con este correo electrónico.";
@@ -97,6 +100,7 @@ internal sealed class CustomerService(
         }
 
         customer.Deactivate(UtcNow);
+        Record(customer, AuditActions.CustomerDeactivated, "desactivado");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return CommandResult.Success();
     }
@@ -115,6 +119,7 @@ internal sealed class CustomerService(
         }
 
         customer.Reactivate(UtcNow);
+        Record(customer, AuditActions.CustomerReactivated, "reactivado");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return CommandResult.Success();
     }
@@ -162,4 +167,7 @@ internal sealed class CustomerService(
 
     private static Dictionary<string, string> EmailTaken() =>
         new() { [nameof(Customer.Email)] = DuplicateEmailMessage };
+
+    private void Record(Customer customer, string action, string what) =>
+        audit.Record(action, AuditActions.Customer, customer.Id.ToString(CultureInfo.InvariantCulture), $"Cliente {customer.FullName} {what}.");
 }

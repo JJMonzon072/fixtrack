@@ -9,6 +9,8 @@ namespace FixTrack.Tests.Application;
 /// <summary>Casos de uso de clientes con un repositorio en memoria: sin base de datos.</summary>
 public sealed class CustomerServiceTests
 {
+    private readonly FakeAuditLog _audit = new();
+
     private static readonly DateTimeOffset Now = new(2026, 10, 19, 15, 0, 0, TimeSpan.Zero);
 
     private readonly InMemoryStore _store = new();
@@ -24,6 +26,7 @@ public sealed class CustomerServiceTests
             .AddApplication()
             .AddSingleton<ICustomerRepository>(_repository)
             .AddSingleton<IUnitOfWork>(_unitOfWork)
+            .AddSingleton<IAuditLog>(_audit)
             .AddSingleton<TimeProvider>(new FixedClock(Now))
             .BuildServiceProvider()
             .GetRequiredService<ICustomerService>();
@@ -104,6 +107,7 @@ public sealed class CustomerServiceTests
         Assert.True((await _service.ReactivateAsync(created.Value, Token)).Succeeded);
         Assert.True(_store.Customers[0].IsActive);
         Assert.Single(_store.Customers);
+        Assert.Equal(["cliente.desactivado", "cliente.reactivado"], _audit.Events.Select(entry => entry.Action));
     }
 
     [Fact]

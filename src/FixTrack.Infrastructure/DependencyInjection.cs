@@ -54,6 +54,7 @@ public static class DependencyInjection
                 .EnableRetryOnFailure(maxRetryCount: 1, maxRetryDelay: TimeSpan.FromSeconds(1), errorNumbersToAdd: null)));
 
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+        services.AddScoped<IAuditLog, EfAuditLog>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
         services.AddScoped<ITechnicianRepository, TechnicianRepository>();

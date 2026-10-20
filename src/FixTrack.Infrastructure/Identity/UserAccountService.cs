@@ -1,5 +1,6 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Security;
+using FixTrack.Domain.Auditing;
 using FixTrack.Domain.Common;
 using FixTrack.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -22,6 +23,7 @@ internal sealed class UserAccountService(
     UserManager<FixTrackUser> users,
     FixTrackDbContext db,
     IUnitOfWork unitOfWork,
+    IAuditLog audit,
     TimeProvider clock) : IUserAccountService
 {
     internal const string FullNameField = "FullName";
@@ -79,7 +81,7 @@ internal sealed class UserAccountService(
     }
 
     public Task<CommandResult<string>> CreateAsync(NewUserAccountInput input, string actingUserId, CancellationToken cancellationToken) =>
-        AsAdministratorAsync(actingUserId, token => CreateAccountAsync(input, token), CommandResult<string>.Conflict, cancellationToken);
+        AsAdministratorAsync(actingUserId, token => CreateAccountAsync(input, AuditActions.AccountCreated, token), CommandResult<string>.Conflict, cancellationToken);
 
     public Task<CommandResult> UpdateAsync(string id, UserAccountInput input, string actingUserId, CancellationToken cancellationToken)
     {
@@ -120,10 +122,21 @@ internal sealed class UserAccountService(
                     return CommandResult.Conflict("Es el único administrador habilitado: asigna antes el rol de administrador a otra cuenta.");
                 }
 
+                var changes = new List<string>();
+                if (user.FullName != fullName)
+                {
+                    changes.Add($"nombre «{user.FullName}» → «{fullName}»");
+                }
+
+                if (roleChanges)
+                {
+                    changes.Add($"rol {currentRole ?? "sin rol"} → {input.Role}");
+                }
+
                 user.FullName = fullName;
                 if (!roleChanges)
                 {
-                    return Check(await users.UpdateAsync(user));
+                    return await AuditedAsync(Check(await users.UpdateAsync(user)), user, AuditActions.AccountEdited, changes, token);
                 }
 
                 // Quitar el rol anterior, agregar el nuevo y renovar el sello: todo dentro de la misma transacción.
@@ -137,7 +150,7 @@ internal sealed class UserAccountService(
                     return added;
                 }
 
-                return Check(await users.UpdateSecurityStampAsync(user));
+                return await AuditedAsync(Check(await users.UpdateSecurityStampAsync(user)), user, AuditActions.AccountEdited, changes, token);
             },
             CommandResult.Conflict,
             cancellationToken);
@@ -177,7 +190,12 @@ internal sealed class UserAccountService(
                 user.LockoutEnabled = true;
                 user.LockoutEnd = enabled ? null : DateTimeOffset.MaxValue;
                 user.AccessFailedCount = 0;
-                return Check(await users.UpdateSecurityStampAsync(user));
+                return await AuditedAsync(
+                    Check(await users.UpdateSecurityStampAsync(user)),
+                    user,
+                    enabled ? AuditActions.AccountEnabled : AuditActions.AccountDisabled,
+                    [enabled ? "habilitada" : "deshabilitada"],
+                    token);
             },
             CommandResult.Conflict,
             cancellationToken);
@@ -205,7 +223,7 @@ internal sealed class UserAccountService(
 
                 user.LockoutEnd = null;
                 user.AccessFailedCount = 0;
-                return Check(await users.UpdateAsync(user));
+                return await AuditedAsync(Check(await users.UpdateAsync(user)), user, AuditActions.AccountUnlocked, ["desbloqueada"], token);
             },
             CommandResult.Conflict,
             cancellationToken);
@@ -254,7 +272,7 @@ internal sealed class UserAccountService(
                 }
 
                 user.AccessFailedCount = 0;
-                return Check(await users.UpdateAsync(user));
+                return await AuditedAsync(Check(await users.UpdateAsync(user)), user, AuditActions.PasswordReset, ["contraseña restablecida"], token);
             },
             CommandResult.Conflict,
             cancellationToken);
@@ -343,7 +361,8 @@ internal sealed class UserAccountService(
                 }
 
                 outcome = InitialAdministratorOutcome.Created;
-                return await CreateAccountAsync(new NewUserAccountInput(fullName, email, Roles.Administrator, password, password), token);
+                return await CreateAccountAsync(
+                    new NewUserAccountInput(fullName, email, Roles.Administrator, password, password), AuditActions.InitialAdministrator, token);
             },
             CommandResult<string>.Conflict,
             cancellationToken);
@@ -384,7 +403,7 @@ internal sealed class UserAccountService(
             cancellationToken);
 
     /// <summary>Crea la cuenta y le asigna su rol; si algún paso falla, el resultado no exitoso revierte ambos.</summary>
-    private async Task<CommandResult<string>> CreateAccountAsync(NewUserAccountInput input, CancellationToken cancellationToken)
+    private async Task<CommandResult<string>> CreateAccountAsync(NewUserAccountInput input, string auditAction, CancellationToken cancellationToken)
     {
         var fullName = Text.Clean(input.FullName);
         var email = ContactRules.NormalizeEmail(input.Email);
@@ -419,9 +438,34 @@ internal sealed class UserAccountService(
         }
 
         var added = await users.AddToRoleAsync(user, input.Role!);
-        return added.Succeeded
-            ? CommandResult<string>.Success(user.Id)
-            : CommandResult<string>.Invalid(ToErrors(added, RoleField));
+        if (!added.Succeeded)
+        {
+            return CommandResult<string>.Invalid(ToErrors(added, RoleField));
+        }
+
+        await AuditedAsync(CommandResult.Success(), user, auditAction, [$"creada con rol {input.Role}"], cancellationToken);
+        return CommandResult<string>.Success(user.Id);
+    }
+
+    /// <summary>
+    /// Si el cambio salió bien, agrega el evento de auditoría y lo guarda en la misma transacción. Las operaciones de
+    /// Identity ya guardaron sus cambios; este guardado solo agrega el evento.
+    /// </summary>
+    private async Task<CommandResult> AuditedAsync(
+        CommandResult result,
+        FixTrackUser user,
+        string action,
+        IReadOnlyList<string> changes,
+        CancellationToken cancellationToken)
+    {
+        if (!result.Succeeded || changes.Count == 0)
+        {
+            return result;
+        }
+
+        audit.Record(action, AuditActions.Account, user.Id, $"Cuenta {user.Email}: {string.Join("; ", changes)}.");
+        await db.SaveChangesAsync(cancellationToken);
+        return result;
     }
 
     private Task<bool> IsEnabledAdministratorAsync(string userId, CancellationToken cancellationToken) =>

@@ -1,3 +1,4 @@
+using FixTrack.Domain.Auditing;
 using FixTrack.Domain.Customers;
 using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
@@ -28,6 +29,8 @@ public sealed class FixTrackDbContext(DbContextOptions<FixTrackDbContext> option
     public DbSet<ServiceOrderStatusChange> ServiceOrderStatusHistory => Set<ServiceOrderStatusChange>();
 
     public DbSet<ServiceOrderAssignment> ServiceOrderAssignments => Set<ServiceOrderAssignment>();
+
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     /// <summary>
     /// Claves de Data Protection. Guardarlas en la base permite que las sesiones sobrevivan a reinicios y
