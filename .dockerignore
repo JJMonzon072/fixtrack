@@ -1,0 +1,23 @@
+# Solo el código necesario para compilar: nada de resultados locales, secretos ni evidencias.
+**/bin/
+**/obj/
+.git/
+.github/
+.vs/
+.vscode/
+.idea/
+qa-evidence/
+docs/
+tests/
+*.md
+**/*.user
+**/appsettings.*.local.json
+**/appsettings.Local.json
+**/secrets.json
+**/.env
+**/.env.*
+**/*.pfx
+**/*.pem
+**/*.key
+Dockerfile
+.dockerignore

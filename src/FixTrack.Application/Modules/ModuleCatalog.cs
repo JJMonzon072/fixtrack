@@ -22,12 +22,14 @@ internal sealed class ModuleCatalog : IModuleCatalog
                 ModuleKey.ServiceOrders,
                 "Órdenes de servicio",
                 "Registro y seguimiento de cada reparación, desde la recepción del equipo hasta su entrega.",
-                ModuleStatus.Planned,
-                [
-                    "Registro de órdenes con diagnóstico inicial",
-                    "Asignación de técnicos, estados y prioridades",
-                    "Cálculo de costos y priorización por fecha de entrega",
-                ]),
+                ModuleStatus.Available,
+                []),
+            new ModuleInfo(
+                ModuleKey.WorkQueue,
+                "Cola de trabajo",
+                "Órdenes abiertas ordenadas por el algoritmo de priorización, con la acción recomendada para cada una.",
+                ModuleStatus.Available,
+                []),
             new ModuleInfo(
                 ModuleKey.Customers,
                 "Clientes",
@@ -44,6 +46,12 @@ internal sealed class ModuleCatalog : IModuleCatalog
                 ModuleKey.Technicians,
                 "Técnicos",
                 "Personal técnico del taller, su especialidad y su disponibilidad.",
+                ModuleStatus.Available,
+                []),
+            new ModuleInfo(
+                ModuleKey.Users,
+                "Usuarios",
+                "Cuentas de acceso al sistema y sus roles. Solo para administradores.",
                 ModuleStatus.Available,
                 []),
         ];

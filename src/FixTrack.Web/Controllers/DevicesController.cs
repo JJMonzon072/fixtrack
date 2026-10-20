@@ -3,13 +3,16 @@ using FixTrack.Application.Customers;
 using FixTrack.Application.Devices;
 using FixTrack.Web.Models;
 using FixTrack.Web.Models.Devices;
+using FixTrack.Web.Security;
 using FixTrack.Web.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FixTrack.Web.Controllers;
 
 /// <summary>Módulo Equipos: listado, búsqueda, registro, detalle y edición.</summary>
 [Route("equipos")]
+[Authorize(Policy = AuthorizationPolicies.Workshop)]
 public sealed class DevicesController(IDeviceService devices, ICustomerService customers) : Controller
 {
     [HttpGet("")]

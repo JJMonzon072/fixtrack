@@ -1,16 +1,20 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Application.Devices;
+using FixTrack.Application.ServiceOrders;
 using FixTrack.Web.Models;
 using FixTrack.Web.Models.Customers;
+using FixTrack.Web.Security;
 using FixTrack.Web.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FixTrack.Web.Controllers;
 
-/// <summary>Módulo Clientes: listado, búsqueda, registro, edición, desactivación y reactivación.</summary>
+/// <summary>Módulo Clientes: listado, búsqueda, registro, edición, desactivación y reactivación, con sus equipos y órdenes.</summary>
 [Route("clientes")]
-public sealed class CustomersController(ICustomerService customers, IDeviceService devices) : Controller
+[Authorize(Policy = AuthorizationPolicies.Workshop)]
+public sealed class CustomersController(ICustomerService customers, IDeviceService devices, IServiceOrderService orders) : Controller
 {
     [HttpGet("")]
     public async Task<IActionResult> Index(
@@ -30,6 +34,25 @@ public sealed class CustomersController(ICustomerService customers, IDeviceServi
     {
         var options = await customers.SuggestActiveAsync(search, cancellationToken);
         return Json(options.Select(option => new { option.Id, option.FullName, option.Phone, option.Email }));
+    }
+
+    /// <summary>Equipos del cliente para el selector del formulario de órdenes.</summary>
+    [HttpGet("{id:int}/equipos")]
+    public async Task<IActionResult> Devices(int id, CancellationToken cancellationToken)
+    {
+        if (await customers.GetOptionAsync(id, cancellationToken) is null)
+        {
+            return NotFound();
+        }
+
+        var customerDevices = await devices.ListByCustomerAsync(id, cancellationToken);
+        return Json(customerDevices.Select(device => new
+        {
+            device.Id,
+            Title = DomainDisplay.DeviceTitle(device.Brand, device.Model),
+            Type = DomainDisplay.Name(device.Type),
+            device.SerialNumber,
+        }));
     }
 
     [HttpGet("nuevo")]
@@ -59,7 +82,8 @@ public sealed class CustomersController(ICustomerService customers, IDeviceServi
         }
 
         var customerDevices = await devices.ListByCustomerAsync(id, cancellationToken);
-        return View(new CustomerDetailsViewModel(customer, customerDevices));
+        var customerOrders = await orders.ListByCustomerAsync(id, cancellationToken);
+        return View(new CustomerDetailsViewModel(customer, customerDevices, customerOrders));
     }
 
     [HttpGet("{id:int}/editar")]

@@ -13,12 +13,13 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
     [Theory]
     [InlineData("/", "Panel general")]
     [InlineData("/ordenes", "Órdenes de servicio")]
+    [InlineData("/cola-de-trabajo", "Cola de trabajo")]
     [InlineData("/clientes", "Clientes")]
     [InlineData("/equipos", "Equipos")]
     [InlineData("/tecnicos", "Técnicos")]
     public async Task Main_pages_respond_successfully_in_spanish(string url, string expectedHeading)
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync(url, CancellationToken);
         var html = await response.Content.ReadAsStringAsync(CancellationToken);
@@ -32,12 +33,14 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
     [Theory]
     [InlineData("/", "/")]
     [InlineData("/ordenes", "/ordenes")]
+    [InlineData("/ordenes/nueva", "/ordenes")]
+    [InlineData("/cola-de-trabajo", "/cola-de-trabajo")]
     [InlineData("/clientes", "/clientes")]
     [InlineData("/equipos", "/equipos")]
     [InlineData("/tecnicos", "/tecnicos")]
     public async Task Sidebar_marks_only_the_current_module_as_active(string url, string expectedHref)
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var html = await client.GetStringAsync(url, CancellationToken);
         var activeLinks = ActiveNavigationLink().Matches(html);
@@ -46,37 +49,23 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
         Assert.Contains($"href=\"{expectedHref}\"", activeLink.Value);
     }
 
-    [Theory]
-    [InlineData("/ordenes", "Nueva orden")]
-    public async Task Pending_modules_show_an_empty_state_with_a_disabled_action(string url, string actionLabel)
-    {
-        using var client = factory.CreateClient();
-
-        var html = await client.GetStringAsync(url, CancellationToken);
-
-        Assert.Contains("En preparación", html);
-        Assert.Contains("Este módulo se habilitará en una próxima fase", html);
-        var button = Assert.Single(PrimaryButton().Matches(html));
-        Assert.Contains(" disabled", button.Groups["attributes"].Value);
-        Assert.Contains(actionLabel, button.Value);
-    }
-
     [Fact]
-    public async Task Dashboard_does_not_present_sample_metrics()
+    public async Task Dashboard_metrics_are_numbers_from_the_database_not_placeholders()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var html = await client.GetStringAsync("/", CancellationToken);
+        var values = MetricValue().Matches(html).Select(match => match.Groups["value"].Value).ToList();
 
-        Assert.Contains("No se muestran datos de ejemplo", html);
-        Assert.Equal(4, MetricValue().Matches(html).Count);
-        Assert.All(MetricValue().Matches(html), match => Assert.Contains("Sin datos", match.Value));
+        Assert.Equal(6, values.Count);
+        Assert.All(values, value => Assert.Matches(@"^\d+$", value));
+        Assert.DoesNotContain("Sin datos", html);
     }
 
     [Fact]
     public async Task Unknown_routes_return_a_not_found_page()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync("/ruta-inexistente", CancellationToken);
         var html = await response.Content.ReadAsStringAsync(CancellationToken);
@@ -92,7 +81,7 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
     [InlineData("/fonts/ibm-plex-sans-latin-wght.woff2", "font/woff2")]
     public async Task Static_assets_are_served(string url, string expectedMediaType)
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         using var response = await client.GetAsync(url, CancellationToken);
 
@@ -103,9 +92,6 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
     [GeneratedRegex("<a class=\"nav-link\"[^>]*aria-current=\"page\"[^>]*>")]
     private static partial Regex ActiveNavigationLink();
 
-    [GeneratedRegex("<button class=\"button button--primary\"(?<attributes>[^>]*)>.*?</button>", RegexOptions.Singleline)]
-    private static partial Regex PrimaryButton();
-
-    [GeneratedRegex("<dd class=\"metric__value\">.*?</dd>", RegexOptions.Singleline)]
+    [GeneratedRegex("<dd class=\"metric__value\">(?<value>[^<]*)</dd>")]
     private static partial Regex MetricValue();
 }

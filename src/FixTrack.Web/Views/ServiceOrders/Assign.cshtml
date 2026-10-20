@@ -1,0 +1,92 @@
+@using FixTrack.Web.Models.Forms
+@using FixTrack.Web.Models.ServiceOrders
+@model ServiceOrderAssignViewModel
+@{
+    var order = Model.Order;
+    var current = order.Technician;
+    var title = current is null ? "Asignar técnico" : "Reasignar técnico";
+    ViewData["Title"] = title;
+    ViewData["ParentTitle"] = order.Number;
+    ViewData["ParentUrl"] = Url.Action("Details", new { id = order.Id });
+
+    var errors = FormErrors.From(ViewData.ModelState, ("TechnicianId", "Técnico", "technician-options"));
+    var error = errors.For("TechnicianId");
+    var maxLoad = Math.Max(1, Model.Technicians.Select(t => t.OpenOrderCount).DefaultIfEmpty(0).Max());
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">@title</h1>
+        <p class="page-description">
+            Elige al técnico responsable de la orden. Solo los técnicos activos pueden recibir asignaciones; junto a cada uno se muestra su carga actual.
+        </p>
+    </div>
+</header>
+
+<div class="form-layout">
+    <form class="form-card" method="post" novalidate asp-action="Assign" asp-route-id="@order.Id" asp-antiforgery="true">
+        <partial name="_OrderContext" model="order" />
+        <partial name="_ErrorSummary" model="errors" />
+
+        <div class="form-grid">
+            @if (Model.Technicians.Count == 0)
+            {
+                <div class="field field--wide inline-empty">
+                    <icon name="wrench" />
+                    <p>
+                        No hay técnicos activos.
+                        <a class="link" asp-controller="Technicians" asp-action="Index">Registra o reactiva un técnico</a> para asignarle la orden.
+                    </p>
+                </div>
+            }
+            else
+            {
+                <fieldset class="field field--wide" aria-describedby="@(error is null ? null : "TechnicianId-error")">
+                    <legend class="field__label">Técnico responsable</legend>
+                    <div class="choice-list" id="technician-options">
+                        @foreach (var technician in Model.Technicians)
+                        {
+                            var isCurrent = technician.Id == current?.Id;
+                            var load = technician.OpenOrderCount;
+                            <label class="choice@(isCurrent ? " choice--disabled" : string.Empty)">
+                                <input type="radio" name="TechnicianId" value="@technician.Id" disabled="@isCurrent"
+                                       checked="@(!isCurrent && technician.Id == Model.SelectedTechnicianId)" />
+                                <span class="choice__body">
+                                    <span class="choice__title">
+                                        @technician.FullName
+                                        @if (isCurrent)
+                                        {
+                                            <span class="badge badge--accent">Asignado actualmente</span>
+                                        }
+                                    </span>
+                                    <span class="choice__text">@technician.Specialty</span>
+                                </span>
+                                <span class="choice__aside workload">
+                                    <span>@(load == 1 ? "1 orden abierta" : $"{load} órdenes abiertas")</span>
+                                    <svg class="workload__bar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                                        <rect class="workload__track" width="100" height="6" rx="3" />
+                                        <rect class="workload__fill" width="@(load * 100 / maxLoad)" height="6" rx="3" />
+                                    </svg>
+                                </span>
+                            </label>
+                        }
+                    </div>
+                    @if (error is not null)
+                    {
+                        <p class="field__error" id="TechnicianId-error"><icon name="triangle-alert" />@error</p>
+                    }
+                </fieldset>
+            }
+        </div>
+
+        <input type="hidden" name="Version" value="@Model.Version" />
+
+        <footer class="form-card__actions">
+            <a class="button button--secondary" asp-action="Details" asp-route-id="@order.Id">Cancelar</a>
+            <button class="button button--primary" type="submit" disabled="@(Model.Technicians.Count == 0)">
+                <icon name="user-check" />
+                @(current is null ? "Asignar técnico" : "Reasignar")
+            </button>
+        </footer>
+    </form>
+</div>

@@ -2,7 +2,10 @@
 @using FixTrack.Web.Services
 @model TechnicianDetails
 @inject DateDisplay Dates
+@inject TimeProvider Clock
+@inject IAuthorizationService Authorization
 @{
+    var canManage = (await Authorization.AuthorizeAsync(User, AuthorizationPolicies.ManageTechnicians)).Succeeded;
     ViewData["Title"] = Model.FullName;
     ViewData["ParentTitle"] = "Técnicos";
     ViewData["ParentUrl"] = Url.Action("Index");
@@ -28,6 +31,8 @@
         </div>
     </div>
 
+    @if (canManage)
+    {
     <div class="page-header__actions">
         <a class="button button--secondary" asp-action="Edit" asp-route-id="@Model.Id">
             <icon name="pencil" />
@@ -50,6 +55,7 @@
             </form>
         }
     </div>
+    }
 </header>
 
 @if (!Model.IsActive && Model.DeactivatedAtUtc is { } deactivatedAt)
@@ -132,6 +138,13 @@
             <div class="card__title-row">
                 <h2 class="card__title" id="orders-title">Órdenes asignadas</h2>
             </div>
+            @if (Model.TotalOrderCount > 0)
+            {
+                <a class="button button--secondary button--small" asp-controller="ServiceOrders" asp-action="Index" asp-route-tecnico="@Model.Id" asp-route-vista="todas">
+                    <icon name="clipboard-list" />
+                    Ver todas sus órdenes
+                </a>
+            }
         </header>
         <dl class="stat-row">
             <div class="stat-row__item">
@@ -149,43 +162,22 @@
                 <icon name="clipboard-list" />
                 <p>
                     No tiene órdenes abiertas asignadas.
-                    La asignación de técnicos a órdenes estará disponible cuando se habilite el módulo Órdenes de servicio.
+                    @(Model.IsActive ? "Puede recibir asignaciones desde el detalle de cualquier orden abierta." : "Reactívalo para asignarle órdenes nuevas.")
                 </p>
             </div>
         }
         else
         {
-            <div class="table-scroll">
-                <table class="data-table">
-                    <caption class="visually-hidden">Órdenes abiertas asignadas, por fecha de entrega comprometida</caption>
-                    <thead>
-                        <tr>
-                            <th scope="col">Orden</th>
-                            <th scope="col">Estado</th>
-                            <th scope="col">Prioridad</th>
-                            <th scope="col">Recibida</th>
-                            <th scope="col">Entrega comprometida</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var order in Model.OpenOrders)
-                        {
-                            <tr>
-                                <td class="mono">@order.Number</td>
-                                <td><span class="badge @DomainDisplay.BadgeClass(order.Status)">@DomainDisplay.Name(order.Status)</span></td>
-                                <td>@DomainDisplay.Name(order.Priority)</td>
-                                <td>@Dates.Short(order.ReceivedAtUtc)</td>
-                                <td>@(order.PromisedAtUtc is { } promised ? Dates.Short(promised) : "Sin fecha")</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+            <partial name="_OrderSummaryTable" model='new OrderSummaryTableViewModel(Model.OpenOrders, Clock.GetUtcNow().UtcDateTime, "Órdenes abiertas asignadas, por fecha de entrega comprometida", ShowDevice: true, ShowCustomer: true, ShowTechnician: false)' />
+            @if (openOrders > Model.OpenOrders.Count)
+            {
+                <p class="card__footnote">Se muestran las @Model.OpenOrders.Count que vencen antes de @openOrders órdenes abiertas.</p>
+            }
         }
     </section>
 </div>
 
-@if (Model.IsActive)
+@if (Model.IsActive && canManage)
 {
     <dialog class="dialog" id="deactivate-dialog" aria-labelledby="deactivate-title" aria-describedby="deactivate-text">
         @if (openOrders > 0)

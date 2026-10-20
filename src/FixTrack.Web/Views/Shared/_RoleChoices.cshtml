@@ -1,0 +1,30 @@
+@using FixTrack.Application.Security
+@model RoleChoicesViewModel
+<fieldset class="field field--wide" aria-describedby="@(Model.Error is null ? null : "Role-error")">
+    <legend class="field__label">Rol</legend>
+    <div class="choice-list" id="Role">
+        @foreach (var (role, description) in new[]
+        {
+            (Roles.Operator, "Gestión operativa: clientes, equipos y órdenes. Consulta los técnicos, pero no los administra ni gestiona cuentas."),
+            (Roles.Administrator, "Administración completa: además de lo anterior, gestiona técnicos y cuentas de acceso."),
+        })
+        {
+            <label class="choice@(Model.Disabled ? " choice--disabled" : string.Empty)">
+                <input type="radio" name="Role" value="@role" checked="@(role == Model.Selected)" disabled="@Model.Disabled" />
+                <span class="choice__body">
+                    <span class="choice__title">@role</span>
+                    <span class="choice__text">@description</span>
+                </span>
+            </label>
+        }
+    </div>
+    @if (Model.Disabled && Model.Selected is { } current)
+    {
+        <input type="hidden" name="Role" value="@current" />
+        <p class="field__hint">No puedes cambiar el rol de tu propia cuenta.</p>
+    }
+    @if (Model.Error is not null)
+    {
+        <p class="field__error" id="Role-error"><icon name="triangle-alert" />@Model.Error</p>
+    }
+</fieldset>

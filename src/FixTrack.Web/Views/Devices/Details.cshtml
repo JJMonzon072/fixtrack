@@ -2,6 +2,7 @@
 @using FixTrack.Web.Services
 @model DeviceDetails
 @inject DateDisplay Dates
+@inject TimeProvider Clock
 @{
     var title = DomainDisplay.DeviceTitle(Model.Brand, Model.Model);
     ViewData["Title"] = title;
@@ -145,6 +146,13 @@
                 <h2 class="card__title" id="orders-title">Órdenes de servicio</h2>
                 <span class="badge badge--neutral mono">@Model.ServiceOrders.Count</span>
             </div>
+            @if (owner.IsActive)
+            {
+                <a class="button button--secondary button--small" asp-controller="ServiceOrders" asp-action="Create" asp-route-equipo="@Model.Id">
+                    <icon name="clipboard-plus" />
+                    Nueva orden
+                </a>
+            }
         </header>
         @if (Model.ServiceOrders.Count == 0)
         {
@@ -152,38 +160,13 @@
                 <icon name="clipboard-list" />
                 <p>
                     Este equipo todavía no tiene órdenes de servicio.
-                    Las reparaciones se registrarán cuando se habilite el módulo Órdenes de servicio.
+                    @(owner.IsActive ? "Registra una orden cuando el cliente lo traiga a reparar." : "Reactiva al cliente para registrarle órdenes nuevas.")
                 </p>
             </div>
         }
         else
         {
-            <div class="table-scroll">
-                <table class="data-table">
-                    <caption class="visually-hidden">Órdenes de servicio del equipo, de la más reciente a la más antigua</caption>
-                    <thead>
-                        <tr>
-                            <th scope="col">Orden</th>
-                            <th scope="col">Estado</th>
-                            <th scope="col">Prioridad</th>
-                            <th scope="col">Recibida</th>
-                            <th scope="col">Entrega comprometida</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var order in Model.ServiceOrders)
-                        {
-                            <tr>
-                                <td class="mono">@order.Number</td>
-                                <td><span class="badge @DomainDisplay.BadgeClass(order.Status)">@DomainDisplay.Name(order.Status)</span></td>
-                                <td>@DomainDisplay.Name(order.Priority)</td>
-                                <td>@Dates.Short(order.ReceivedAtUtc)</td>
-                                <td>@(order.PromisedAtUtc is { } promised ? Dates.Short(promised) : "Sin fecha")</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+            <partial name="_OrderSummaryTable" model='new OrderSummaryTableViewModel(Model.ServiceOrders, Clock.GetUtcNow().UtcDateTime, "Órdenes de servicio del equipo, de la más reciente a la más antigua")' />
         }
     </section>
 </div>

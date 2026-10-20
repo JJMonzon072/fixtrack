@@ -1,7 +1,9 @@
 @using FixTrack.Application.Technicians
 @using FixTrack.Web.Models.Technicians
 @model TechnicianIndexViewModel
+@inject IAuthorizationService Authorization
 @{
+    var canManage = (await Authorization.AuthorizeAsync(User, AuthorizationPolicies.ManageTechnicians)).Succeeded;
     ViewData["Title"] = "Técnicos";
     var paging = Model.Result.Page;
     var statusValue = StatusFilterQuery.ToParameter(Model.Status);
@@ -22,7 +24,7 @@
         <h1 class="page-title">Técnicos</h1>
         <p class="page-description">Personal técnico del taller, su especialidad y su disponibilidad para nuevas órdenes.</p>
     </div>
-    @if (!Model.IsFirstUse)
+    @if (!Model.IsFirstUse && canManage)
     {
         <a class="button button--primary" asp-action="Create">
             <icon name="plus" />
@@ -37,13 +39,20 @@
         <div class="empty-state">
             <div class="empty-state__icon"><icon name="wrench" /></div>
             <h2 class="empty-state__title">Todavía no hay técnicos registrados</h2>
-            <p class="empty-state__text">Registra al personal que repara los equipos. Más adelante podrás asignarles órdenes de servicio.</p>
-            <div class="empty-state__actions">
-                <a class="button button--primary" asp-action="Create">
-                    <icon name="user-plus" />
-                    Registrar el primer técnico
-                </a>
-            </div>
+            <p class="empty-state__text">Registra al personal que repara los equipos para poder asignarles órdenes de servicio.</p>
+            @if (canManage)
+            {
+                <div class="empty-state__actions">
+                    <a class="button button--primary" asp-action="Create">
+                        <icon name="user-plus" />
+                        Registrar el primer técnico
+                    </a>
+                </div>
+            }
+            else
+            {
+                <p class="empty-state__text">Solo un administrador puede registrar técnicos.</p>
+            }
         </div>
     </section>
 }

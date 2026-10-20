@@ -1,0 +1,20 @@
+@using FixTrack.Application.ServiceOrders
+@model ServiceOrderDetails
+<div class="order-context">
+    <div class="order-context__item">
+        <span class="order-context__label">Orden</span>
+        <a class="link mono" asp-controller="ServiceOrders" asp-action="Details" asp-route-id="@Model.Id">@Model.Number</a>
+    </div>
+    <div class="order-context__item">
+        <span class="order-context__label">Equipo</span>
+        <span>@DomainDisplay.DeviceTitle(Model.Device.Brand, Model.Device.Model)</span>
+    </div>
+    <div class="order-context__item">
+        <span class="order-context__label">Cliente</span>
+        <span>@Model.Customer.FullName</span>
+    </div>
+    <div class="order-context__item">
+        <span class="order-context__label">Estado actual</span>
+        <partial name="_OrderStatus" model="Model.Status" />
+    </div>
+</div>

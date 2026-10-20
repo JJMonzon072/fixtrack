@@ -1,0 +1,71 @@
+@using FixTrack.Web.Services
+@model OrderSummaryTableViewModel
+@inject DateDisplay Dates
+<div class="table-scroll">
+    <table class="data-table data-table--interactive data-table--stack data-table--related">
+        <caption class="visually-hidden">@Model.Caption</caption>
+        <thead>
+            <tr>
+                <th scope="col">Orden</th>
+                @if (Model.ShowDevice)
+                {
+                    <th scope="col">Equipo</th>
+                }
+                @if (Model.ShowCustomer)
+                {
+                    <th scope="col">Cliente</th>
+                }
+                @if (Model.ShowTechnician)
+                {
+                    <th scope="col">Técnico</th>
+                }
+                <th scope="col">Estado</th>
+                <th scope="col">Prioridad</th>
+                <th scope="col">Entrega comprometida</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var order in Model.Orders)
+            {
+                var overdue = FixTrack.Domain.ServiceOrders.ServiceOrderSchedule.IsOverdue(order.Status, order.PromisedAtUtc, Model.NowUtc);
+                <tr class="@(overdue ? "is-overdue" : null)">
+                    <td data-label="Orden" data-span>
+                        <span class="order-ref">
+                            <a class="order-ref__number row-link" asp-controller="ServiceOrders" asp-action="Details" asp-route-id="@order.Id">@order.Number</a>
+                            <span class="order-ref__meta">Recibida el @Dates.Short(order.ReceivedAtUtc)</span>
+                        </span>
+                    </td>
+                    @if (Model.ShowDevice)
+                    {
+                        <td data-label="Equipo" data-span>@DomainDisplay.DeviceTitle(order.DeviceBrand, order.DeviceModel)</td>
+                    }
+                    @if (Model.ShowCustomer)
+                    {
+                        <td data-label="Cliente" data-hide-mobile>@order.CustomerName</td>
+                    }
+                    @if (Model.ShowTechnician)
+                    {
+                        <td data-label="Técnico">
+                            @if (order.TechnicianName is { } technicianName)
+                            {
+                                <span class="assignee">
+                                    <span class="avatar avatar--small" aria-hidden="true">@ContactDisplay.Initials(technicianName)</span>
+                                    @technicianName
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="assignee assignee--empty"><span class="avatar avatar--small" aria-hidden="true">?</span>Sin asignar</span>
+                            }
+                        </td>
+                    }
+                    <td data-label="Estado" data-align-end><partial name="_OrderStatus" model="order.Status" /></td>
+                    <td data-label="Prioridad"><partial name="_OrderPriority" model="order.Priority" /></td>
+                    <td data-label="Entrega comprometida" data-align-end>
+                        <partial name="_OrderDue" model="new OrderDueViewModel(order.Status, order.PromisedAtUtc, order.DeliveredAtUtc, Model.NowUtc)" />
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

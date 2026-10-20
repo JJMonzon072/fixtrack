@@ -17,6 +17,16 @@ internal sealed class ServiceOrderConfiguration : IEntityTypeConfiguration<Servi
             table.HasCheckConstraint("CK_ServiceOrders_FinalCost", "[FinalCost] IS NULL OR [FinalCost] >= 0");
             table.HasCheckConstraint("CK_ServiceOrders_PromisedAt", "[PromisedAtUtc] IS NULL OR [PromisedAtUtc] >= [ReceivedAtUtc]");
 
+            // Toda asignación de técnico registra su fecha.
+            table.HasCheckConstraint(
+                "CK_ServiceOrders_TechnicianAssignment",
+                "([TechnicianId] IS NULL AND [TechnicianAssignedAtUtc] IS NULL) OR ([TechnicianId] IS NOT NULL AND [TechnicianAssignedAtUtc] IS NOT NULL)");
+
+            // El costo final se registra al entregar (estado 6) y solo entonces.
+            table.HasCheckConstraint(
+                "CK_ServiceOrders_FinalCost_OnDelivery",
+                "([Status] = 6 AND [FinalCost] IS NOT NULL) OR ([Status] <> 6 AND [FinalCost] IS NULL)");
+
             // La fecha de entrega existe solo cuando la orden está entregada (estado 6).
             table.HasCheckConstraint(
                 "CK_ServiceOrders_Delivery",
@@ -26,9 +36,16 @@ internal sealed class ServiceOrderConfiguration : IEntityTypeConfiguration<Servi
         builder.HasKey(order => order.Id);
         builder.Ignore(order => order.Number);
         builder.Ignore(order => order.IsClosed);
+        builder.Ignore(order => order.CostVariance);
 
-        builder.Property(order => order.ReportedIssue).HasMaxLength(ServiceOrder.ReportedIssueMaxLength);
-        builder.Property(order => order.Diagnosis).HasMaxLength(ServiceOrder.DiagnosisMaxLength);
+        builder.Property(order => order.ReportedIssue).HasMaxLength(ServiceOrderRules.ReportedIssueMaxLength);
+        builder.Property(order => order.IntakeNotes).HasMaxLength(ServiceOrderRules.IntakeNotesMaxLength);
+        builder.Property(order => order.Diagnosis).HasMaxLength(ServiceOrderRules.DiagnosisMaxLength);
+
+        // Concurrencia optimista: el UPDATE incluye "WHERE Version = <versión leída>". Si otra solicitud
+        // modificó la orden mientras tanto, no se actualiza ninguna fila y EF Core lanza
+        // DbUpdateConcurrencyException en lugar de sobrescribir el cambio ajeno.
+        builder.Property(order => order.Version).IsConcurrencyToken();
 
         builder.HasOne(order => order.Device)
             .WithMany()
@@ -52,5 +69,8 @@ internal sealed class ServiceOrderConfiguration : IEntityTypeConfiguration<Servi
         // Consulta principal de la priorización: órdenes por estado ordenadas por fecha comprometida.
         builder.HasIndex(order => new { order.Status, order.PromisedAtUtc })
             .HasDatabaseName("IX_ServiceOrders_Status_PromisedAtUtc");
+
+        // Orden predeterminado del listado y de las órdenes recibidas recientemente.
+        builder.HasIndex(order => order.ReceivedAtUtc).HasDatabaseName("IX_ServiceOrders_ReceivedAtUtc");
     }
 }

@@ -2,6 +2,7 @@
 @using FixTrack.Web.Services
 @model CustomerDetailsViewModel
 @inject DateDisplay Dates
+@inject TimeProvider Clock
 @{
     var customer = Model.Customer;
     ViewData["Title"] = customer.FullName;
@@ -181,6 +182,54 @@
                     </li>
                 }
             </ul>
+        }
+    </section>
+
+    <section class="card card--full" aria-labelledby="orders-title">
+        <header class="card__header">
+            <div class="card__title-row">
+                <h2 class="card__title" id="orders-title">Órdenes de servicio</h2>
+                <span class="badge badge--neutral mono">@Model.Orders.TotalCount</span>
+            </div>
+            <div class="card__header-actions">
+                @if (Model.Orders.TotalCount > Model.Orders.Recent.Count)
+                {
+                    <a class="button button--secondary button--small" asp-controller="ServiceOrders" asp-action="Index" asp-route-cliente="@customer.Id" asp-route-vista="todas">
+                        Ver todas
+                    </a>
+                }
+                @if (customer.IsActive && Model.Devices.Count > 0)
+                {
+                    <a class="button button--secondary button--small" asp-controller="ServiceOrders" asp-action="Create" asp-route-cliente="@customer.Id">
+                        <icon name="clipboard-plus" />
+                        Nueva orden
+                    </a>
+                }
+            </div>
+        </header>
+        @if (Model.Orders.TotalCount > 0)
+        {
+            <dl class="stat-row">
+                <div class="stat-row__item">
+                    <dt>Abiertas</dt>
+                    <dd class="mono">@Model.Orders.OpenCount</dd>
+                </div>
+                <div class="stat-row__item">
+                    <dt>Total histórico</dt>
+                    <dd class="mono">@Model.Orders.TotalCount</dd>
+                </div>
+            </dl>
+            <partial name="_OrderSummaryTable" model='new OrderSummaryTableViewModel(Model.Orders.Recent, Clock.GetUtcNow().UtcDateTime, "Órdenes de servicio del cliente, de la más reciente a la más antigua", ShowDevice: true)' />
+        }
+        else
+        {
+            <div class="card__body inline-empty">
+                <icon name="clipboard-list" />
+                <p>
+                    Este cliente todavía no tiene órdenes de servicio.
+                    @(Model.Devices.Count == 0 ? "Registra primero uno de sus equipos." : string.Empty)
+                </p>
+            </div>
         }
     </section>
 </div>

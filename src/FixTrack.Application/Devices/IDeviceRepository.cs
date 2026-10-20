@@ -16,6 +16,9 @@ public interface IDeviceRepository
     /// <summary>Obtiene el equipo para modificarlo.</summary>
     Task<Device?> FindAsync(int id, CancellationToken cancellationToken);
 
+    /// <summary>Obtiene el equipo junto con su propietario (por ejemplo, para registrarle una orden).</summary>
+    Task<Device?> FindWithOwnerAsync(int id, CancellationToken cancellationToken);
+
     /// <summary>Indica si otra unidad de la misma marca ya usa ese número de serie.</summary>
     Task<bool> SerialNumberExistsAsync(string brand, string serialNumber, int? excludingDeviceId, CancellationToken cancellationToken);
 

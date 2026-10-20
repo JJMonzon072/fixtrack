@@ -1,11 +1,13 @@
 using System.Diagnostics;
 using FixTrack.Web.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FixTrack.Web.Controllers;
 
 /// <summary>Páginas de error. Atiende las excepciones no controladas y los códigos de estado HTTP.</summary>
 [Route("error")]
+[AllowAnonymous]
 [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
 public sealed class ErrorController : Controller
 {
@@ -28,6 +30,18 @@ public sealed class ErrorController : Controller
                 "Página no encontrada",
                 "La dirección que buscas no existe o ya no está disponible.",
                 "compass",
+                RequestId: null),
+            StatusCodes.Status403Forbidden => new ErrorViewModel(
+                statusCode,
+                "No tienes permiso para esta acción",
+                "Tu cuenta no tiene el rol necesario. Si crees que deberías tenerlo, comunícate con el administrador del sistema.",
+                "lock",
+                RequestId: null),
+            StatusCodes.Status429TooManyRequests => new ErrorViewModel(
+                statusCode,
+                "Demasiados intentos",
+                "Por seguridad, espera un minuto antes de volver a intentarlo.",
+                "timer",
                 RequestId: null),
             >= 500 => new ErrorViewModel(
                 statusCode,

@@ -23,13 +23,15 @@ public sealed class PersistenceModelTests : IDisposable
         await using (var context = _database.CreateContext())
         {
             var customer = new Customer("Ana López", "5555-1234", "ana@example.com", null, Now);
+            var technician = new Technician("Luis Pérez", "Laptops", null, null, Now);
             context.Customers.Add(customer);
+            context.Technicians.Add(technician);
             await context.SaveChangesAsync(Token);
 
             var device = customer.RegisterDevice(DeviceType.Laptop, "Dell", "Latitude 5440", "SN-001", null, Now);
             await context.SaveChangesAsync(Token);
 
-            var order = new ServiceOrder(device.Id, "No enciende", ServiceOrderPriority.High, Now, Now.AddDays(2), 350.50m);
+            var order = new ServiceOrder(device, "No enciende", ServiceOrderPriority.High, Now, Now.AddDays(2), 350.50m, "Con cargador", technician);
             order.ChangeStatus(ServiceOrderStatus.Diagnosing, Now.AddHours(1));
             context.ServiceOrders.Add(order);
             await context.SaveChangesAsync(Token);
@@ -41,6 +43,9 @@ public sealed class PersistenceModelTests : IDisposable
         Assert.Equal(DateTimeKind.Utc, saved.ReceivedAtUtc.Kind);
         Assert.Equal(Now, saved.ReceivedAtUtc);
         Assert.Equal(350.50m, saved.EstimatedCost);
+        Assert.Equal("Con cargador", saved.IntakeNotes);
+        Assert.Equal(Now, saved.TechnicianAssignedAtUtc);
+        Assert.Equal(1, saved.Version);
         Assert.Equal(2, saved.StatusHistory.Count);
         Assert.All(saved.StatusHistory, entry => Assert.Equal(DateTimeKind.Utc, entry.ChangedAtUtc.Kind));
     }
@@ -143,7 +148,7 @@ public sealed class PersistenceModelTests : IDisposable
             await context.SaveChangesAsync(Token);
             var device = customer.RegisterDevice(DeviceType.Laptop, "Dell", null, null, null, Now);
             await context.SaveChangesAsync(Token);
-            context.ServiceOrders.Add(new ServiceOrder(device.Id, "No enciende", ServiceOrderPriority.Normal, Now, null, null));
+            context.ServiceOrders.Add(new ServiceOrder(device, "No enciende", ServiceOrderPriority.Normal, Now, null, null, null));
             customer.Deactivate(Now.AddDays(1));
             await context.SaveChangesAsync(Token);
             customerId = customer.Id;
@@ -164,7 +169,7 @@ public sealed class PersistenceModelTests : IDisposable
         await context.SaveChangesAsync(Token);
         var device = customer.RegisterDevice(DeviceType.Laptop, "Lenovo", null, null, null, Now);
         await context.SaveChangesAsync(Token);
-        context.ServiceOrders.Add(new ServiceOrder(device.Id, "Pantalla rota", ServiceOrderPriority.Normal, Now, null, null));
+        context.ServiceOrders.Add(new ServiceOrder(device, "Pantalla rota", ServiceOrderPriority.Normal, Now, null, null, null));
         await context.SaveChangesAsync(Token);
 
         await Assert.ThrowsAnyAsync<Exception>(() =>
@@ -172,4 +177,56 @@ public sealed class PersistenceModelTests : IDisposable
         await Assert.ThrowsAnyAsync<Exception>(() =>
             context.Database.ExecuteSqlRawAsync("UPDATE ServiceOrders SET EstimatedCost = -1", Token));
     }
+
+    [Theory]
+    [InlineData("UPDATE ServiceOrders SET FinalCost = 10")]
+    [InlineData("UPDATE ServiceOrders SET TechnicianAssignedAtUtc = NULL")]
+    [InlineData("UPDATE ServiceOrders SET Status = 6, DeliveredAtUtc = '2026-10-20 10:00:00'")]
+    public async Task The_database_rejects_inconsistent_assignments_and_final_costs(string sql)
+    {
+        await using var context = _database.CreateContext();
+        var customer = new Customer("Ana López", "5555-1234", null, null, Now);
+        var technician = new Technician("Luis Pérez", "Laptops", null, null, Now);
+        context.AddRange(customer, technician);
+        await context.SaveChangesAsync(Token);
+        var device = customer.RegisterDevice(DeviceType.Laptop, "Lenovo", null, null, null, Now);
+        context.ServiceOrders.Add(new ServiceOrder(device, "Pantalla rota", ServiceOrderPriority.Normal, Now, null, null, null, technician));
+        await context.SaveChangesAsync(Token);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => context.Database.ExecuteSqlRawAsync(sql, Token));
+    }
+
+    [Fact]
+    public async Task Concurrent_changes_to_the_same_order_are_detected()
+    {
+        int orderId;
+        await using (var setup = _database.CreateContext())
+        {
+            var customer = new Customer("Ana López", "5555-1234", null, null, Now);
+            setup.Customers.Add(customer);
+            await setup.SaveChangesAsync(Token);
+            var device = customer.RegisterDevice(DeviceType.Laptop, "Lenovo", null, null, null, Now);
+            var order = new ServiceOrder(device, "Pantalla rota", ServiceOrderPriority.Normal, Now, null, null, null);
+            setup.ServiceOrders.Add(order);
+            await setup.SaveChangesAsync(Token);
+            orderId = order.Id;
+        }
+
+        // Dos usuarios leen la misma versión de la orden y la modifican por separado.
+        await using var first = _database.CreateContext();
+        await using var second = _database.CreateContext();
+        var firstCopy = await first.ServiceOrders.SingleAsync(o => o.Id == orderId, Token);
+        var secondCopy = await second.ServiceOrders.SingleAsync(o => o.Id == orderId, Token);
+
+        firstCopy.UpdatePlan(ServiceOrderPriority.Urgent, null, 100m, Now.AddHours(1));
+        await first.SaveChangesAsync(Token);
+        secondCopy.UpdatePlan(ServiceOrderPriority.Low, null, 50m, Now.AddHours(2));
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync(Token));
+        await using var reader = _database.CreateContext();
+        var saved = await reader.ServiceOrders.SingleAsync(o => o.Id == orderId, Token);
+        Assert.Equal(ServiceOrderPriority.Urgent, saved.Priority);
+        Assert.Equal(1, saved.Version);
+    }
 }
+

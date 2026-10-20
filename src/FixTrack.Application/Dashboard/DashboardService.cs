@@ -1,0 +1,50 @@
+using FixTrack.Application.ServiceOrders;
+using FixTrack.Application.Technicians;
+using FixTrack.Domain.ServiceOrders;
+
+namespace FixTrack.Application.Dashboard;
+
+internal sealed class DashboardService(
+    IDashboardRepository dashboard,
+    IServiceOrderService orders,
+    ITechnicianRepository technicians,
+    TimeProvider clock) : IDashboardService
+{
+    internal const int RecentDays = 7;
+    internal const int ItemsPerList = 5;
+
+    public async Task<DashboardSummary> GetAsync(CancellationToken cancellationToken)
+    {
+        var now = clock.GetUtcNow().UtcDateTime;
+        var counts = await dashboard.CountOrdersAsync(now, now.AddDays(-RecentDays), cancellationToken);
+        if (counts.Total == 0)
+        {
+            // Sin órdenes no hay nada más que consultar: el panel muestra ceros y estados vacíos.
+            return new DashboardSummary(counts, RecentDays, [], [], [], await ActiveWorkloadAsync(cancellationToken), now);
+        }
+
+        var queue = await orders.GetWorkQueueAsync(cancellationToken);
+        // Las tres listas se combinan con el mismo criterio de orden del algoritmo de priorización.
+        var recommended = WorkPrioritizer
+            .Rank(
+                queue.Repair.Concat(queue.ReadyForPickup).Concat(queue.AwaitingParts),
+                item => item.Score.Total,
+                item => item.Order.PromisedAtUtc,
+                item => item.Order.ReceivedAtUtc,
+                item => item.Order.Id)
+            .Take(ItemsPerList)
+            .ToList();
+
+        return new DashboardSummary(
+            counts,
+            RecentDays,
+            recommended,
+            await dashboard.ListUpcomingDeliveriesAsync(now, ItemsPerList, cancellationToken),
+            await dashboard.ListRecentlyReceivedAsync(ItemsPerList, cancellationToken),
+            await ActiveWorkloadAsync(cancellationToken),
+            now);
+    }
+
+    private async Task<IReadOnlyList<TechnicianWorkload>> ActiveWorkloadAsync(CancellationToken cancellationToken) =>
+        [.. (await technicians.ListWorkloadAsync(cancellationToken)).Where(technician => technician.IsActive)];
+}

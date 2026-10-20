@@ -1,0 +1,124 @@
+@using FixTrack.Domain.Common
+@using FixTrack.Infrastructure.Identity
+@using FixTrack.Web.Models.Account
+@using FixTrack.Web.Models.Forms
+@using FixTrack.Web.Services
+@model UserEditorViewModel
+@inject DateDisplay Dates
+@{
+    var account = Model.Account;
+    var form = Model.Form;
+    ViewData["Title"] = Model.IsNew ? "Nueva cuenta" : "Editar cuenta";
+    ViewData["ParentTitle"] = "Usuarios";
+    ViewData["ParentUrl"] = Url.Action("Index");
+
+    var errors = FormErrors.From(ViewData.ModelState,
+        ("FullName", "Nombre", null),
+        ("Email", "Correo electrónico", null),
+        ("Role", "Rol", "Role"),
+        ("Password", "Contraseña inicial", null),
+        ("ConfirmPassword", "Confirmación", null));
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">@(Model.IsNew ? "Nueva cuenta de acceso" : account!.FullName)</h1>
+        <p class="page-description">
+            @if (Model.IsNew)
+            {
+                @:El correo electrónico será el usuario para iniciar sesión. Define una contraseña inicial y compártela por un medio seguro.
+            }
+            else
+            {
+                @(account!.Email)
+            }
+        </p>
+    </div>
+</header>
+
+<div class="form-layout form-layout--stack">
+    <form class="form-card" method="post" novalidate asp-action="@(Model.IsNew ? "Create" : "Edit")" asp-route-id="@(account?.Id)" asp-antiforgery="true">
+        <partial name="_ErrorSummary" model="errors" />
+        <div class="form-grid">
+            <partial name="_FormField" model='new FormField("FullName", "Nombre")
+            {
+                Value = form.FullName, Error = errors.For("FullName"), Wide = !Model.IsNew,
+                MaxLength = FixTrackUser.FullNameMaxLength, Autocomplete = "off",
+            }' />
+            @if (Model.IsNew)
+            {
+                <partial name="_FormField" model='new FormField("Email", "Correo electrónico")
+                {
+                    Value = form.Email, Error = errors.For("Email"), InputType = "email", InputMode = "email",
+                    Autocomplete = "off", Spellcheck = false, MaxLength = ContactRules.EmailMaxLength,
+                }' />
+            }
+            <partial name="_RoleChoices" model='new RoleChoicesViewModel(form.Role, errors.For("Role"), Model.IsCurrentUser)' />
+            @if (Model.IsNew)
+            {
+                <partial name="_FormField" model='new FormField("Password", "Contraseña inicial")
+                {
+                    Error = errors.For("Password"), InputType = "password", Autocomplete = "new-password", Spellcheck = false, MaxLength = 128,
+                    Hint = $"Mínimo {IdentitySettings.MinPasswordLength} caracteres, con mayúsculas, minúsculas y números.",
+                }' />
+                <partial name="_FormField" model='new FormField("ConfirmPassword", "Repite la contraseña")
+                {
+                    Error = errors.For("ConfirmPassword"), InputType = "password", Autocomplete = "new-password", Spellcheck = false, MaxLength = 128,
+                }' />
+            }
+        </div>
+        <footer class="form-card__actions">
+            <a class="button button--secondary" asp-action="Index">Cancelar</a>
+            <button class="button button--primary" type="submit">
+                <icon name="check" />
+                @(Model.IsNew ? "Crear cuenta" : "Guardar cambios")
+            </button>
+        </footer>
+    </form>
+
+    @if (account is not null)
+    {
+        <section class="card form-side-card" aria-labelledby="access-title">
+            <header class="card__header">
+                <h2 class="card__title" id="access-title">Acceso</h2>
+                @if (!account.IsEnabled)
+                {
+                    <span class="status" data-status="cancelled">Deshabilitada</span>
+                }
+                else if (account.IsLockedOut)
+                {
+                    <span class="status" data-status="parts">Bloqueada temporalmente</span>
+                }
+                else
+                {
+                    <span class="status" data-status="ready">Habilitada</span>
+                }
+            </header>
+            <dl class="meta-list meta-list--stacked">
+                <div class="meta-list__row">
+                    <dt><icon name="calendar" />Creada</dt>
+                    <dd>@Dates.ShortWithTime(account.CreatedAtUtc)</dd>
+                </div>
+                <div class="meta-list__row">
+                    <dt><icon name="log-in" />Último acceso</dt>
+                    <dd>@(account.LastSignInAtUtc is { } lastSignIn ? Dates.ShortWithTime(lastSignIn) : "Nunca")</dd>
+                </div>
+            </dl>
+            <div class="card__actions">
+                <a class="button button--secondary button--small" asp-action="ResetPassword" asp-route-id="@account.Id">
+                    <icon name="key-round" />
+                    Restablecer contraseña
+                </a>
+                @if (!Model.IsCurrentUser)
+                {
+                    <form method="post" asp-action="@(account.IsEnabled ? "Disable" : "Enable")" asp-route-id="@account.Id" asp-antiforgery="true">
+                        <button class="button button--secondary button--small@(account.IsEnabled ? " button--danger-text" : string.Empty)" type="submit">
+                            <icon name="@(account.IsEnabled ? "user-x" : "user-check")" />
+                            @(account.IsEnabled ? "Deshabilitar cuenta" : "Habilitar cuenta")
+                        </button>
+                    </form>
+                }
+            </div>
+        </section>
+    }
+</div>

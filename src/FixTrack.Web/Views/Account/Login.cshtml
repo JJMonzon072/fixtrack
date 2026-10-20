@@ -1,0 +1,94 @@
+@using FixTrack.Web.Models.Account
+@model LoginViewModel
+@{
+    Layout = "_AuthLayout";
+    ViewData["Title"] = "Iniciar sesión";
+}
+
+<section class="auth__brand" aria-label="FixTrack">
+    <div class="auth__brand-top">
+        <span class="brand brand--inverse">
+            <partial name="_LogoMark" />
+            <span class="brand__text">
+                <span class="brand__name">FixTrack</span>
+                <span class="brand__tagline">Servicio técnico</span>
+            </span>
+        </span>
+    </div>
+
+    <div class="auth__pitch">
+        <p class="auth__headline">Cada reparación, del mostrador a la entrega.</p>
+        <p class="auth__lead">Órdenes de servicio, técnicos, prioridades y entregas del taller en un solo lugar.</p>
+        <ul class="auth__features" role="list">
+            <li><icon name="clipboard-list" />Órdenes con historial de estados de solo lectura</li>
+            <li><icon name="list-ordered" />Cola de trabajo ordenada por prioridad y fecha de entrega</li>
+            <li><icon name="shield-check" />Acceso por roles para administradores y operadores</li>
+        </ul>
+    </div>
+
+    <p class="auth__footnote">
+        Versión <span class="mono">@Model.Application.Version</span>
+        @if (Model.Application.IsDevelopment)
+        {
+            @:· @Model.Application.EnvironmentName
+        }
+    </p>
+</section>
+
+<section class="auth__panel">
+    <div class="auth__card">
+        <span class="auth__mobile-brand" aria-hidden="true"><partial name="_LogoMark" /></span>
+        <h1 class="auth__title">Iniciar sesión</h1>
+        <p class="auth__subtitle">Usa la cuenta que te asignó el administrador del taller.</p>
+
+        @if (Model.Notice is { } notice)
+        {
+            <div class="alert alert--success" role="status">
+                <icon name="circle-check" />
+                <p class="alert__text">@notice</p>
+            </div>
+        }
+
+        @if (Model.Error is { } error)
+        {
+            <div class="alert alert--danger" role="alert" id="login-error">
+                <icon name="triangle-alert" />
+                <p class="alert__text">@error</p>
+            </div>
+        }
+
+        @* novalidate: la validación la hace el servidor, con mensajes en español. *@
+        <form class="auth__form" method="post" novalidate asp-action="Login" asp-route-volver="@Model.ReturnUrl" asp-antiforgery="true">
+            <div class="field">
+                <label class="field__label" for="Email">Correo electrónico</label>
+                <input class="input" id="Email" name="Email" type="email" value="@Model.Email" required
+                       autocomplete="username" inputmode="email" spellcheck="false" autofocus maxlength="254"
+                       aria-invalid="@(Model.Error is null ? null : "true")" aria-describedby="@(Model.Error is null ? null : "login-error")" />
+            </div>
+
+            <div class="field">
+                <label class="field__label" for="Password">Contraseña</label>
+                <div class="password-field">
+                    <input class="input password-field__input" id="Password" name="Password" type="password" required
+                           autocomplete="current-password" maxlength="128"
+                           aria-invalid="@(Model.Error is null ? null : "true")" aria-describedby="@(Model.Error is null ? null : "login-error")" />
+                    <button class="icon-button password-field__toggle" type="button" data-password-toggle="Password"
+                            aria-label="Mostrar la contraseña" aria-pressed="false" hidden>
+                        <icon name="eye" class="password-field__show" />
+                        <icon name="eye-off" class="password-field__hide" />
+                    </button>
+                </div>
+            </div>
+
+            <button class="button button--primary button--large" type="submit">
+                <icon name="log-in" />
+                Iniciar sesión
+            </button>
+        </form>
+
+        <p class="auth__help">
+            <icon name="key-round" />
+            ¿Olvidaste tu contraseña? Pide al administrador del sistema que la restablezca.
+        </p>
+    </div>
+</section>

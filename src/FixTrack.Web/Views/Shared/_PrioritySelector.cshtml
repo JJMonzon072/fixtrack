@@ -1,0 +1,22 @@
+@using FixTrack.Domain.ServiceOrders
+@model PrioritySelectorViewModel
+@{
+    var describedBy = string.Join(' ', new[] { "Priority-hint", Model.Error is null ? null : "Priority-error" }.Where(id => id is not null));
+}
+<fieldset class="field field--wide" aria-describedby="@describedBy">
+    <legend class="field__label">Prioridad</legend>
+    <p class="field__hint" id="Priority-hint">Indica qué tan urgente es para el cliente. Se usa para ordenar la cola de trabajo.</p>
+    <div class="segmented" id="Priority" aria-invalid="@(Model.Error is null ? null : "true")">
+        @foreach (var priority in DomainDisplay.Priorities)
+        {
+            <label class="segmented__option" data-priority="@DomainDisplay.Slug(priority)">
+                <input type="radio" name="Priority" value="@((int)priority)" checked="@(priority == Model.Selected)" />
+                <span class="segmented__label"><icon name="@DomainDisplay.Icon(priority)" />@DomainDisplay.Name(priority)</span>
+            </label>
+        }
+    </div>
+    @if (Model.Error is not null)
+    {
+        <p class="field__error" id="Priority-error"><icon name="triangle-alert" />@Model.Error</p>
+    }
+</fieldset>

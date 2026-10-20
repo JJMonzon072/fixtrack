@@ -46,3 +46,42 @@ jobs:
 
       - name: Ejecutar las pruebas
         run: dotnet test --configuration Release --no-build
+
+  docker:
+    name: Construir y probar la imagen Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Construir la imagen (no se publica)
+        run: docker build --tag fixtrack:ci .
+
+      - name: Comprobar que la imagen se ejecuta sin privilegios
+        run: |
+          user="$(docker image inspect fixtrack:ci --format '{{.Config.User}}')"
+          echo "Usuario de la imagen: $user"
+          test "$user" != "" && test "$user" != "0" && test "$user" != "root"
+
+      - name: Probar el contenedor sin base de datos
+        run: |
+          # Cadena ficticia: la imagen no trae credenciales y el contenedor debe arrancar igual.
+          docker run --detach --name fixtrack --publish 8080:9000 \
+            --env PORT=9000 \
+            --env ConnectionStrings__FixTrack="Server=no-existe.invalid;Database=NoUsar;Encrypt=True;" \
+            fixtrack:ci
+          for attempt in $(seq 1 60); do
+            curl --silent --fail http://localhost:8080/salud > /dev/null && break
+            sleep 2
+          done
+          test "$(curl --silent http://localhost:8080/salud)" = "Healthy"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/salud/bd)" = "503"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/clientes)" = "302"
+
+      - name: Registro del contenedor
+        if: always()
+        run: docker logs fixtrack 2>&1 | tail -n 40 || true

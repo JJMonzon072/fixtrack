@@ -1,0 +1,261 @@
+@using FixTrack.Application.ServiceOrders
+@using FixTrack.Web.Models.ServiceOrders
+@using FixTrack.Web.Services
+@model ServiceOrderIndexViewModel
+@inject DateDisplay Dates
+@{
+    ViewData["Title"] = "Órdenes de servicio";
+    var query = Model.Query;
+    var paging = Model.Result.Page;
+    var counts = Model.Result.Counts;
+
+    (ServiceOrderView View, string Label, int Count)[] views =
+    [
+        (ServiceOrderView.Open, "Abiertas", counts.Open),
+        (ServiceOrderView.Overdue, "Vencidas", counts.Overdue),
+        (ServiceOrderView.Closed, "Cerradas", counts.Closed),
+        (ServiceOrderView.All, "Todas", counts.All),
+    ];
+
+    var statusOptions = ServiceOrderListQuery.StatusesFor(query.View);
+
+    // El filtro de técnico muestra los activos y, si está elegido, también uno inactivo.
+    var technicianOptions = Model.Technicians.Where(t => t.IsActive || t.Id == query.TechnicianId).ToList();
+
+    string Caption() => query.View is ServiceOrderView.Open or ServiceOrderView.Overdue
+        ? "Órdenes de servicio, por fecha de entrega comprometida"
+        : "Órdenes de servicio, de la más reciente a la más antigua";
+
+    string PageUrl(int number) => Url.Action("Index", query.RouteValues(page: number))!;
+
+    string EmptyTitle() => query.View switch
+    {
+        ServiceOrderView.Overdue => "No hay órdenes vencidas",
+        ServiceOrderView.Closed => "No hay órdenes cerradas",
+        _ => "No hay órdenes abiertas",
+    };
+
+    // El nombre se toma de los resultados: el filtro solo llega desde los enlaces de los detalles.
+    string RecordFilterLabel()
+    {
+        var first = paging.Items.FirstOrDefault();
+        return query.DeviceId is not null
+            ? first is null ? "Equipo seleccionado" : $"Equipo: {DomainDisplay.DeviceTitle(first.DeviceBrand, first.DeviceModel)}"
+            : first is null ? "Cliente seleccionado" : $"Cliente: {first.CustomerName}";
+    }
+
+    string EmptyText() => query.View == ServiceOrderView.Overdue
+        ? "Todas las órdenes abiertas están dentro de su fecha de entrega comprometida."
+        : "Cambia de vista para ver el resto de órdenes.";
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">Órdenes de servicio</h1>
+        <p class="page-description">Cada reparación, desde la recepción del equipo hasta su entrega, con su responsable, su estado y su historial.</p>
+    </div>
+    @if (!Model.IsFirstUse)
+    {
+        <a class="button button--primary" asp-action="Create">
+            <icon name="plus" />
+            Nueva orden
+        </a>
+    }
+</header>
+
+@if (Model.IsFirstUse)
+{
+    <section class="table-card">
+        <div class="empty-state">
+            <div class="empty-state__icon"><icon name="clipboard-list" /></div>
+            <h2 class="empty-state__title">Todavía no hay órdenes de servicio</h2>
+            <p class="empty-state__text">
+                Registra la recepción de un equipo para comenzar su seguimiento. Necesitas que el cliente y su equipo estén registrados;
+                el técnico puede asignarse después.
+            </p>
+            <div class="empty-state__actions">
+                <a class="button button--primary" asp-action="Create">
+                    <icon name="clipboard-plus" />
+                    Registrar la primera orden
+                </a>
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    <section class="table-card" aria-labelledby="orders-list-title">
+        <h2 class="visually-hidden" id="orders-list-title">Listado de órdenes de servicio</h2>
+
+        <div class="toolbar toolbar--views">
+            <nav class="tabs tabs--views" aria-label="Vistas de órdenes">
+                @foreach (var view in views)
+                {
+                    <a class="tabs__item" aria-current="@(view.View == query.View ? "page" : null)" href="@Url.Action("Index", query.RouteValues(view.View))">
+                        @view.Label
+                        <span class="tabs__count@(view.View == ServiceOrderView.Overdue && view.Count > 0 ? " tabs__count--alert" : string.Empty)">@view.Count</span>
+                    </a>
+                }
+            </nav>
+        </div>
+
+        @if (query.HasRecordFilter)
+        {
+            <div class="filter-chips">
+                <span class="filter-chip">
+                    <icon name="@(query.DeviceId is null ? "users" : "laptop")" />
+                    @RecordFilterLabel()
+                    <a class="filter-chip__remove" href="@Url.Action("Index", query.RouteValues(keepRecordFilter: false))" aria-label="Quitar el filtro de @(query.DeviceId is null ? "cliente" : "equipo")">
+                        <icon name="x" />
+                    </a>
+                </span>
+            </div>
+        }
+
+        <form class="toolbar" method="get" asp-action="Index" role="search">
+            @if (query.View != ServiceOrderView.Open)
+            {
+                <input type="hidden" name="vista" value="@DomainDisplay.Slug(query.View)" />
+            }
+            @if (query.CustomerId is { } customerFilter)
+            {
+                <input type="hidden" name="cliente" value="@customerFilter" />
+            }
+            @if (query.DeviceId is { } deviceFilter)
+            {
+                <input type="hidden" name="equipo" value="@deviceFilter" />
+            }
+            <div class="search">
+                <label class="visually-hidden" for="buscar">Buscar órdenes</label>
+                <icon name="search" class="search__icon" />
+                <input class="input search__input" type="search" id="buscar" name="buscar" value="@query.Text"
+                       maxlength="@ServiceOrderSearch.TextMaxLength" placeholder="Número, cliente, equipo o técnico" autocomplete="off" />
+            </div>
+            <div class="toolbar__filters toolbar__filters--wrap">
+                <label class="visually-hidden" for="estado">Estado</label>
+                <div class="select select--compact">
+                    <select class="input select__control" id="estado" name="estado" data-autosubmit>
+                        <option value="">Estado: todos</option>
+                        @foreach (var status in statusOptions)
+                        {
+                            <option value="@DomainDisplay.Slug(status)" selected="@(status == query.Status)">@DomainDisplay.Name(status)</option>
+                        }
+                    </select>
+                    <icon name="chevron-down" class="select__icon" />
+                </div>
+
+                <label class="visually-hidden" for="prioridad">Prioridad</label>
+                <div class="select select--compact">
+                    <select class="input select__control" id="prioridad" name="prioridad" data-autosubmit>
+                        <option value="">Prioridad: todas</option>
+                        @foreach (var priority in DomainDisplay.Priorities.Reverse())
+                        {
+                            <option value="@DomainDisplay.Slug(priority)" selected="@(priority == query.Priority)">@DomainDisplay.Name(priority)</option>
+                        }
+                    </select>
+                    <icon name="chevron-down" class="select__icon" />
+                </div>
+
+                <label class="visually-hidden" for="tecnico">Técnico</label>
+                <div class="select select--compact">
+                    <select class="input select__control" id="tecnico" name="tecnico" data-autosubmit>
+                        <option value="">Técnico: todos</option>
+                        <option value="@ServiceOrderListQuery.UnassignedValue" selected="@query.Unassigned">Sin asignar</option>
+                        @foreach (var technician in technicianOptions)
+                        {
+                            <option value="@technician.Id" selected="@(technician.Id == query.TechnicianId)">@technician.FullName@(technician.IsActive ? string.Empty : " (inactivo)")</option>
+                        }
+                    </select>
+                    <icon name="chevron-down" class="select__icon" />
+                </div>
+
+                <button class="button button--secondary" type="submit">Buscar</button>
+            </div>
+        </form>
+
+        @if (paging.TotalCount == 0)
+        {
+            <div class="empty-state empty-state--compact">
+                <div class="empty-state__icon"><icon name="@(query.HasFilters ? "search" : "clipboard-list")" /></div>
+                @if (query.HasFilters)
+                {
+                    <h3 class="empty-state__title">No hay órdenes que coincidan con los filtros</h3>
+                    <p class="empty-state__text">Prueba con otro número, cliente, equipo o técnico, o quita algunos filtros.</p>
+                    <div class="empty-state__actions">
+                        <a class="button button--secondary" href="@Url.Action("Index", new { vista = query.View == ServiceOrderView.Open ? null : DomainDisplay.Slug(query.View) })">Limpiar filtros</a>
+                    </div>
+                }
+                else
+                {
+                    <h3 class="empty-state__title">@EmptyTitle()</h3>
+                    <p class="empty-state__text">@EmptyText()</p>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="data-table data-table--interactive data-table--stack data-table--orders">
+                    <caption class="visually-hidden">@Caption()</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Orden</th>
+                            <th scope="col">Equipo y cliente</th>
+                            <th scope="col">Técnico</th>
+                            <th scope="col">Estado</th>
+                            <th scope="col">Prioridad</th>
+                            <th scope="col">Recibida</th>
+                            <th scope="col">Entrega comprometida</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var order in paging.Items)
+                        {
+                            var overdue = order.IsOverdueAt(Model.NowUtc);
+                            <tr class="@(overdue ? "is-overdue" : null)">
+                                <td data-label="Orden" data-span>
+                                    <span class="order-ref">
+                                        <a class="order-ref__number row-link" asp-action="Details" asp-route-id="@order.Id">@order.Number</a>
+                                        <span class="order-ref__meta">@DomainDisplay.Name(order.DeviceType)</span>
+                                    </span>
+                                </td>
+                                <td data-label="Equipo y cliente" data-span>
+                                    <span class="order-subject">
+                                        <span class="order-subject__title">@DomainDisplay.DeviceTitle(order.DeviceBrand, order.DeviceModel)</span>
+                                        <span class="order-subject__meta">@order.CustomerName</span>
+                                    </span>
+                                </td>
+                                <td data-label="Técnico">
+                                    @if (order.TechnicianName is { } technicianName)
+                                    {
+                                        <span class="assignee">
+                                            <span class="avatar avatar--small" aria-hidden="true">@ContactDisplay.Initials(technicianName)</span>
+                                            @technicianName
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="assignee assignee--empty">
+                                            <span class="avatar avatar--small" aria-hidden="true">?</span>
+                                            Sin asignar
+                                        </span>
+                                    }
+                                </td>
+                                <td data-label="Estado" data-align-end><partial name="_OrderStatus" model="order.Status" /></td>
+                                <td data-label="Prioridad"><partial name="_OrderPriority" model="order.Priority" /></td>
+                                <td data-label="Recibida" class="data-table__date" data-hide-mobile>
+                                    <time datetime="@DateDisplay.Iso(order.ReceivedAtUtc)">@Dates.Short(order.ReceivedAtUtc)</time>
+                                </td>
+                                <td data-label="Entrega comprometida" data-align-end>
+                                    <partial name="_OrderDue" model="new OrderDueViewModel(order.Status, order.PromisedAtUtc, order.DeliveredAtUtc, Model.NowUtc)" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <partial name="_Pagination" model="new PaginationViewModel(paging, PageUrl)" />
+        }
+    </section>
+}

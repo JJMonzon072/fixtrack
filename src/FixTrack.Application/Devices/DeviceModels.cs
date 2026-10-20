@@ -40,15 +40,20 @@ public sealed record CustomerDeviceItem(
     int ServiceOrderCount,
     DateTime CreatedAtUtc);
 
-/// <summary>Orden de servicio resumida, tal como se muestra en el detalle de un equipo o un técnico.</summary>
+/// <summary>Orden de servicio resumida, tal como se muestra en el detalle de un cliente, un equipo o un técnico.</summary>
 public sealed record ServiceOrderSummary(
     int Id,
     ServiceOrderStatus Status,
     ServiceOrderPriority Priority,
     DateTime ReceivedAtUtc,
-    DateTime? PromisedAtUtc)
+    DateTime? PromisedAtUtc,
+    DateTime? DeliveredAtUtc,
+    string DeviceBrand,
+    string? DeviceModel,
+    string CustomerName,
+    string? TechnicianName)
 {
-    public string Number => $"OS-{Id:D6}";
+    public string Number => ServiceOrder.FormatNumber(Id);
 }
 
 public sealed record DeviceDetails(

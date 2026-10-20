@@ -1,0 +1,56 @@
+@using FixTrack.Web.Models.Forms
+@using FixTrack.Web.Models.ServiceOrders
+@model ServiceOrderPlanViewModel
+@{
+    var order = Model.Order;
+    var form = Model.Form;
+    ViewData["Title"] = "Planificación";
+    ViewData["ParentTitle"] = order.Number;
+    ViewData["ParentUrl"] = Url.Action("Details", new { id = order.Id });
+
+    var errors = FormErrors.From(ViewData.ModelState,
+        (nameof(form.Priority), "Prioridad", null),
+        ("PromisedAtUtc", "Entrega comprometida", "PromisedAt"),
+        (nameof(form.EstimatedCost), "Costo estimado", null));
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">Planificación de la orden</h1>
+        <p class="page-description">
+            Ajusta la prioridad, la fecha de entrega acordada con el cliente y el costo estimado mientras la orden siga abierta.
+        </p>
+    </div>
+</header>
+
+<div class="form-layout">
+    <form class="form-card" method="post" novalidate asp-action="Plan" asp-route-id="@order.Id" asp-antiforgery="true">
+        <partial name="_OrderContext" model="order" />
+        <partial name="_ErrorSummary" model="errors" />
+
+        <div class="form-grid">
+            <partial name="_PrioritySelector" model="new PrioritySelectorViewModel(form.Priority, errors.For(nameof(form.Priority)))" />
+            <partial name="_FormField" model='new FormField("PromisedAt", "Entrega comprometida")
+            {
+                Value = form.PromisedAt, Error = errors.For("PromisedAtUtc"), Optional = true,
+                Hint = "Una fecha nueva no puede estar en el pasado. Déjala vacía si todavía no se acordó.", InputType = "datetime-local",
+            }' />
+            <partial name="_FormField" model='new FormField(nameof(form.EstimatedCost), "Costo estimado")
+            {
+                Value = form.EstimatedCost, Error = errors.For(nameof(form.EstimatedCost)), Optional = true, Mono = true,
+                Hint = "En quetzales, por ejemplo 350.00.", Prefix = "Q",
+                InputMode = "decimal", Autocomplete = "off", MaxLength = 16,
+            }' />
+        </div>
+
+        <input type="hidden" name="Version" value="@form.Version" />
+
+        <footer class="form-card__actions">
+            <a class="button button--secondary" asp-action="Details" asp-route-id="@order.Id">Cancelar</a>
+            <button class="button button--primary" type="submit">
+                <icon name="check" />
+                Guardar planificación
+            </button>
+        </footer>
+    </form>
+</div>

@@ -1,6 +1,8 @@
 using FixTrack.Application.Customers;
+using FixTrack.Application.Dashboard;
 using FixTrack.Application.Devices;
 using FixTrack.Application.Modules;
+using FixTrack.Application.ServiceOrders;
 using FixTrack.Application.Technicians;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,6 +17,8 @@ public static class DependencyInjection
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<IDeviceService, DeviceService>();
         services.AddScoped<ITechnicianService, TechnicianService>();
+        services.AddScoped<IServiceOrderService, ServiceOrderService>();
+        services.AddScoped<IDashboardService, DashboardService>();
 
         return services;
     }

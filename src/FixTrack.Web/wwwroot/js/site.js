@@ -1,4 +1,4 @@
-// FixTrack: comportamiento de la interfaz (menú lateral móvil y tema de color).
+// FixTrack: comportamiento de la interfaz. Todo funciona sin JavaScript; estas funciones mejoran la experiencia.
 (() => {
     "use strict";
 
@@ -221,12 +221,19 @@
                 selected.hidden = false;
             }
             close();
+            container.dispatchEvent(new CustomEvent("combobox:change", { bubbles: true, detail: { id: option.id } }));
         }
 
         // Escribir invalida la selección anterior: el servidor exige un cliente elegido de la lista.
         input.addEventListener("input", () => {
+            if (hidden.value) {
+                container.dispatchEvent(new CustomEvent("combobox:change", { bubbles: true, detail: { id: null } }));
+            }
             hidden.value = "";
             if (selected) selected.hidden = true;
+            // Los resultados anteriores ya no corresponden al texto: se ocultan hasta recibir los nuevos.
+            options = [];
+            close();
             clearTimeout(timer);
             timer = setTimeout(() => search(input.value.trim()), 200);
         });
@@ -247,6 +254,9 @@
             } else if (event.key === "Enter" && open && active >= 0) {
                 event.preventDefault();
                 choose(active);
+            } else if (event.key === "Enter" && !hidden.value) {
+                // Sin un cliente elegido, Enter no envía el formulario: todavía se está buscando.
+                event.preventDefault();
             } else if (event.key === "Escape" && open) {
                 event.preventDefault();
                 close();
@@ -262,6 +272,104 @@
         });
 
         input.addEventListener("blur", close);
+    }
+
+    // --- Equipos del cliente elegido (formulario de nueva orden) -------------
+
+    document.querySelectorAll("[data-device-field]").forEach((field) => {
+        const select = field.querySelector("select");
+        const hint = field.querySelector("[data-device-hint]");
+        const template = field.dataset.sourceTemplate;
+        const form = field.closest("form");
+        if (!select || !hint || !template || !form) return;
+
+        let pending;
+
+        function reset(message, disabled) {
+            select.replaceChildren(new Option("Selecciona el equipo", ""));
+            select.disabled = disabled;
+            hint.textContent = message;
+        }
+
+        async function load(customerId) {
+            pending?.abort();
+            if (!customerId) {
+                reset("Primero elige el cliente para ver sus equipos.", true);
+                return;
+            }
+
+            pending = new AbortController();
+            reset("Cargando los equipos del cliente…", true);
+            try {
+                const url = new URL(template.replace(/\/0\/equipos$/, `/${customerId}/equipos`), window.location.origin);
+                const response = await fetch(url, { signal: pending.signal, headers: { Accept: "application/json" } });
+                if (!response.ok) throw new Error(String(response.status));
+                const devices = await response.json();
+                if (devices.length === 0) {
+                    reset("Este cliente no tiene equipos registrados. Regístralo primero desde el módulo Equipos.", true);
+                    return;
+                }
+
+                reset("Equipos registrados a nombre del cliente.", false);
+                devices.forEach((device) => {
+                    const details = [device.title, device.type, device.serialNumber].filter(Boolean).join(" · ");
+                    select.append(new Option(details, String(device.id)));
+                });
+                if (devices.length === 1) select.value = String(devices[0].id);
+            } catch (error) {
+                if (error.name !== "AbortError") reset("No se pudieron cargar los equipos. Intenta de nuevo.", true);
+            }
+        }
+
+        form.addEventListener("combobox:change", (event) => load(event.detail.id));
+    });
+
+    // --- Cambio de estado: el costo final solo se pide al entregar -----------
+
+    document.querySelectorAll("[data-status-form]").forEach((form) => {
+        const conditional = form.querySelectorAll("[data-show-for-status]");
+        const update = () => {
+            const chosen = form.querySelector("input[name='Status']:checked")?.value;
+            conditional.forEach((element) => {
+                element.hidden = element.dataset.showForStatus !== chosen;
+            });
+        };
+
+        form.addEventListener("change", (event) => {
+            if (event.target instanceof HTMLInputElement && event.target.name === "Status") update();
+        });
+        update();
+    });
+
+    // --- Mostrar u ocultar la contraseña ---------------------------------------
+
+    document.querySelectorAll("[data-password-toggle]").forEach((button) => {
+        const input = document.getElementById(button.dataset.passwordToggle);
+        if (!(input instanceof HTMLInputElement)) return;
+
+        button.hidden = false;
+        button.addEventListener("click", () => {
+            const show = input.type === "password";
+            input.type = show ? "text" : "password";
+            button.setAttribute("aria-pressed", String(show));
+            button.setAttribute("aria-label", show ? "Ocultar la contraseña" : "Mostrar la contraseña");
+            input.focus();
+        });
+    });
+
+    // --- Menú de la cuenta: se cierra al hacer clic fuera o con Escape --------
+
+    const userMenu = document.querySelector("[data-user-menu]");
+    if (userMenu instanceof HTMLDetailsElement) {
+        document.addEventListener("click", (event) => {
+            if (userMenu.open && !userMenu.contains(event.target)) userMenu.open = false;
+        });
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && userMenu.open) {
+                userMenu.open = false;
+                userMenu.querySelector("summary")?.focus();
+            }
+        });
     }
 
     // --- Resumen de errores: recibe el foco para que se anuncie y se vea ------

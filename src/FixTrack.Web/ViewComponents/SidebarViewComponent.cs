@@ -2,22 +2,44 @@ using FixTrack.Application.Modules;
 using FixTrack.Web.Models;
 using FixTrack.Web.Navigation;
 using FixTrack.Web.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FixTrack.Web.ViewComponents;
 
-/// <summary>Menú lateral construido a partir del catálogo de módulos.</summary>
-public sealed class SidebarViewComponent(IModuleCatalog modules, ApplicationInfo application) : ViewComponent
+/// <summary>
+/// Menú lateral construido a partir del catálogo de módulos. Solo muestra los módulos que la cuenta puede usar;
+/// la autorización real la aplican los controladores.
+/// </summary>
+public sealed class SidebarViewComponent(
+    IModuleCatalog modules,
+    ApplicationInfo application,
+    IAuthorizationService authorization) : ViewComponent
 {
-    public IViewComponentResult Invoke()
+    public async Task<IViewComponentResult> InvokeAsync()
     {
         var currentController = RouteData.Values["controller"] as string;
+        var groups = new List<SidebarGroupViewModel>();
 
-        var groups = ModuleNavigation.Groups
-            .Select(group => new SidebarGroupViewModel(
-                group.Title,
-                [.. group.Modules.Select(key => CreateItem(key, currentController))]))
-            .ToList();
+        foreach (var group in ModuleNavigation.Groups)
+        {
+            var items = new List<SidebarItemViewModel>();
+            foreach (var key in group.Modules)
+            {
+                if (ModuleNavigation.RequiredPolicy(key) is { } policy
+                    && !(await authorization.AuthorizeAsync(UserClaimsPrincipal, policy)).Succeeded)
+                {
+                    continue;
+                }
+
+                items.Add(CreateItem(key, currentController));
+            }
+
+            if (items.Count > 0)
+            {
+                groups.Add(new SidebarGroupViewModel(group.Title, items));
+            }
+        }
 
         return View(new SidebarViewModel(groups, application.Version));
     }

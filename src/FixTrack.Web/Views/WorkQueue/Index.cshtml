@@ -1,0 +1,141 @@
+@using FixTrack.Application.ServiceOrders
+@using FixTrack.Domain.ServiceOrders
+@using FixTrack.Web.Services
+@model WorkQueueResult
+@inject DateDisplay Dates
+@{
+    ViewData["Title"] = "Cola de trabajo";
+    var now = Model.CalculatedAtUtc;
+
+    (WorkQueue Queue, IReadOnlyList<PrioritizedOrder> Items, string Description, string Empty)[] lists =
+    [
+        (WorkQueue.Repair, Model.Repair,
+            "Órdenes recibidas, en diagnóstico o en reparación. El taller puede trabajar en ellas ahora.",
+            "No hay reparaciones pendientes."),
+        (WorkQueue.ReadyForPickup, Model.ReadyForPickup,
+            "Trabajos terminados: avisa al cliente y registra la entrega con el costo final.",
+            "No hay equipos esperando ser retirados."),
+        (WorkQueue.AwaitingParts, Model.AwaitingParts,
+            "Detenidas hasta recibir un repuesto. No se recomiendan como reparación inmediata; conviene dar seguimiento al proveedor.",
+            "No hay órdenes esperando repuestos."),
+    ];
+
+    string SectionId(WorkQueue queue) => queue switch
+    {
+        WorkQueue.Repair => "reparaciones",
+        WorkQueue.ReadyForPickup => "entregas",
+        _ => "repuestos",
+    };
+}
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-title">Cola de trabajo</h1>
+        <p class="page-description">
+            Órdenes abiertas ordenadas por el algoritmo de priorización. Calculada el
+            <time datetime="@DateDisplay.Iso(now)">@Dates.Long(now)</time>: la antigüedad y las fechas de entrega cambian con el tiempo.
+        </p>
+    </div>
+    <a class="button button--secondary" href="#como-se-calcula">
+        <icon name="info" />
+        Cómo se calcula
+    </a>
+</header>
+
+@if (Model.IsTruncated)
+{
+    <div class="alert alert--warning" role="status">
+        <icon name="triangle-alert" />
+        <p class="alert__text">Hay más órdenes abiertas de las que se priorizan en una consulta; se muestran las 500 recibidas hace más tiempo.</p>
+    </div>
+}
+
+<nav class="queue-summary" aria-label="Listas de la cola de trabajo">
+    @foreach (var list in lists)
+    {
+        <a class="queue-summary__item" href="#@SectionId(list.Queue)">
+            <span class="queue-summary__label">@DomainDisplay.Name(list.Queue)</span>
+            <span class="queue-summary__value mono">@list.Items.Count</span>
+        </a>
+    }
+</nav>
+
+@if (Model.Count == 0)
+{
+    <section class="table-card">
+        <div class="empty-state">
+            <div class="empty-state__icon"><icon name="list-ordered" /></div>
+            <h2 class="empty-state__title">No hay órdenes abiertas</h2>
+            <p class="empty-state__text">Cuando registres órdenes, aparecerán aquí ordenadas por su prioridad, su fecha de entrega y su antigüedad.</p>
+            <div class="empty-state__actions">
+                <a class="button button--primary" asp-controller="ServiceOrders" asp-action="Create">
+                    <icon name="clipboard-plus" />
+                    Registrar una orden
+                </a>
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    @foreach (var list in lists)
+    {
+        <section class="table-card queue-section" id="@SectionId(list.Queue)" aria-labelledby="@SectionId(list.Queue)-title">
+            <header class="queue-section__header">
+                <div class="card__title-row">
+                    <h2 class="card__title" id="@SectionId(list.Queue)-title">@DomainDisplay.Name(list.Queue)</h2>
+                    <span class="badge badge--neutral mono">@list.Items.Count</span>
+                </div>
+                <p class="card__description">@list.Description</p>
+            </header>
+            @if (list.Items.Count == 0)
+            {
+                <div class="card__body inline-empty">
+                    <icon name="circle-check" />
+                    <p>@list.Empty</p>
+                </div>
+            }
+            else
+            {
+                <partial name="_QueueTable" model='new QueueTableViewModel(list.Items, now, $"{DomainDisplay.Name(list.Queue)}, de mayor a menor puntuación")' />
+            }
+        </section>
+    }
+}
+
+<section class="card queue-formula" id="como-se-calcula" aria-labelledby="formula-title">
+    <header class="card__header">
+        <div>
+            <h2 class="card__title" id="formula-title">Cómo se calcula la puntuación</h2>
+            <p class="card__description">
+                La puntuación suma tres factores independientes. Es determinista: con los mismos datos y el mismo momento, siempre da el mismo resultado.
+            </p>
+        </div>
+    </header>
+    <div class="formula-grid">
+        <dl class="formula">
+            <dt class="formula__title"><icon name="flag" />Prioridad configurada</dt>
+            <dd>Baja <span class="mono">@WorkPrioritizer.LowPriorityPoints</span></dd>
+            <dd>Normal <span class="mono">@WorkPrioritizer.NormalPriorityPoints</span></dd>
+            <dd>Alta <span class="mono">@WorkPrioritizer.HighPriorityPoints</span></dd>
+            <dd>Urgente <span class="mono">@WorkPrioritizer.UrgentPriorityPoints</span></dd>
+        </dl>
+        <dl class="formula">
+            <dt class="formula__title"><icon name="calendar-clock" />Fecha de entrega (solo un bono)</dt>
+            <dd>Vencida <span class="mono">+@WorkPrioritizer.OverduePoints</span></dd>
+            <dd>En menos de 24 horas <span class="mono">+@WorkPrioritizer.DueWithin24HoursPoints</span></dd>
+            <dd>Entre 24 y 72 horas <span class="mono">+@WorkPrioritizer.DueWithin72HoursPoints</span></dd>
+            <dd>Más adelante o sin fecha <span class="mono">0</span></dd>
+        </dl>
+        <dl class="formula">
+            <dt class="formula__title"><icon name="clock" />Antigüedad</dt>
+            <dd>Por cada día completo en el taller <span class="mono">+@WorkPrioritizer.PointsPerDayOfAge</span></dd>
+            <dd>Máximo <span class="mono">@WorkPrioritizer.MaxAgePoints</span></dd>
+        </dl>
+    </div>
+    <ul class="formula-notes" role="list">
+        <li>El estado no suma puntos: decide la lista. Una orden en espera de repuestos no compite con las reparaciones que sí pueden ejecutarse, y una orden lista para entrega aparece entre las entregas pendientes.</li>
+        <li>Con la misma puntuación, va primero la entrega comprometida más cercana (las que no tienen fecha, al final), después la recepción más antigua y, por último, el número de orden.</li>
+        <li>Puntuación máxima: urgente, vencida y con 15 días o más en el taller, <span class="mono">170</span> puntos.</li>
+    </ul>
+</section>

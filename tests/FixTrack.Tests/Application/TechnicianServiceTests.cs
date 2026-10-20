@@ -114,6 +114,38 @@ public sealed class TechnicianServiceTests
     }
 
     [Fact]
+    public async Task Deactivation_counts_open_orders_with_the_technician_locked_in_a_transaction()
+    {
+        var id = await CreateAsync();
+        _store.OpenOrdersByTechnician[id] = 1;
+
+        var refused = await _service.DeactivateAsync(id, Token);
+        _store.OpenOrdersByTechnician[id] = 0;
+        var accepted = await _service.DeactivateAsync(id, Token);
+
+        Assert.Contains("1 orden abierta", refused.Message);
+        Assert.True(accepted.Succeeded);
+        Assert.Equal([id, id], _store.LockedTechnicians);
+        Assert.Equal(1, _unitOfWork.RolledBackTransactions);
+        Assert.Equal(1, _unitOfWork.CommittedTransactions);
+    }
+
+    [Fact]
+    public async Task Lists_every_technician_with_its_workload()
+    {
+        var luis = await CreateAsync("Luis Pérez");
+        var ana = await CreateAsync("Ana Castillo");
+        _store.OpenOrdersByTechnician[luis] = 3;
+
+        var workload = await _service.ListWorkloadAsync(Token);
+
+        Assert.Equal(["Ana Castillo", "Luis Pérez"], workload.Select(t => t.FullName));
+        Assert.Equal([0, 3], workload.Select(t => t.OpenOrderCount));
+        Assert.All(workload, t => Assert.True(t.IsActive));
+        Assert.Equal(ana, workload[0].Id);
+    }
+
+    [Fact]
     public async Task Unknown_technicians_are_reported_as_not_found()
     {
         Assert.Equal(CommandStatus.NotFound, (await _service.UpdateAsync(9, new TechnicianInput("Luis Pérez", "Redes", null, null), Token)).Status);

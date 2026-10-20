@@ -66,8 +66,9 @@ internal sealed class TechnicianRepository(FixTrackDbContext db) : ITechnicianRe
             inactiveCount);
     }
 
-    public Task<TechnicianDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken) =>
-        db.Technicians
+    public async Task<TechnicianDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken)
+    {
+        var details = await db.Technicians
             .AsNoTracking()
             .Where(technician => technician.Id == id)
             .Select(technician => new TechnicianDetails(
@@ -80,23 +81,69 @@ internal sealed class TechnicianRepository(FixTrackDbContext db) : ITechnicianRe
                 technician.CreatedAtUtc,
                 technician.UpdatedAtUtc,
                 technician.DeactivatedAtUtc,
-                db.ServiceOrders.Count(order => order.TechnicianId == technician.Id
-                    && order.Status != ServiceOrderStatus.Delivered
-                    && order.Status != ServiceOrderStatus.Cancelled),
+                db.ServiceOrders.WhereOpen().Count(order => order.TechnicianId == technician.Id),
                 db.ServiceOrders.Count(order => order.TechnicianId == technician.Id),
-                db.ServiceOrders
-                    .Where(order => order.TechnicianId == technician.Id
-                        && order.Status != ServiceOrderStatus.Delivered
-                        && order.Status != ServiceOrderStatus.Cancelled)
-                    .OrderBy(order => order.PromisedAtUtc == null)
-                    .ThenBy(order => order.PromisedAtUtc)
-                    .Take(OpenOrdersShown)
-                    .Select(order => new ServiceOrderSummary(order.Id, order.Status, order.Priority, order.ReceivedAtUtc, order.PromisedAtUtc))
-                    .ToList()))
+                Array.Empty<ServiceOrderSummary>()))
             .SingleOrDefaultAsync(cancellationToken);
+        if (details is null)
+        {
+            return null;
+        }
+
+        // Las órdenes abiertas que vencen antes aparecen primero; las que no tienen fecha, al final.
+        var openOrders = await db.ServiceOrders
+            .AsNoTracking()
+            .WhereOpen()
+            .Where(order => order.TechnicianId == id)
+            .OrderBy(order => order.PromisedAtUtc == null)
+            .ThenBy(order => order.PromisedAtUtc)
+            .ThenBy(order => order.Id)
+            .Take(OpenOrdersShown)
+            .Select(ServiceOrderQueries.Summary)
+            .ToListAsync(cancellationToken);
+        return details with { OpenOrders = openOrders };
+    }
 
     public Task<Technician?> FindAsync(int id, CancellationToken cancellationToken) =>
         db.Technicians.SingleOrDefaultAsync(technician => technician.Id == id, cancellationToken);
+
+    /// <remarks>
+    /// En SQL Server se lee con <c>WITH (UPDLOCK, ROWLOCK)</c>: el bloqueo de actualización sobre la fila del
+    /// técnico se conserva hasta el final de la transacción y es incompatible con otro UPDLOCK sobre la misma
+    /// fila. Así, una asignación y una desactivación del mismo técnico nunca se intercalan: la segunda espera
+    /// a que la primera confirme y después lee el estado actualizado. Las lecturas normales (listados,
+    /// detalle) no se bloquean, porque el bloqueo U es compatible con los bloqueos compartidos.
+    /// SQLite, que solo se usa en las pruebas, no admite estas sugerencias; allí cada transacción de
+    /// escritura ya bloquea la base completa.
+    /// </remarks>
+    public Task<Technician?> FindForAssignmentAsync(int id, CancellationToken cancellationToken)
+    {
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("El bloqueo del técnico requiere una transacción activa (IUnitOfWork.ExecuteInTransactionAsync).");
+        }
+
+        return db.Database.IsSqlServer()
+            ? db.Technicians
+                .FromSql($"SELECT * FROM [Technicians] WITH (UPDLOCK, ROWLOCK) WHERE [Id] = {id}")
+                .SingleOrDefaultAsync(cancellationToken)
+            : FindAsync(id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TechnicianWorkload>> ListWorkloadAsync(CancellationToken cancellationToken) =>
+        await db.Technicians
+            .AsNoTracking()
+            .OrderBy(technician => technician.FullName)
+            .ThenBy(technician => technician.Id)
+            .Select(technician => new TechnicianWorkload(
+                technician.Id,
+                technician.FullName,
+                technician.Specialty,
+                technician.IsActive,
+                db.ServiceOrders.Count(order => order.TechnicianId == technician.Id
+                    && order.Status != ServiceOrderStatus.Delivered
+                    && order.Status != ServiceOrderStatus.Cancelled)))
+            .ToListAsync(cancellationToken);
 
     public Task<bool> EmailExistsAsync(string email, int? excludingTechnicianId, CancellationToken cancellationToken) =>
         db.Technicians.AnyAsync(

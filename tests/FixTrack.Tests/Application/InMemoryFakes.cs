@@ -1,10 +1,12 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Application.Devices;
+using FixTrack.Application.ServiceOrders;
 using FixTrack.Application.Technicians;
 using FixTrack.Domain.Common;
 using FixTrack.Domain.Customers;
 using FixTrack.Domain.Devices;
+using FixTrack.Domain.ServiceOrders;
 using FixTrack.Domain.Technicians;
 
 namespace FixTrack.Tests.Application;
@@ -26,10 +28,18 @@ public sealed class InMemoryStore
 
     public List<Technician> Technicians { get; } = [];
 
+    public List<ServiceOrder> ServiceOrders { get; } = [];
+
     public List<Entity> Pending { get; } = [];
 
-    /// <summary>Órdenes abiertas por técnico (el módulo Órdenes todavía no existe).</summary>
+    /// <summary>Órdenes abiertas adicionales por técnico, para pruebas que no necesitan crear órdenes reales.</summary>
     public Dictionary<int, int> OpenOrdersByTechnician { get; } = [];
+
+    /// <summary>Indica si hay una transacción en curso (la abre <see cref="FakeUnitOfWork"/>).</summary>
+    public bool InTransaction { get; set; }
+
+    /// <summary>Técnicos bloqueados con FindForAssignmentAsync, en orden.</summary>
+    public List<int> LockedTechnicians { get; } = [];
 
     /// <summary>Asigna el Id como lo haría la columna IDENTITY de SQL Server.</summary>
     public static void AssignId(Entity entity, int id) =>
@@ -41,7 +51,13 @@ public sealed class FakeUnitOfWork(InMemoryStore store) : IUnitOfWork
 {
     public int SaveCount { get; private set; }
 
+    public int CommittedTransactions { get; private set; }
+
+    public int RolledBackTransactions { get; private set; }
+
     public bool FailNextSaveWithDuplicate { get; set; }
+
+    public bool FailNextSaveWithConcurrencyConflict { get; set; }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {
@@ -50,6 +66,13 @@ public sealed class FakeUnitOfWork(InMemoryStore store) : IUnitOfWork
             FailNextSaveWithDuplicate = false;
             store.Pending.Clear();
             throw new DuplicateValueException("Duplicado", new InvalidOperationException());
+        }
+
+        if (FailNextSaveWithConcurrencyConflict)
+        {
+            FailNextSaveWithConcurrencyConflict = false;
+            store.Pending.Clear();
+            throw new ConcurrencyConflictException("Conflicto", new InvalidOperationException());
         }
 
         foreach (var entity in store.Pending)
@@ -68,12 +91,40 @@ public sealed class FakeUnitOfWork(InMemoryStore store) : IUnitOfWork
                     InMemoryStore.AssignId(technician, store.Technicians.Count + 1);
                     store.Technicians.Add(technician);
                     break;
+                case ServiceOrder order:
+                    InMemoryStore.AssignId(order, store.ServiceOrders.Count + 1);
+                    store.ServiceOrders.Add(order);
+                    break;
             }
         }
 
         store.Pending.Clear();
         SaveCount++;
         return Task.CompletedTask;
+    }
+
+    public async Task<TResult> ExecuteInTransactionAsync<TResult>(Func<CancellationToken, Task<TResult>> operation, CancellationToken cancellationToken)
+        where TResult : CommandResult
+    {
+        store.InTransaction = true;
+        try
+        {
+            var result = await operation(cancellationToken);
+            if (result.Succeeded)
+            {
+                CommittedTransactions++;
+            }
+            else
+            {
+                RolledBackTransactions++;
+            }
+
+            return result;
+        }
+        finally
+        {
+            store.InTransaction = false;
+        }
     }
 }
 
@@ -131,6 +182,8 @@ public sealed class FakeDeviceRepository(InMemoryStore store) : IDeviceRepositor
     public Task<Device?> FindAsync(int id, CancellationToken cancellationToken) =>
         Task.FromResult(store.Devices.SingleOrDefault(d => d.Id == id));
 
+    public Task<Device?> FindWithOwnerAsync(int id, CancellationToken cancellationToken) => FindAsync(id, cancellationToken);
+
     // Igual que SQL Server con la intercalación CI: sin distinguir mayúsculas.
     public Task<bool> SerialNumberExistsAsync(string brand, string serialNumber, int? excludingDeviceId, CancellationToken cancellationToken) =>
         Task.FromResult(store.Devices.Any(d =>
@@ -159,8 +212,63 @@ public sealed class FakeTechnicianRepository(InMemoryStore store) : ITechnicianR
     public Task<bool> EmailExistsAsync(string email, int? excludingTechnicianId, CancellationToken cancellationToken) =>
         Task.FromResult(store.Technicians.Any(t => t.Email == email && t.Id != excludingTechnicianId));
 
+    public Task<Technician?> FindForAssignmentAsync(int id, CancellationToken cancellationToken)
+    {
+        if (!store.InTransaction)
+        {
+            throw new InvalidOperationException("El bloqueo del técnico requiere una transacción activa.");
+        }
+
+        store.LockedTechnicians.Add(id);
+        return FindAsync(id, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<TechnicianWorkload>> ListWorkloadAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TechnicianWorkload>>([.. store.Technicians
+            .OrderBy(t => t.FullName)
+            .Select(t => new TechnicianWorkload(t.Id, t.FullName, t.Specialty, t.IsActive, OpenOrders(t.Id)))]);
+
     public Task<int> CountOpenOrdersAsync(int technicianId, CancellationToken cancellationToken) =>
-        Task.FromResult(store.OpenOrdersByTechnician.GetValueOrDefault(technicianId));
+        Task.FromResult(OpenOrders(technicianId));
+
+    private int OpenOrders(int technicianId) =>
+        store.OpenOrdersByTechnician.GetValueOrDefault(technicianId)
+        + store.ServiceOrders.Count(order => order.TechnicianId == technicianId && !order.IsClosed);
 
     public void Add(Technician technician) => store.Pending.Add(technician);
+}
+
+public sealed class FakeServiceOrderRepository(InMemoryStore store) : IServiceOrderRepository
+{
+    public ServiceOrderSearch? LastSearch { get; private set; }
+
+    public DateTime? LastSearchNow { get; private set; }
+
+    public Task<ServiceOrderSearchResult> SearchAsync(ServiceOrderSearch search, DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        LastSearch = search;
+        LastSearchNow = nowUtc;
+        return Task.FromResult(new ServiceOrderSearchResult(
+            new PagedResult<ServiceOrderListItem>([], 1, ServiceOrderSearch.PageSize, 0),
+            new ServiceOrderViewCounts(0, 0, 0)));
+    }
+
+    public Task<ServiceOrderDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken) => Task.FromResult<ServiceOrderDetails?>(null);
+
+    public Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, int take, CancellationToken cancellationToken) =>
+        Task.FromResult(new CustomerServiceOrders(0, 0, []));
+
+    public Task<IReadOnlyList<OpenOrderSnapshot>> ListOpenAsync(int limit, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OpenOrderSnapshot>>([.. store.ServiceOrders
+            .Where(order => !order.IsClosed)
+            .OrderBy(order => order.ReceivedAtUtc)
+            .Take(limit)
+            .Select(order => new OpenOrderSnapshot(
+                order.Id, order.Status, order.Priority, order.ReceivedAtUtc, order.PromisedAtUtc, order.TechnicianId,
+                order.Technician?.FullName, order.Device!.Customer!.FullName, order.Device.Type, order.Device.Brand, order.Device.Model))]);
+
+    public Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken) =>
+        Task.FromResult(store.ServiceOrders.SingleOrDefault(order => order.Id == id));
+
+    public void Add(ServiceOrder order) => store.Pending.Add(order);
 }

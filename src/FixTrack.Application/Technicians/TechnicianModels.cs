@@ -39,3 +39,6 @@ public sealed record TechnicianDetails(
     int OpenOrderCount,
     int TotalOrderCount,
     IReadOnlyList<ServiceOrderSummary> OpenOrders);
+
+/// <summary>Técnico con su carga de trabajo: órdenes abiertas asignadas.</summary>
+public sealed record TechnicianWorkload(int Id, string FullName, string Specialty, bool IsActive, int OpenOrderCount);

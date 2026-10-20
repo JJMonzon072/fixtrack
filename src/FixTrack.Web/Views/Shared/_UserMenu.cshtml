@@ -1,0 +1,40 @@
+@using System.Security.Claims
+@using FixTrack.Application.Security
+@using FixTrack.Infrastructure.Identity
+@if (User.Identity?.IsAuthenticated == true)
+{
+    var email = User.FindFirstValue(ClaimTypes.Email) ?? User.Identity.Name ?? string.Empty;
+    var name = User.FindFirstValue(FixTrackClaimsPrincipalFactory.FullNameClaim) ?? email;
+    var role = Roles.All.FirstOrDefault(User.IsInRole) ?? "Sin rol";
+    <details class="user-menu" data-user-menu>
+        <summary class="user-menu__button" aria-label="Cuenta de @name">
+            <span class="avatar avatar--small" aria-hidden="true">@ContactDisplay.Initials(name)</span>
+            <span class="user-menu__name">@name</span>
+            <icon name="chevron-down" class="user-menu__chevron" />
+        </summary>
+        <div class="user-menu__panel">
+            <div class="user-menu__header">
+                <span class="user-menu__full-name">@name</span>
+                <span class="user-menu__email">@email</span>
+                <span class="badge @(role == Roles.Administrator ? "badge--accent" : "badge--neutral")">@role</span>
+            </div>
+            <a class="user-menu__item" asp-controller="Account" asp-action="ChangePassword">
+                <icon name="key-round" />
+                Cambiar contraseña
+            </a>
+            @if (User.IsInRole(Roles.Administrator))
+            {
+                <a class="user-menu__item" asp-controller="Users" asp-action="Index">
+                    <icon name="user-cog" />
+                    Usuarios y roles
+                </a>
+            }
+            <form method="post" asp-controller="Account" asp-action="Logout" asp-antiforgery="true">
+                <button class="user-menu__item user-menu__item--danger" type="submit">
+                    <icon name="log-out" />
+                    Cerrar sesión
+                </button>
+            </form>
+        </div>
+    </details>
+}
