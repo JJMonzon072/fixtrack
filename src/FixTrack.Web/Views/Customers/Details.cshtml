@@ -1,20 +1,21 @@
 @using FixTrack.Web.Models.Customers
 @using FixTrack.Web.Services
-@model CustomerDetails
+@model CustomerDetailsViewModel
 @inject DateDisplay Dates
 @{
-    ViewData["Title"] = Model.FullName;
+    var customer = Model.Customer;
+    ViewData["Title"] = customer.FullName;
     ViewData["ParentTitle"] = "Clientes";
     ViewData["ParentUrl"] = Url.Action("Index");
 }
 
 <header class="page-header page-header--entity">
     <div class="entity">
-        <span class="avatar avatar--large" aria-hidden="true">@ContactDisplay.Initials(Model.FullName)</span>
+        <span class="avatar avatar--large" aria-hidden="true">@ContactDisplay.Initials(customer.FullName)</span>
         <div class="page-header__text">
             <div class="page-header__title-row">
-                <h1 class="page-title">@Model.FullName</h1>
-                @if (Model.IsActive)
+                <h1 class="page-title">@customer.FullName</h1>
+                @if (customer.IsActive)
                 {
                     <span class="badge badge--accent">Activo</span>
                 }
@@ -24,17 +25,17 @@
                 }
             </div>
             <p class="page-description">
-                Cliente desde <time datetime="@DateDisplay.Iso(Model.CreatedAtUtc)">@Dates.Short(Model.CreatedAtUtc)</time>
+                Cliente desde <time datetime="@DateDisplay.Iso(customer.CreatedAtUtc)">@Dates.Short(customer.CreatedAtUtc)</time>
             </p>
         </div>
     </div>
 
     <div class="page-header__actions">
-        <a class="button button--secondary" asp-action="Edit" asp-route-id="@Model.Id">
+        <a class="button button--secondary" asp-action="Edit" asp-route-id="@customer.Id">
             <icon name="pencil" />
             Editar
         </a>
-        @if (Model.IsActive)
+        @if (customer.IsActive)
         {
             <button class="button button--secondary button--danger-text" type="button" data-dialog-open="deactivate-dialog">
                 <icon name="user-x" />
@@ -43,7 +44,7 @@
         }
         else
         {
-            <form method="post" asp-action="Reactivate" asp-route-id="@Model.Id" asp-antiforgery="true">
+            <form method="post" asp-action="Reactivate" asp-route-id="@customer.Id" asp-antiforgery="true">
                 <button class="button button--primary" type="submit">
                     <icon name="user-check" />
                     Reactivar
@@ -53,7 +54,7 @@
     </div>
 </header>
 
-@if (!Model.IsActive && Model.DeactivatedAtUtc is { } deactivatedAt)
+@if (!customer.IsActive && customer.DeactivatedAtUtc is { } deactivatedAt)
 {
     <div class="alert alert--neutral" role="note">
         <icon name="info" />
@@ -72,12 +73,12 @@
         <dl class="meta-list meta-list--stacked">
             <div class="meta-list__row">
                 <dt><icon name="phone" />Teléfono</dt>
-                <dd><a class="link mono" href="@ContactDisplay.PhoneHref(Model.Phone)">@Model.Phone</a></dd>
+                <dd><a class="link mono" href="@ContactDisplay.PhoneHref(customer.Phone)">@customer.Phone</a></dd>
             </div>
             <div class="meta-list__row">
                 <dt><icon name="mail" />Correo electrónico</dt>
                 <dd>
-                    @if (Model.Email is { } email)
+                    @if (customer.Email is { } email)
                     {
                         <a class="link" href="mailto:@email">@email</a>
                     }
@@ -97,12 +98,12 @@
         <dl class="meta-list meta-list--stacked">
             <div class="meta-list__row">
                 <dt><icon name="calendar" />Registrado</dt>
-                <dd><time datetime="@DateDisplay.Iso(Model.CreatedAtUtc)">@Dates.Long(Model.CreatedAtUtc)</time></dd>
+                <dd><time datetime="@DateDisplay.Iso(customer.CreatedAtUtc)">@Dates.Long(customer.CreatedAtUtc)</time></dd>
             </div>
             <div class="meta-list__row">
                 <dt><icon name="clock" />Última actualización</dt>
                 <dd>
-                    @if (Model.UpdatedAtUtc is { } updatedAt)
+                    @if (customer.UpdatedAtUtc is { } updatedAt)
                     {
                         <time datetime="@DateDisplay.Iso(updatedAt)">@Dates.Long(updatedAt)</time>
                     }
@@ -115,11 +116,11 @@
         </dl>
     </section>
 
-    <section class="card" aria-labelledby="notes-title">
+    <section class="card card--full" aria-labelledby="notes-title">
         <header class="card__header">
             <h2 class="card__title" id="notes-title">Notas</h2>
         </header>
-        @if (Model.Notes is { } notes)
+        @if (customer.Notes is { } notes)
         {
             <p class="card__body notes">@notes</p>
         }
@@ -129,34 +130,67 @@
         }
     </section>
 
-    <section class="card" aria-labelledby="devices-title">
+    <section class="card card--full" aria-labelledby="devices-title">
         <header class="card__header">
-            <h2 class="card__title" id="devices-title">Equipos</h2>
-            <span class="badge badge--neutral mono">@Model.DeviceCount</span>
+            <div class="card__title-row">
+                <h2 class="card__title" id="devices-title">Equipos</h2>
+                <span class="badge badge--neutral mono">@Model.Devices.Count</span>
+            </div>
+            @if (customer.IsActive)
+            {
+                <a class="button button--secondary button--small" asp-controller="Devices" asp-action="Create" asp-route-cliente="@customer.Id">
+                    <icon name="plus" />
+                    Registrar equipo
+                </a>
+            }
         </header>
-        <div class="card__body inline-empty">
-            <icon name="laptop" />
-            <p>
-                @if (Model.DeviceCount == 0)
-                {
-                    @:Este cliente aún no tiene equipos registrados.
-                }
-                else
-                {
-                    @:Este cliente tiene @Model.DeviceCount equipos registrados.
-                }
-                El registro de equipos estará disponible cuando se habilite el módulo Equipos.
+
+        @if (!customer.IsActive)
+        {
+            <p class="card__note">
+                <icon name="info" />
+                Los equipos de un cliente inactivo se conservan y pueden consultarse. Para registrarle equipos nuevos, reactívalo.
             </p>
-        </div>
+        }
+
+        @if (Model.Devices.Count == 0)
+        {
+            <div class="card__body inline-empty">
+                <icon name="laptop" />
+                <p>Este cliente aún no tiene equipos registrados.</p>
+            </div>
+        }
+        else
+        {
+            <ul class="item-list" role="list">
+                @foreach (var device in Model.Devices)
+                {
+                    <li class="item-list__item">
+                        <span class="thing-icon" aria-hidden="true"><icon name="@DomainDisplay.Icon(device.Type)" /></span>
+                        <span class="item-list__text">
+                            <a class="item-list__title row-link" asp-controller="Devices" asp-action="Details" asp-route-id="@device.Id">@DomainDisplay.DeviceTitle(device.Brand, device.Model)</a>
+                            <span class="item-list__meta">
+                                @DomainDisplay.Name(device.Type)
+                                · @(device.SerialNumber is { } serial ? $"Serie {serial}" : "Sin número de serie")
+                            </span>
+                        </span>
+                        <span class="item-list__aside">
+                            <span class="item-list__meta">@(device.ServiceOrderCount == 1 ? "1 orden" : $"{device.ServiceOrderCount} órdenes")</span>
+                            <icon name="chevron-right" class="item-list__chevron" />
+                        </span>
+                    </li>
+                }
+            </ul>
+        }
     </section>
 </div>
 
-@if (Model.IsActive)
+@if (customer.IsActive)
 {
     <dialog class="dialog" id="deactivate-dialog" aria-labelledby="deactivate-title" aria-describedby="deactivate-text">
-        <form method="post" asp-action="Deactivate" asp-route-id="@Model.Id" asp-antiforgery="true">
+        <form method="post" asp-action="Deactivate" asp-route-id="@customer.Id" asp-antiforgery="true">
             <div class="dialog__icon dialog__icon--danger"><icon name="user-x" /></div>
-            <h2 class="dialog__title" id="deactivate-title">¿Desactivar a @Model.FullName?</h2>
+            <h2 class="dialog__title" id="deactivate-title">¿Desactivar a @customer.FullName?</h2>
             <p class="dialog__text" id="deactivate-text">
                 El cliente dejará de aparecer en el listado de activos. No se elimina ningún dato: su información,
                 equipos e historial se conservan y puedes reactivarlo en cualquier momento.

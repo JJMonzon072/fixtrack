@@ -1,5 +1,6 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
+using FixTrack.Application.Devices;
 
 namespace FixTrack.Web.Models.Customers;
 
@@ -16,3 +17,6 @@ public sealed record CustomerIndexViewModel(string? SearchText, StatusFilter Sta
     /// <summary>No existe ningún cliente registrado todavía.</summary>
     public bool IsFirstUse => !HasSearch && Result.ActiveCount + Result.InactiveCount == 0;
 }
+
+/// <summary>Detalle de un cliente con sus equipos.</summary>
+public sealed record CustomerDetailsViewModel(CustomerDetails Customer, IReadOnlyList<CustomerDeviceItem> Devices);

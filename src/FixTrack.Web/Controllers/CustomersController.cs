@@ -1,5 +1,6 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
+using FixTrack.Application.Devices;
 using FixTrack.Web.Models;
 using FixTrack.Web.Models.Customers;
 using FixTrack.Web.Services;
@@ -9,7 +10,7 @@ namespace FixTrack.Web.Controllers;
 
 /// <summary>Módulo Clientes: listado, búsqueda, registro, edición, desactivación y reactivación.</summary>
 [Route("clientes")]
-public sealed class CustomersController(ICustomerService customers) : Controller
+public sealed class CustomersController(ICustomerService customers, IDeviceService devices) : Controller
 {
     [HttpGet("")]
     public async Task<IActionResult> Index(
@@ -52,7 +53,13 @@ public sealed class CustomersController(ICustomerService customers) : Controller
     public async Task<IActionResult> Details(int id, CancellationToken cancellationToken)
     {
         var customer = await customers.GetAsync(id, cancellationToken);
-        return customer is null ? NotFound() : View(customer);
+        if (customer is null)
+        {
+            return NotFound();
+        }
+
+        var customerDevices = await devices.ListByCustomerAsync(id, cancellationToken);
+        return View(new CustomerDetailsViewModel(customer, customerDevices));
     }
 
     [HttpGet("{id:int}/editar")]

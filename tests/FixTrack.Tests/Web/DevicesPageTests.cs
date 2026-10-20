@@ -23,6 +23,59 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
     };
 
     [Fact]
+    public async Task Registers_a_device_and_shows_it_in_its_details_and_in_its_customer()
+    {
+        using var client = factory.CreateClient();
+        var customerId = await FormPost.CreateCustomerAsync(client, "Ana Equipos", "5555-2001");
+
+        var response = await FormPost.SendAsync(client, "/equipos/nuevo", DeviceForm(customerId, "Dell", "dl-0001"));
+        var details = await response.Content.ReadAsStringAsync(Token);
+        var customerPage = await client.GetStringAsync($"/clientes/{customerId}", Token);
+
+        Assert.Matches(@"/equipos/\d+$", response.RequestMessage!.RequestUri!.AbsolutePath);
+        Assert.Contains("Equipo registrado correctamente.", details);
+        Assert.Contains(">Dell Modelo de prueba</h1>", details);
+        Assert.Contains("DL-0001", details);
+        Assert.Contains("Ana Equipos", details);
+        Assert.Contains("Este equipo todavía no tiene órdenes de servicio.", details);
+        Assert.Contains("Dell Modelo de prueba", customerPage);
+        Assert.Contains("Serie DL-0001", customerPage);
+    }
+
+    [Fact]
+    public async Task Starting_from_a_customer_preselects_the_owner()
+    {
+        using var client = factory.CreateClient();
+        var customerId = await FormPost.CreateCustomerAsync(client, "Bruno Preseleccion", "5555-2002");
+
+        var customerPage = await client.GetStringAsync($"/clientes/{customerId}", Token);
+        var form = await client.GetStringAsync($"/equipos/nuevo?cliente={customerId}", Token);
+
+        Assert.Contains($"href=\"/equipos/nuevo?cliente={customerId}\"", customerPage);
+        Assert.Contains("value=\"Bruno Preseleccion\"", form);
+        Assert.Contains($"name=\"CustomerId\" value=\"{customerId}\"", form);
+    }
+
+    [Fact]
+    public async Task An_inactive_customer_keeps_its_devices_but_cannot_receive_new_ones()
+    {
+        using var client = factory.CreateClient();
+        var customerId = await FormPost.CreateCustomerAsync(client, "Carla Inactiva", "5555-2003");
+        await FormPost.SendAsync(client, "/equipos/nuevo", DeviceForm(customerId, "Lenovo"));
+        await FormPost.SendAsync(client, $"/clientes/{customerId}/desactivar", []);
+
+        var customerPage = await client.GetStringAsync($"/clientes/{customerId}", Token);
+        var preselected = await client.GetStringAsync($"/equipos/nuevo?cliente={customerId}", Token);
+        var rejected = await (await FormPost.SendAsync(client, "/equipos/nuevo", DeviceForm(customerId, "Asus"))).Content.ReadAsStringAsync(Token);
+
+        Assert.Contains("Lenovo Modelo de prueba", customerPage);
+        Assert.DoesNotContain($"href=\"/equipos/nuevo?cliente={customerId}\"", customerPage);
+        Assert.Contains("está inactivo y no admite equipos nuevos", preselected);
+        Assert.Contains("El cliente está inactivo. Reactívalo para registrarle equipos nuevos.", rejected);
+        Assert.Equal(1, await CountDevicesAsync(customerId));
+    }
+
+    [Fact]
     public async Task Shows_validation_errors_including_a_missing_owner()
     {
         using var client = factory.CreateClient();
@@ -136,5 +189,11 @@ public sealed class DevicesPageTests(FixTrackWebApplicationFactory factory)
         using var response = await client.GetAsync(url, Token);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    private async Task<int> CountDevicesAsync(int customerId)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<FixTrackDbContext>().Devices.CountAsync(d => d.CustomerId == customerId, Token);
     }
 }
