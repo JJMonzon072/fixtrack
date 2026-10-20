@@ -31,4 +31,8 @@ public sealed record CommandResult<T>(CommandStatus Status, IReadOnlyDictionary<
     public static CommandResult<T> Success(T value) => new(CommandStatus.Succeeded, new Dictionary<string, string>(), null, value);
 
     public static new CommandResult<T> Invalid(IReadOnlyDictionary<string, string> errors) => new(CommandStatus.Invalid, errors, null, default);
+
+    public static new CommandResult<T> NotFound() => new(CommandStatus.NotFound, new Dictionary<string, string>(), null, default);
+
+    public static new CommandResult<T> Conflict(string message) => new(CommandStatus.Conflict, new Dictionary<string, string>(), message, default);
 }

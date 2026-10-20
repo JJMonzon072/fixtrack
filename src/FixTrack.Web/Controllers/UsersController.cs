@@ -28,7 +28,14 @@ public sealed class UsersController(IUserAccountService accounts) : Controller
     {
         var result = await accounts.CreateAsync(
             new NewUserAccountInput(form.FullName, form.Email, form.Role, form.Password, form.ConfirmPassword),
+            CurrentUserId,
             cancellationToken);
+        if (result.Status == CommandStatus.Conflict)
+        {
+            StatusMessage.Warning(TempData, result.Message ?? "No se pudo completar la operación.");
+            return RedirectToAction(nameof(Index));
+        }
+
         if (!result.Succeeded)
         {
             AddErrors(result);
@@ -45,13 +52,16 @@ public sealed class UsersController(IUserAccountService accounts) : Controller
         var account = await accounts.GetAsync(id, cancellationToken);
         return account is null
             ? NotFound()
-            : View("Editor", new UserEditorViewModel(account, new UserFormModel { FullName = account.FullName, Role = account.Role }, id == CurrentUserId));
+            : View("Editor", new UserEditorViewModel(
+                account,
+                new UserFormModel { FullName = account.FullName, Role = account.Role, ConcurrencyStamp = account.ConcurrencyStamp },
+                IsCurrentUser(account)));
     }
 
     [HttpPost("{id:guid}/editar")]
     public async Task<IActionResult> Edit(string id, UserFormModel form, CancellationToken cancellationToken)
     {
-        var result = await accounts.UpdateAsync(id, new UserAccountInput(form.FullName, form.Role), CurrentUserId, cancellationToken);
+        var result = await accounts.UpdateAsync(id, new UserAccountInput(form.FullName, form.Role, form.ConcurrencyStamp), CurrentUserId, cancellationToken);
         switch (result.Status)
         {
             case CommandStatus.NotFound:
@@ -66,7 +76,9 @@ public sealed class UsersController(IUserAccountService accounts) : Controller
 
         AddErrors(result);
         var account = await accounts.GetAsync(id, cancellationToken);
-        return account is null ? NotFound() : View("Editor", new UserEditorViewModel(account, WithoutPasswords(form), id == CurrentUserId));
+        return account is null
+            ? NotFound()
+            : View("Editor", new UserEditorViewModel(account, WithoutPasswords(form), IsCurrentUser(account)));
     }
 
     [HttpPost("{id:guid}/deshabilitar")]
@@ -87,10 +99,10 @@ public sealed class UsersController(IUserAccountService accounts) : Controller
     [HttpPost("{id:guid}/contrasena")]
     public async Task<IActionResult> ResetPassword(string id, ResetPasswordFormModel form, CancellationToken cancellationToken)
     {
-        var result = await accounts.ResetPasswordAsync(id, form.Password, form.ConfirmPassword, cancellationToken);
-        if (result.Status == CommandStatus.NotFound)
+        var result = await accounts.ResetPasswordAsync(id, form.Password, form.ConfirmPassword, CurrentUserId, cancellationToken);
+        if (result.Status is CommandStatus.NotFound or CommandStatus.Conflict)
         {
-            return NotFound();
+            return Report(result, id, string.Empty);
         }
 
         if (!result.Succeeded)
@@ -107,6 +119,12 @@ public sealed class UsersController(IUserAccountService accounts) : Controller
     private async Task<IActionResult> SetEnabledAsync(string id, bool enabled, string successMessage, CancellationToken cancellationToken)
     {
         var result = await accounts.SetEnabledAsync(id, enabled, CurrentUserId, cancellationToken);
+        return Report(result, id, successMessage);
+    }
+
+    /// <summary>Resultado de una acción sobre una cuenta: vuelve a su página con el mensaje correspondiente.</summary>
+    private IActionResult Report(CommandResult result, string id, string successMessage)
+    {
         if (result.Status == CommandStatus.NotFound)
         {
             return NotFound();
@@ -124,8 +142,11 @@ public sealed class UsersController(IUserAccountService accounts) : Controller
         return RedirectToAction(nameof(Edit), new { id });
     }
 
+    /// <summary>Se compara con el Id guardado, no con el de la ruta, que puede venir en mayúsculas.</summary>
+    private bool IsCurrentUser(UserAccount account) => string.Equals(account.Id, CurrentUserId, StringComparison.Ordinal);
+
     private static UserFormModel WithoutPasswords(UserFormModel form) =>
-        new() { FullName = form.FullName, Email = form.Email, Role = form.Role };
+        new() { FullName = form.FullName, Email = form.Email, Role = form.Role, ConcurrencyStamp = form.ConcurrencyStamp };
 
     private void AddErrors(CommandResult result)
     {

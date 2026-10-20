@@ -37,6 +37,9 @@ public sealed class UserFormModel
     public string? Password { get; set; }
 
     public string? ConfirmPassword { get; set; }
+
+    /// <summary>Marca de la cuenta cuando se abrió el formulario: detecta cambios hechos por otra persona.</summary>
+    public string? ConcurrencyStamp { get; set; }
 }
 
 public sealed class ResetPasswordFormModel

@@ -369,7 +369,7 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
         {
             var accounts = scope.ServiceProvider.GetRequiredService<IUserAccountService>();
             var id = (await accounts.ListAsync(Token)).Single(a => a.Email == account.Email).Id;
-            Assert.True((await accounts.SetEnabledAsync(id, enabled: false, actingUserId: "otra-cuenta", Token)).Succeeded);
+            Assert.True((await accounts.SetEnabledAsync(id, enabled: false, actingUserId: await AdministratorIdAsync(), Token)).Succeeded);
         }
 
         using var after = await session.GetAsync("/clientes", Token);

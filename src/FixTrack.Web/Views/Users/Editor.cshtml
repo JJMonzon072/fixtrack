@@ -67,6 +67,10 @@
                 }' />
             }
         </div>
+        @if (!Model.IsNew)
+        {
+            <input type="hidden" name="ConcurrencyStamp" value="@form.ConcurrencyStamp" />
+        }
         <footer class="form-card__actions">
             <a class="button button--secondary" asp-action="Index">Cancelar</a>
             <button class="button button--primary" type="submit">
@@ -105,10 +109,20 @@
                 </div>
             </dl>
             <div class="card__actions">
-                <a class="button button--secondary button--small" asp-action="ResetPassword" asp-route-id="@account.Id">
-                    <icon name="key-round" />
-                    Restablecer contraseña
-                </a>
+                @if (Model.IsCurrentUser)
+                {
+                    <a class="button button--secondary button--small" asp-controller="Account" asp-action="ChangePassword">
+                        <icon name="key-round" />
+                        Cambiar mi contraseña
+                    </a>
+                }
+                else
+                {
+                    <a class="button button--secondary button--small" asp-action="ResetPassword" asp-route-id="@account.Id">
+                        <icon name="key-round" />
+                        Restablecer contraseña
+                    </a>
+                }
                 @if (!Model.IsCurrentUser)
                 {
                     <form method="post" asp-action="@(account.IsEnabled ? "Disable" : "Enable")" asp-route-id="@account.Id" asp-antiforgery="true">

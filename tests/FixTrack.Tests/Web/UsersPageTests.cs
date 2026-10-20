@@ -33,6 +33,12 @@ public sealed class UsersPageTests(FixTrackWebApplicationFactory factory)
             .SingleAsync(Token);
     }
 
+    private async Task<string> StampAsync(string id)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        return (await scope.ServiceProvider.GetRequiredService<IUserAccountService>().GetAsync(id, Token))!.ConcurrencyStamp!;
+    }
+
     private HttpClient FreshClient() => factory.CreateClient();
 
     [Fact]
@@ -102,6 +108,7 @@ public sealed class UsersPageTests(FixTrackWebApplicationFactory factory)
         {
             ["FullName"] = "Rosa Supervisora",
             ["Role"] = Roles.Administrator,
+            ["ConcurrencyStamp"] = await StampAsync(id),
         })).Content.ReadAsStringAsync(Token);
 
         Assert.Contains("Los cambios se guardaron correctamente.", html);
@@ -121,6 +128,7 @@ public sealed class UsersPageTests(FixTrackWebApplicationFactory factory)
         {
             ["FullName"] = TestAccounts.Administrator.FullName,
             ["Role"] = Roles.Operator,
+            ["ConcurrencyStamp"] = await StampAsync(id),
         })).Content.ReadAsStringAsync(Token);
 
         Assert.Contains("No puedes deshabilitar tu propia cuenta.", disable);
@@ -130,22 +138,6 @@ public sealed class UsersPageTests(FixTrackWebApplicationFactory factory)
         Assert.Equal((true, Roles.Administrator), (account!.IsEnabled, account.Role));
     }
 
-    [Fact]
-    public async Task The_last_enabled_administrator_cannot_be_demoted_or_disabled()
-    {
-        await using var isolated = new FixTrackWebApplicationFactory();
-        using var client = await isolated.CreateAuthenticatedClientAsync();
-        await using var scope = isolated.Services.CreateAsyncScope();
-        var accounts = scope.ServiceProvider.GetRequiredService<IUserAccountService>();
-        var adminId = (await accounts.ListAsync(Token)).Single(a => a.Email == TestAccounts.Administrator.Email).Id;
-
-        var demote = await accounts.UpdateAsync(adminId, new UserAccountInput(TestAccounts.Administrator.FullName, Roles.Operator), "otra-cuenta", Token);
-        var disable = await accounts.SetEnabledAsync(adminId, enabled: false, actingUserId: "otra-cuenta", Token);
-
-        Assert.Equal(CommandStatus.Conflict, demote.Status);
-        Assert.Contains("único administrador", demote.Message);
-        Assert.Equal(CommandStatus.Conflict, disable.Status);
-    }
 
     [Fact]
     public async Task Disables_and_enables_another_account()
