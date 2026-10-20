@@ -1,6 +1,7 @@
 using System.Net;
 using FixTrack.Infrastructure.Persistence;
 using FixTrack.Web.Hosting;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -10,13 +11,26 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace FixTrack.Tests.Web;
 
-/// <summary>Comprobaciones de salud para la plataforma de alojamiento.</summary>
+/// <summary>Ejecución en un contenedor detrás de un proxy HTTPS: salud, encabezados reenviados y redirección.</summary>
 public sealed class HostingTests(FixTrackWebApplicationFactory factory)
     : IClassFixture<FixTrackWebApplicationFactory>
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     private static readonly WebApplicationFactoryClientOptions NoRedirects = new() { AllowAutoRedirect = false };
+
+    /// <summary>Producción con el proxy confiable configurado y la conexión simulada desde <paramref name="remoteIp"/>.</summary>
+    private WebApplicationFactory<Program> BehindProxy(string remoteIp, bool trustProxy = true) =>
+        factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Production").UseSetting("https_port", "443");
+            if (trustProxy)
+            {
+                builder.UseSetting("ReverseProxy:KnownNetworks:0", "10.0.0.0/8");
+            }
+
+            builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(new RemoteAddressFilter(IPAddress.Parse(remoteIp))));
+        });
 
     [Theory]
     [InlineData("/salud")]
@@ -77,5 +91,45 @@ public sealed class HostingTests(FixTrackWebApplicationFactory factory)
         Assert.Equal("https://localhost/cuenta/iniciar-sesion", page.Headers.Location?.ToString());
     }
 
+    [Fact]
+    public async Task A_trusted_proxy_can_report_that_the_original_request_was_https()
+    {
+        using var client = BehindProxy("10.20.30.40").CreateClient(NoRedirects);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/cuenta/iniciar-sesion");
+        request.Headers.Add("X-Forwarded-Proto", "https");
+        request.Headers.Add("X-Forwarded-For", "203.0.113.7");
 
+        using var response = await client.SendAsync(request, Token);
+
+        // Sin el proxy confiable, la misma solicitud HTTP se redirigiría a HTTPS (ver la prueba siguiente).
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("203.0.113.9", true)]
+    [InlineData("10.20.30.40", false)]
+    public async Task Forwarded_headers_from_untrusted_sources_are_ignored(string remoteIp, bool trustProxy)
+    {
+        using var client = BehindProxy(remoteIp, trustProxy).CreateClient(NoRedirects);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/cuenta/iniciar-sesion");
+        request.Headers.Add("X-Forwarded-Proto", "https");
+
+        using var response = await client.SendAsync(request, Token);
+
+        Assert.Equal(HttpStatusCode.TemporaryRedirect, response.StatusCode);
+    }
+
+    /// <summary>Simula la dirección del extremo que abre la conexión (en TestServer no existe).</summary>
+    private sealed class RemoteAddressFilter(IPAddress address) : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use((context, nextMiddleware) =>
+            {
+                context.Connection.RemoteIpAddress = address;
+                return nextMiddleware(context);
+            });
+            next(app);
+        };
+    }
 }
