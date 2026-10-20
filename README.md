@@ -416,7 +416,7 @@ Toda la interfaz se construye desde `src/FixTrack.Web/wwwroot/css/site.css`, org
 dotnet test -c Release
 ```
 
-Hay **594 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan **571** y se omiten **23**: las que necesitan SQL Server real (ver más abajo). Con un SQL Server local desechable pasan los **594**. Las demás usan **SQLite en memoria** y funcionan igual en GitHub Actions, sin credenciales.
+Hay **595 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan **572** y se omiten **23**: las que necesitan SQL Server real (ver más abajo). Con un SQL Server local desechable pasan los **595**. Las demás usan **SQLite en memoria** y funcionan igual en GitHub Actions, sin credenciales.
 
 | Grupo | Archivo | Casos | Qué verifica |
 | --- | --- | --- | --- |
@@ -450,7 +450,7 @@ Hay **594 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan 
 | Web | `Web/TechniciansPageTests.cs` | 9 | Módulo Técnicos |
 | Web | `Web/ServiceOrdersPageTests.cs` | 28 | Módulo Órdenes: registro, validaciones, flujo completo, formulario desactualizado, envío repetido, línea de tiempo con asignaciones y autores |
 | Web | `Web/DashboardPageTests.cs` | 4 | Panel y cola de trabajo con datos reales y sin datos |
-| Web | `Web/SecurityTests.cs` (y `.Login.cs`, `.Administration.cs`) | 44 | Acceso anónimo, cookies, bloqueo, límite por IP, permisos por rol, **todos los POST de administración rechazados a un Operador**, CSRF, encabezados y CSP, inicio de sesión sin enumeración (mismo mensaje y tiempo), contraseñas fuera de registros |
+| Web | `Web/SecurityTests.cs` (y `.Login.cs`, `.Administration.cs`) | 45 | Acceso anónimo, cookies, bloqueo, límite por IP, permisos por rol, **todos los POST de administración rechazados a un Operador**, CSRF, encabezados y CSP, inicio de sesión sin enumeración (mismo mensaje y tiempo), contraseñas fuera de registros |
 | Web | `Web/UsersPageTests.cs` | 9 | Cuentas: alta, validaciones, roles, deshabilitar, restablecer y cambiar contraseña, último administrador |
 | Web | `Web/AccountAdministrationTests.cs` | 11 | Desbloqueo, edición concurrente de cuentas, cambio de la propia contraseña, auditoría de cuentas sin contraseñas, Operador sin acceso por solicitudes manuales |
 | Web | `Web/AuditPageTests.cs` | 3 | Auditoría solo para administradores, con autor y filtros por área; la planificación aparece en la línea de tiempo de la orden |

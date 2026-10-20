@@ -140,7 +140,7 @@ Las capturas de pantalla de las revisiones de QA están en `qa-evidence/fase-3/`
 | Base de datos | SQL Server 2022 (Somee), Entity Framework Core 10 con migraciones |
 | Seguridad | ASP.NET Core Identity, cookies seguras, roles, protección CSRF, CSP, claves de sesión cifradas con certificado, auditoría |
 | Interfaz | HTML, CSS y JavaScript propios, sin frameworks; íconos Lucide; tema claro y oscuro |
-| Pruebas | xUnit v3: 594 pruebas (unitarias, de integración y 23 que necesitan un SQL Server real) |
+| Pruebas | xUnit v3: 595 pruebas (unitarias, de integración y 23 que necesitan un SQL Server real) |
 | Integración continua | GitHub Actions: compila y prueba, ejecuta las pruebas de SQL Server en un servidor efímero y construye y prueba la imagen Docker |
 | Respaldos | Copias diarias de Somee y respaldo lógico propio (`exportar-respaldo`) verificable con SHA-256 |
 | Despliegue (preparado) | Docker, previsto para Render (plan gratuito); todavía no publicado |
