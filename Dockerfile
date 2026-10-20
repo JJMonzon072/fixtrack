@@ -29,12 +29,12 @@ RUN dotnet publish src/FixTrack.Web/FixTrack.Web.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra AS final
 WORKDIR /app
 
-# Los encabezados X-Forwarded-* solo se aceptan desde la red interna del proxy (Render usa direcciones 10.x).
 # Si la plataforma define PORT, la aplicación escucha en ese puerto en lugar de 8080.
+# La imagen no confía en ningún proxy: el despliegue debe indicar sus direcciones reales (ReverseProxy__KnownProxies__N o
+# ReverseProxy__KnownNetworks__N) o declarar ReverseProxy__IgnoreForwardedHeaders=true. Sin esa decisión no arranca.
 ENV ASPNETCORE_ENVIRONMENT=Production \
     ASPNETCORE_HTTP_PORTS=8080 \
-    TZ=America/Guatemala \
-    ReverseProxy__KnownNetworks__0=10.0.0.0/8
+    TZ=America/Guatemala
 
 EXPOSE 8080
 COPY --from=build /app ./

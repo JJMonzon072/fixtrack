@@ -304,7 +304,10 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
     {
         var account = await CreateAccountAsync();
         using var client = factory
-            .WithWebHostBuilder(builder => builder.UseEnvironment("Production").UseSetting("https_port", "443"))
+            .WithWebHostBuilder(builder => builder
+                .UseEnvironment("Production")
+                .UseSetting("https_port", "443")
+                .UseSetting("ReverseProxy:IgnoreForwardedHeaders", "true"))
             .CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("https://localhost") });
 
         using var response = await AuthenticatedClients.LogInAsync(client, account.Email, account.Password);

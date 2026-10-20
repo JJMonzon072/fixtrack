@@ -125,6 +125,7 @@ jobs:
           # Cadena ficticia: la imagen no trae credenciales y el contenedor debe arrancar igual.
           docker run --detach --name fixtrack --publish 8080:9000 \
             --env PORT=9000 \
+            --env ReverseProxy__IgnoreForwardedHeaders=true \
             --env ConnectionStrings__FixTrack="Server=no-existe.invalid;Database=NoUsar;Encrypt=True;" \
             fixtrack:ci
           for _ in $(seq 1 60); do

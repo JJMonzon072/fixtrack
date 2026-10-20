@@ -18,7 +18,7 @@ builder.Services
     .AddInfrastructure(builder.Configuration)
     .AddPresentation()
     .AddSecurity(builder.Configuration, builder.Environment)
-    .AddReverseProxySupport(builder.Configuration)
+    .AddReverseProxySupport(builder.Configuration, builder.Environment)
     .AddHealthEndpoints();
 
 var app = builder.Build();
@@ -30,7 +30,7 @@ if (ConsoleCommands.IsCommand(args))
 }
 
 // Primero: el esquema (https) y la IP real del cliente, si la solicitud llega desde un proxy confiable.
-app.UseReverseProxySupport(app.Configuration);
+app.UseReverseProxySupport();
 
 if (!app.Environment.IsDevelopment())
 {
