@@ -1,0 +1,50 @@
+@using FixTrack.Web.Services
+@model QueueTableViewModel
+@inject DateDisplay Dates
+<div class="table-scroll">
+    <table class="data-table data-table--interactive data-table--stack data-table--queue">
+        <caption class="visually-hidden">@Model.Caption</caption>
+        <thead>
+            <tr>
+                <th scope="col" class="data-table__numeric">#</th>
+                <th scope="col">Orden</th>
+                <th scope="col">Estado y responsable</th>
+                <th scope="col">Puntuación</th>
+                <th scope="col">Entrega comprometida</th>
+                <th scope="col">Acción recomendada</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.Items)
+            {
+                var order = item.Order;
+                var overdue = FixTrack.Domain.ServiceOrders.ServiceOrderSchedule.IsOverdue(order.Status, order.PromisedAtUtc, Model.NowUtc);
+                <tr class="@(overdue ? "is-overdue" : null)">
+                    <td data-label="Posición" class="data-table__numeric queue-position mono" data-hide-mobile>@item.Position</td>
+                    <td data-label="Orden" data-span>
+                        <span class="order-subject">
+                            <span class="order-subject__title">
+                                <a class="order-ref__number row-link" asp-controller="ServiceOrders" asp-action="Details" asp-route-id="@order.Id">@order.Number</a>
+                                · @DomainDisplay.DeviceTitle(order.DeviceBrand, order.DeviceModel)
+                            </span>
+                            <span class="order-subject__meta">@order.CustomerName · <partial name="_OrderPriority" model="order.Priority" /></span>
+                        </span>
+                    </td>
+                    <td data-label="Estado y responsable">
+                        <span class="queue-status">
+                            <partial name="_OrderStatus" model="order.Status" />
+                            <span class="queue-status__assignee@(order.TechnicianName is null ? " queue-status__assignee--empty" : string.Empty)">
+                                @(order.TechnicianName ?? "Sin técnico asignado")
+                            </span>
+                        </span>
+                    </td>
+                    <td data-label="Puntuación" data-span><partial name="_ScoreFactors" model="item.Score" /></td>
+                    <td data-label="Entrega comprometida">
+                        <partial name="_OrderDue" model="new OrderDueViewModel(order.Status, order.PromisedAtUtc, null, Model.NowUtc)" />
+                    </td>
+                    <td data-label="Acción recomendada" data-align-end><partial name="_RecommendedAction" model="item" /></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

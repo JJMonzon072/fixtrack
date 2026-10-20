@@ -139,6 +139,32 @@ public static class DomainDisplay
     public static ServiceOrderPriority? ParsePriority(string? slug) =>
         Priorities.Cast<ServiceOrderPriority?>().FirstOrDefault(priority => Slug(priority!.Value) == slug?.Trim().ToLowerInvariant());
 
+    public static string Name(RecommendedAction action) => action switch
+    {
+        RecommendedAction.AssignTechnician => "Asignar técnico",
+        RecommendedAction.StartDiagnosis => "Iniciar diagnóstico",
+        RecommendedAction.CompleteDiagnosis => "Completar diagnóstico",
+        RecommendedAction.ContinueRepair => "Continuar reparación",
+        RecommendedAction.FollowUpParts => "Dar seguimiento al repuesto",
+        _ => "Avisar al cliente y entregar",
+    };
+
+    public static string Icon(RecommendedAction action) => action switch
+    {
+        RecommendedAction.AssignTechnician => "user-check",
+        RecommendedAction.StartDiagnosis or RecommendedAction.CompleteDiagnosis => "scan-search",
+        RecommendedAction.ContinueRepair => "wrench",
+        RecommendedAction.FollowUpParts => "package-search",
+        _ => "package-check",
+    };
+
+    public static string Name(WorkQueue queue) => queue switch
+    {
+        WorkQueue.Repair => "Reparaciones",
+        WorkQueue.AwaitingParts => "En espera de repuestos",
+        _ => "Listas para entrega",
+    };
+
     /// <summary>Valor del parámetro <c>?vista=</c> del listado de órdenes.</summary>
     public static string Slug(ServiceOrderView view) => view switch
     {

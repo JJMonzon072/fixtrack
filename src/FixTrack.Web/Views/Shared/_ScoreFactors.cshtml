@@ -1,0 +1,10 @@
+@model FixTrack.Domain.ServiceOrders.WorkPriorityScore
+<span class="score">
+    <span class="score__total mono" aria-label="Puntuación @Model.Total">@Model.Total</span>
+    <span class="score__factors">
+        @foreach (var factor in Model.Factors)
+        {
+            <span class="score__factor">@factor.Description <span class="mono">+@factor.Points</span></span>
+        }
+    </span>
+</span>

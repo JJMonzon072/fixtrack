@@ -25,6 +25,12 @@ internal sealed class ModuleCatalog : IModuleCatalog
                 ModuleStatus.Available,
                 []),
             new ModuleInfo(
+                ModuleKey.WorkQueue,
+                "Cola de trabajo",
+                "Órdenes abiertas ordenadas por el algoritmo de priorización, con la acción recomendada para cada una.",
+                ModuleStatus.Available,
+                []),
+            new ModuleInfo(
                 ModuleKey.Customers,
                 "Clientes",
                 "Registro, búsqueda y datos de contacto de los clientes del taller.",

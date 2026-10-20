@@ -1,5 +1,6 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Devices;
+using FixTrack.Application.ServiceOrders;
 using FixTrack.Domain.ServiceOrders;
 
 namespace FixTrack.Web.Models;
@@ -24,3 +25,6 @@ public sealed record OrderSummaryTableViewModel(
     bool ShowDevice = false,
     bool ShowCustomer = false,
     bool ShowTechnician = true);
+
+/// <summary>Una lista de la cola de trabajo, ya ordenada por el algoritmo de priorización.</summary>
+public sealed record QueueTableViewModel(IReadOnlyList<PrioritizedOrder> Items, DateTime NowUtc, string Caption);

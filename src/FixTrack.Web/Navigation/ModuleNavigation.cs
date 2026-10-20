@@ -14,7 +14,7 @@ public static class ModuleNavigation
     public static IReadOnlyList<NavigationGroup> Groups { get; } =
     [
         new(null, [ModuleKey.Dashboard]),
-        new("Operación", [ModuleKey.ServiceOrders]),
+        new("Operación", [ModuleKey.ServiceOrders, ModuleKey.WorkQueue]),
         new("Gestión", [ModuleKey.Customers, ModuleKey.Devices, ModuleKey.Technicians]),
     ];
 
@@ -22,6 +22,7 @@ public static class ModuleNavigation
     {
         ModuleKey.Dashboard => new("Dashboard", "layout-dashboard"),
         ModuleKey.ServiceOrders => new("ServiceOrders", "clipboard-list"),
+        ModuleKey.WorkQueue => new("WorkQueue", "list-ordered"),
         ModuleKey.Customers => new("Customers", "users"),
         ModuleKey.Devices => new("Devices", "laptop"),
         ModuleKey.Technicians => new("Technicians", "wrench"),

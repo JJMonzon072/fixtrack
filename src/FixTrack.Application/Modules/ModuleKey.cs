@@ -5,6 +5,7 @@ public enum ModuleKey
 {
     Dashboard,
     ServiceOrders,
+    WorkQueue,
     Customers,
     Devices,
     Technicians,

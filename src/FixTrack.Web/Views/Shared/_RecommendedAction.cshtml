@@ -1,0 +1,19 @@
+@using FixTrack.Application.ServiceOrders
+@using FixTrack.Domain.ServiceOrders
+@model PrioritizedOrder
+@{
+    // Cada acción lleva a la página donde se realiza.
+    var id = Model.Order.Id;
+    var url = Model.Score.Action switch
+    {
+        RecommendedAction.AssignTechnician => Url.Action("Assign", "ServiceOrders", new { id }),
+        RecommendedAction.StartDiagnosis => Url.Action("ChangeStatus", "ServiceOrders", new { id, a = DomainDisplay.Slug(ServiceOrderStatus.Diagnosing) }),
+        RecommendedAction.CompleteDiagnosis => Url.Action("Diagnosis", "ServiceOrders", new { id }),
+        RecommendedAction.DeliverToCustomer => Url.Action("ChangeStatus", "ServiceOrders", new { id, a = DomainDisplay.Slug(ServiceOrderStatus.Delivered) }),
+        _ => Url.Action("Details", "ServiceOrders", new { id }),
+    };
+}
+<a class="action-link link--above-row" href="@url">
+    <icon name="@DomainDisplay.Icon(Model.Score.Action)" />
+    @DomainDisplay.Name(Model.Score.Action)
+</a>
