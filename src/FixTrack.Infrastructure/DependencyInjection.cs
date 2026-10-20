@@ -8,6 +8,7 @@ using FixTrack.Application.Technicians;
 using FixTrack.Infrastructure.Identity;
 using FixTrack.Infrastructure.Persistence;
 using FixTrack.Infrastructure.Persistence.Repositories;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,6 +20,9 @@ public static class DependencyInjection
 {
     /// <summary>Nombre de la cadena de conexión: <c>ConnectionStrings:FixTrack</c>.</summary>
     public const string ConnectionStringName = "FixTrack";
+
+    /// <summary>Tiempo máximo de conexión y de consulta del anillo de claves de Data Protection.</summary>
+    public const int DataProtectionKeysTimeoutSeconds = 5;
 
     /// <summary>Registra los servicios de infraestructura: reloj del sistema y persistencia con SQL Server.</summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
@@ -39,6 +43,15 @@ public static class DependencyInjection
         services.AddDbContext<FixTrackDbContext>(options => options.UseSqlServer(
             connectionString,
             sql => sql.EnableRetryOnFailure(maxRetryCount: 3)));
+
+        // Claves de Data Protection: falla rápido si la base no responde (ver DataProtectionKeysDbContext).
+        var keysConnection = new SqlConnectionStringBuilder(connectionString);
+        keysConnection.ConnectTimeout = Math.Min(keysConnection.ConnectTimeout, DataProtectionKeysTimeoutSeconds);
+        services.AddDbContext<DataProtectionKeysDbContext>(options => options.UseSqlServer(
+            keysConnection.ConnectionString,
+            sql => sql
+                .CommandTimeout(DataProtectionKeysTimeoutSeconds)
+                .EnableRetryOnFailure(maxRetryCount: 1, maxRetryDelay: TimeSpan.FromSeconds(1), errorNumbersToAdd: null)));
 
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using FixTrack.Application.Common;
 using FixTrack.Application.Security;
 using FixTrack.Infrastructure.Persistence;
+using FixTrack.Tests.Web;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -43,6 +44,7 @@ public sealed class AccountConcurrencyTests(DisposableSqlServerDatabase database
         _app = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder
             .UseEnvironment("Pruebas")
             .UseSetting("ConnectionStrings:FixTrack", connectionString)
+            .UseProtectedKeysInDatabase()
             .ConfigureTestServices(services =>
             {
                 services.RemoveAll<DbContextOptions<FixTrackDbContext>>();
@@ -51,6 +53,10 @@ public sealed class AccountConcurrencyTests(DisposableSqlServerDatabase database
                 services.RemoveAll<FixTrackDbContext>();
                 services.AddDbContext<FixTrackDbContext>(options => options.UseSqlServer(
                     connectionString, sql => sql.EnableRetryOnFailure(maxRetryCount: 3)));
+                services.RemoveAll<DbContextOptions<DataProtectionKeysDbContext>>();
+                services.RemoveAll<IDbContextOptionsConfiguration<DataProtectionKeysDbContext>>();
+                services.RemoveAll<DataProtectionKeysDbContext>();
+                services.AddDbContext<DataProtectionKeysDbContext>(options => options.UseSqlServer(connectionString));
             }));
 
         await using var scope = _app.Services.CreateAsyncScope();

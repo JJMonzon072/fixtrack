@@ -59,10 +59,8 @@ public static class SecurityServiceCollectionExtensions
         services.AddAuthorization(AuthorizationPolicies.Configure);
         services.AddScoped<FailedLoginEqualizer>();
 
-        // Las claves que cifran cookies y tokens se guardan en la base: sobreviven a reinicios del contenedor.
-        services.AddDataProtection()
-            .SetApplicationName("FixTrack")
-            .PersistKeysToDbContext<FixTrackDbContext>();
+        // Claves que cifran cookies y tokens: en la base (cifradas con un certificado) fuera de Desarrollo.
+        services.AddFixTrackDataProtection(configuration, environment);
 
         var attemptsPerMinute = configuration.GetValue("Security:LoginAttemptsPerMinute", 10);
         services.AddRateLimiter(options =>

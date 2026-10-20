@@ -122,10 +122,21 @@ jobs:
 
       - name: Probar el contenedor sin base de datos
         run: |
+          # Certificado desechable de esta ejecución para Data Protection (producción exige uno); no es del repositorio.
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 2 -subj "/CN=FixTrack CI" 2> /dev/null
+          openssl pkcs12 -export -inkey key.pem -in cert.pem -out dp.pfx -passout "pass:$password"
+          DataProtection__Certificate__Base64="$(base64 -w0 dp.pfx)"
+          DataProtection__Certificate__Password="$password"
+          export DataProtection__Certificate__Base64 DataProtection__Certificate__Password
+          rm key.pem cert.pem dp.pfx
           # Cadena ficticia: la imagen no trae credenciales y el contenedor debe arrancar igual.
           docker run --detach --name fixtrack --publish 8080:9000 \
             --env PORT=9000 \
             --env ReverseProxy__IgnoreForwardedHeaders=true \
+            --env DataProtection__Certificate__Base64 \
+            --env DataProtection__Certificate__Password \
             --env ConnectionStrings__FixTrack="Server=no-existe.invalid;Database=NoUsar;Encrypt=True;" \
             fixtrack:ci
           for _ in $(seq 1 60); do

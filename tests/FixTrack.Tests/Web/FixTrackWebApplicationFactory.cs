@@ -36,6 +36,9 @@ public sealed class FixTrackWebApplicationFactory : WebApplicationFactory<Progra
         // El tiempo mínimo de un inicio de sesión fallido se prueba aparte; aquí solo haría lentas las pruebas.
         builder.UseSetting(FailedLoginEqualizer.MinimumDurationSetting, "0");
 
+        // Las claves de Data Protection van a la base de la prueba, cifradas con un certificado generado al azar.
+        builder.UseProtectedKeysInDatabase();
+
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<DbContextOptions<FixTrackDbContext>>();
@@ -43,6 +46,10 @@ public sealed class FixTrackWebApplicationFactory : WebApplicationFactory<Progra
             services.RemoveAll<IDbContextOptionsConfiguration<FixTrackDbContext>>();
             services.RemoveAll<FixTrackDbContext>();
             services.AddDbContext<FixTrackDbContext>(options => options.UseSqlite(_database.Connection));
+            services.RemoveAll<DbContextOptions<DataProtectionKeysDbContext>>();
+            services.RemoveAll<IDbContextOptionsConfiguration<DataProtectionKeysDbContext>>();
+            services.RemoveAll<DataProtectionKeysDbContext>();
+            services.AddDbContext<DataProtectionKeysDbContext>(options => options.UseSqlite(_database.Connection));
         });
     }
 
