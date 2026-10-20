@@ -1,10 +1,12 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Application.Devices;
+using FixTrack.Application.ServiceOrders;
 using FixTrack.Application.Technicians;
 using FixTrack.Domain.Common;
 using FixTrack.Domain.Customers;
 using FixTrack.Domain.Devices;
+using FixTrack.Domain.ServiceOrders;
 using FixTrack.Domain.Technicians;
 
 namespace FixTrack.Tests.Application;
@@ -26,9 +28,11 @@ public sealed class InMemoryStore
 
     public List<Technician> Technicians { get; } = [];
 
+    public List<ServiceOrder> ServiceOrders { get; } = [];
+
     public List<Entity> Pending { get; } = [];
 
-    /// <summary>Órdenes abiertas por técnico (el módulo Órdenes todavía no existe).</summary>
+    /// <summary>Órdenes abiertas adicionales por técnico, para pruebas que no necesitan crear órdenes reales.</summary>
     public Dictionary<int, int> OpenOrdersByTechnician { get; } = [];
 
     /// <summary>Indica si hay una transacción en curso (la abre <see cref="FakeUnitOfWork"/>).</summary>
@@ -86,6 +90,10 @@ public sealed class FakeUnitOfWork(InMemoryStore store) : IUnitOfWork
                 case Technician technician:
                     InMemoryStore.AssignId(technician, store.Technicians.Count + 1);
                     store.Technicians.Add(technician);
+                    break;
+                case ServiceOrder order:
+                    InMemoryStore.AssignId(order, store.ServiceOrders.Count + 1);
+                    store.ServiceOrders.Add(order);
                     break;
             }
         }
@@ -174,6 +182,8 @@ public sealed class FakeDeviceRepository(InMemoryStore store) : IDeviceRepositor
     public Task<Device?> FindAsync(int id, CancellationToken cancellationToken) =>
         Task.FromResult(store.Devices.SingleOrDefault(d => d.Id == id));
 
+    public Task<Device?> FindWithOwnerAsync(int id, CancellationToken cancellationToken) => FindAsync(id, cancellationToken);
+
     // Igual que SQL Server con la intercalación CI: sin distinguir mayúsculas.
     public Task<bool> SerialNumberExistsAsync(string brand, string serialNumber, int? excludingDeviceId, CancellationToken cancellationToken) =>
         Task.FromResult(store.Devices.Any(d =>
@@ -222,7 +232,31 @@ public sealed class FakeTechnicianRepository(InMemoryStore store) : ITechnicianR
         Task.FromResult(OpenOrders(technicianId));
 
     private int OpenOrders(int technicianId) =>
-        store.OpenOrdersByTechnician.GetValueOrDefault(technicianId);
+        store.OpenOrdersByTechnician.GetValueOrDefault(technicianId)
+        + store.ServiceOrders.Count(order => order.TechnicianId == technicianId && !order.IsClosed);
 
     public void Add(Technician technician) => store.Pending.Add(technician);
+}
+
+public sealed class FakeServiceOrderRepository(InMemoryStore store) : IServiceOrderRepository
+{
+    public ServiceOrderSearch? LastSearch { get; private set; }
+
+    public DateTime? LastSearchNow { get; private set; }
+
+    public Task<ServiceOrderSearchResult> SearchAsync(ServiceOrderSearch search, DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        LastSearch = search;
+        LastSearchNow = nowUtc;
+        return Task.FromResult(new ServiceOrderSearchResult(
+            new PagedResult<ServiceOrderListItem>([], 1, ServiceOrderSearch.PageSize, 0),
+            new ServiceOrderViewCounts(0, 0, 0)));
+    }
+
+    public Task<ServiceOrderDetails?> GetDetailsAsync(int id, CancellationToken cancellationToken) => Task.FromResult<ServiceOrderDetails?>(null);
+
+    public Task<ServiceOrder?> FindAsync(int id, CancellationToken cancellationToken) =>
+        Task.FromResult(store.ServiceOrders.SingleOrDefault(order => order.Id == id));
+
+    public void Add(ServiceOrder order) => store.Pending.Add(order);
 }

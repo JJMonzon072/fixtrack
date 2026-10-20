@@ -98,6 +98,9 @@ internal sealed class DeviceRepository(FixTrackDbContext db) : IDeviceRepository
     public Task<Device?> FindAsync(int id, CancellationToken cancellationToken) =>
         db.Devices.SingleOrDefaultAsync(device => device.Id == id, cancellationToken);
 
+    public Task<Device?> FindWithOwnerAsync(int id, CancellationToken cancellationToken) =>
+        db.Devices.Include(device => device.Customer).SingleOrDefaultAsync(device => device.Id == id, cancellationToken);
+
     // En SQL Server la comparación usa la intercalación de las columnas (sin distinguir mayúsculas),
     // igual que el índice único UX_Devices_Brand_SerialNumber.
     public Task<bool> SerialNumberExistsAsync(string brand, string serialNumber, int? excludingDeviceId, CancellationToken cancellationToken) =>
