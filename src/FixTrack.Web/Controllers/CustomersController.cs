@@ -1,5 +1,7 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
+using FixTrack.Application.Devices;
+using FixTrack.Web.Models;
 using FixTrack.Web.Models.Customers;
 using FixTrack.Web.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +10,7 @@ namespace FixTrack.Web.Controllers;
 
 /// <summary>Módulo Clientes: listado, búsqueda, registro, edición, desactivación y reactivación.</summary>
 [Route("clientes")]
-public sealed class CustomersController(ICustomerService customers) : Controller
+public sealed class CustomersController(ICustomerService customers, IDeviceService devices) : Controller
 {
     [HttpGet("")]
     public async Task<IActionResult> Index(
@@ -17,9 +19,17 @@ public sealed class CustomersController(ICustomerService customers) : Controller
         [FromQuery(Name = "pagina")] int page,
         CancellationToken cancellationToken)
     {
-        var filter = CustomerIndexViewModel.ParseStatus(status);
+        var filter = StatusFilterQuery.Parse(status);
         var result = await customers.SearchAsync(new CustomerSearch(search, filter, page), cancellationToken);
         return View(new CustomerIndexViewModel(search?.Trim(), filter, result));
+    }
+
+    /// <summary>Sugerencias de clientes activos para el selector de propietario del formulario de equipos.</summary>
+    [HttpGet("opciones")]
+    public async Task<IActionResult> Options([FromQuery(Name = "buscar")] string? search, CancellationToken cancellationToken)
+    {
+        var options = await customers.SuggestActiveAsync(search, cancellationToken);
+        return Json(options.Select(option => new { option.Id, option.FullName, option.Phone, option.Email }));
     }
 
     [HttpGet("nuevo")]
@@ -43,7 +53,13 @@ public sealed class CustomersController(ICustomerService customers) : Controller
     public async Task<IActionResult> Details(int id, CancellationToken cancellationToken)
     {
         var customer = await customers.GetAsync(id, cancellationToken);
-        return customer is null ? NotFound() : View(customer);
+        if (customer is null)
+        {
+            return NotFound();
+        }
+
+        var customerDevices = await devices.ListByCustomerAsync(id, cancellationToken);
+        return View(new CustomerDetailsViewModel(customer, customerDevices));
     }
 
     [HttpGet("{id:int}/editar")]

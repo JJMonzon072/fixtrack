@@ -1,6 +1,7 @@
 @using FixTrack.Domain.Common
 @using FixTrack.Domain.Customers
 @using FixTrack.Web.Models.Customers
+@using FixTrack.Web.Models.Forms
 @model CustomerEditorViewModel
 @{
     var isNew = Model.IsNew;
@@ -8,26 +9,12 @@
     ViewData["ParentTitle"] = "Clientes";
     ViewData["ParentUrl"] = Url.Action("Index");
 
-    string[] fieldOrder = [nameof(CustomerFormModel.FullName), nameof(CustomerFormModel.Phone), nameof(CustomerFormModel.Email), nameof(CustomerFormModel.Notes)];
-    var errors = ViewData.ModelState
-        .Where(entry => entry.Value is { Errors.Count: > 0 })
-        .Select(entry => (Field: entry.Key, Message: entry.Value!.Errors[0].ErrorMessage))
-        .OrderBy(error => Array.IndexOf(fieldOrder, error.Field) is var index and >= 0 ? index : int.MaxValue)
-        .ToList();
-
-    string? ErrorFor(string field) => errors.FirstOrDefault(e => e.Field == field).Message;
-
-    string? DescribedBy(string field, bool hasHint) =>
-        string.Join(' ', new[] { hasHint ? $"{field}-hint" : null, ErrorFor(field) is null ? null : $"{field}-error" }
-            .Where(id => id is not null)) is { Length: > 0 } ids ? ids : null;
-
-    var fieldLabels = new Dictionary<string, string>
-    {
-        [nameof(CustomerFormModel.FullName)] = "Nombre completo",
-        [nameof(CustomerFormModel.Phone)] = "Teléfono",
-        [nameof(CustomerFormModel.Email)] = "Correo electrónico",
-        [nameof(CustomerFormModel.Notes)] = "Notas",
-    };
+    var form = Model.Form;
+    var errors = FormErrors.From(ViewData.ModelState,
+        (nameof(form.FullName), "Nombre completo", null),
+        (nameof(form.Phone), "Teléfono", null),
+        (nameof(form.Email), "Correo electrónico", null),
+        (nameof(form.Notes), "Notas", null));
 
     var cancelUrl = isNew ? Url.Action("Index") : Url.Action("Details", new { id = Model.CustomerId });
 }
@@ -48,81 +35,39 @@
     </div>
 </header>
 
-@* novalidate: la validación la hace el servidor, con mensajes en español y el mismo estilo en todos los navegadores. *@
 <div class="form-layout">
+    @* novalidate: la validación la hace el servidor, con mensajes en español y el mismo estilo en todos los navegadores. *@
     <form class="form-card" method="post" novalidate asp-antiforgery="true"
           asp-action="@(isNew ? "Create" : "Edit")" asp-route-id="@Model.CustomerId">
 
-        @if (errors.Count > 0)
-        {
-            <div class="error-summary" role="alert" tabindex="-1" data-error-summary aria-labelledby="error-summary-title">
-                <icon name="triangle-alert" />
-                <div>
-                    <h2 class="error-summary__title" id="error-summary-title">Revisa @(errors.Count == 1 ? "el siguiente campo" : $"los siguientes {errors.Count} campos")</h2>
-                    <ul class="error-summary__list" role="list">
-                        @foreach (var error in errors)
-                        {
-                            <li><a href="#@error.Field">@(fieldLabels.GetValueOrDefault(error.Field, error.Field)): @error.Message</a></li>
-                        }
-                    </ul>
-                </div>
-            </div>
-        }
+        <partial name="_ErrorSummary" model="errors" />
 
         <div class="form-grid">
-            <div class="field field--wide">
-                <label class="field__label" for="FullName">Nombre completo</label>
-                <p class="field__hint" id="FullName-hint">Nombre de la persona o razón social de la empresa.</p>
-                <input class="input" id="FullName" name="FullName" value="@Model.Form.FullName"
-                       autocomplete="name" maxlength="@ContactRules.NameMaxLength" required
-                       aria-invalid="@(ErrorFor("FullName") is null ? null : "true")"
-                       aria-describedby="@DescribedBy("FullName", hasHint: true)" />
-                @if (ErrorFor("FullName") is { } nameError)
-                {
-                    <p class="field__error" id="FullName-error"><icon name="triangle-alert" />@nameError</p>
-                }
-            </div>
-
-            <div class="field">
-                <label class="field__label" for="Phone">Teléfono</label>
-                <p class="field__hint" id="Phone-hint">De 7 a 15 dígitos. Incluye el código de país si no es local.</p>
-                <input class="input mono-input" id="Phone" name="Phone" value="@Model.Form.Phone" type="tel"
-                       inputmode="tel" autocomplete="tel" maxlength="@ContactRules.PhoneMaxLength" required
-                       aria-invalid="@(ErrorFor("Phone") is null ? null : "true")"
-                       aria-describedby="@DescribedBy("Phone", hasHint: true)" />
-                @if (ErrorFor("Phone") is { } phoneError)
-                {
-                    <p class="field__error" id="Phone-error"><icon name="triangle-alert" />@phoneError</p>
-                }
-            </div>
-
-            <div class="field">
-                <label class="field__label" for="Email">Correo electrónico <span class="field__optional">(opcional)</span></label>
-                <p class="field__hint" id="Email-hint">No puede estar registrado en otro cliente.</p>
-                <input class="input" id="Email" name="Email" value="@Model.Form.Email" type="email"
-                       inputmode="email" autocomplete="email" spellcheck="false" maxlength="@ContactRules.EmailMaxLength"
-                       aria-invalid="@(ErrorFor("Email") is null ? null : "true")"
-                       aria-describedby="@DescribedBy("Email", hasHint: true)" />
-                @if (ErrorFor("Email") is { } emailError)
-                {
-                    <p class="field__error" id="Email-error"><icon name="triangle-alert" />@emailError</p>
-                }
-            </div>
-
-            <div class="field field--wide">
-                <div class="field__label-row">
-                    <label class="field__label" for="Notes">Notas <span class="field__optional">(opcional)</span></label>
-                    <span class="field__counter mono" data-char-counter-for="Notes" aria-hidden="true"></span>
-                </div>
-                <p class="field__hint" id="Notes-hint">Preferencias de contacto u observaciones útiles para el taller.</p>
-                <textarea class="input textarea" id="Notes" name="Notes" rows="4" maxlength="@CustomerRules.NotesMaxLength"
-                          aria-invalid="@(ErrorFor("Notes") is null ? null : "true")"
-                          aria-describedby="@DescribedBy("Notes", hasHint: true)">@Model.Form.Notes</textarea>
-                @if (ErrorFor("Notes") is { } notesError)
-                {
-                    <p class="field__error" id="Notes-error"><icon name="triangle-alert" />@notesError</p>
-                }
-            </div>
+            <partial name="_FormField" model='new FormField(nameof(form.FullName), "Nombre completo")
+            {
+                Value = form.FullName, Error = errors.For(nameof(form.FullName)), Wide = true,
+                Hint = "Nombre de la persona o razón social de la empresa.",
+                MaxLength = ContactRules.NameMaxLength, Autocomplete = "name",
+            }' />
+            <partial name="_FormField" model='new FormField(nameof(form.Phone), "Teléfono")
+            {
+                Value = form.Phone, Error = errors.For(nameof(form.Phone)), Mono = true,
+                Hint = "De 7 a 15 dígitos. Incluye el código de país si no es local.",
+                InputType = "tel", InputMode = "tel", Autocomplete = "tel", MaxLength = ContactRules.PhoneMaxLength,
+            }' />
+            <partial name="_FormField" model='new FormField(nameof(form.Email), "Correo electrónico")
+            {
+                Value = form.Email, Error = errors.For(nameof(form.Email)), Optional = true,
+                Hint = "No puede estar registrado en otro cliente.",
+                InputType = "email", InputMode = "email", Autocomplete = "email", Spellcheck = false,
+                MaxLength = ContactRules.EmailMaxLength,
+            }' />
+            <partial name="_FormField" model='new FormField(nameof(form.Notes), "Notas")
+            {
+                Value = form.Notes, Error = errors.For(nameof(form.Notes)), Optional = true, Wide = true,
+                Hint = "Preferencias de contacto u observaciones útiles para el taller.",
+                Rows = 4, MaxLength = CustomerRules.NotesMaxLength,
+            }' />
         </div>
 
         <footer class="form-card__actions">

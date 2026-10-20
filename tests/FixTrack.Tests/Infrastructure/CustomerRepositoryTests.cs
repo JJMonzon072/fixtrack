@@ -1,3 +1,4 @@
+using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Domain.Customers;
 using FixTrack.Infrastructure.Persistence;
@@ -87,8 +88,8 @@ public sealed class CustomerRepositoryTests : IDisposable
     {
         await SeedAsync([.. Enumerable.Range(1, 23).Select(i => ($"Cliente Inactivo {i:D2}", $"5555-{i:D4}", (string?)null, false))]);
 
-        var firstPage = await SearchAsync(new CustomerSearch(null, CustomerStatusFilter.Inactive, Page: 1));
-        var lastPage = await SearchAsync(new CustomerSearch(null, CustomerStatusFilter.Inactive, Page: 99));
+        var firstPage = await SearchAsync(new CustomerSearch(null, StatusFilter.Inactive, Page: 1));
+        var lastPage = await SearchAsync(new CustomerSearch(null, StatusFilter.Inactive, Page: 99));
 
         Assert.Equal(CustomerSearch.PageSize, firstPage.Page.Items.Count);
         Assert.Equal(2, firstPage.Page.TotalPages);

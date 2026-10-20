@@ -38,22 +38,14 @@ internal sealed class ModuleCatalog : IModuleCatalog
                 ModuleKey.Devices,
                 "Equipos",
                 "Computadoras, laptops y otros dispositivos recibidos, vinculados a su propietario.",
-                ModuleStatus.Planned,
-                [
-                    "Registro por tipo, marca, modelo y número de serie",
-                    "Vinculación con el cliente propietario",
-                    "Historial de reparaciones por equipo",
-                ]),
+                ModuleStatus.Available,
+                []),
             new ModuleInfo(
                 ModuleKey.Technicians,
                 "Técnicos",
-                "Personal técnico del taller y su carga de trabajo.",
-                ModuleStatus.Planned,
-                [
-                    "Registro de técnicos y especialidades",
-                    "Asignación a órdenes de servicio",
-                    "Seguimiento de la carga de trabajo",
-                ]),
+                "Personal técnico del taller, su especialidad y su disponibilidad.",
+                ModuleStatus.Available,
+                []),
         ];
 
         _modulesByKey = Modules.ToDictionary(module => module.Key);

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FixTrack.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -27,7 +28,7 @@ public sealed class MigrationTests
     }
 
     [Fact]
-    public void The_initial_migration_creates_the_schema_without_destructive_operations()
+    public void The_migrations_create_the_schema_without_destructive_operations()
     {
         using var context = CreateSqlServerContext();
         var script = context.GetService<IMigrator>().GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
@@ -38,8 +39,32 @@ public sealed class MigrationTests
         }
 
         Assert.Contains("TR_ServiceOrderStatusHistory_AppendOnly", script);
-        Assert.DoesNotContain("DROP ", script, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("TRUNCATE", script, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("ON DELETE CASCADE", script, StringComparison.OrdinalIgnoreCase);
+
+        foreach (var forbidden in new[] { "DROP TABLE", "DROP COLUMN", "DROP INDEX", "TRUNCATE", "DELETE FROM", "UPDATE [", "ON DELETE CASCADE" })
+        {
+            Assert.DoesNotContain(forbidden, script, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // ALTER COLUMN incluye un bloque estándar de EF que elimina la restricción DEFAULT de la columna, si existe.
+        // Es el único DROP permitido.
+        Assert.Equal(
+            Regex.Count(script, @"\[sys\]\.\[default_constraints\]"),
+            Regex.Count(script, "DROP CONSTRAINT", RegexOptions.IgnoreCase));
+    }
+
+    [Fact]
+    public void The_phase_2b_migration_requires_a_specialty_and_non_empty_serial_numbers()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: "20261020031151_InitialCreate",
+            toMigration: "20261020045452_TechnicianSpecialtyAndDeviceSerialRules");
+
+        Assert.Contains("ALTER COLUMN [Specialty] nvarchar(100) NOT NULL", script);
+        Assert.Contains("CK_Technicians_Specialty_NotEmpty", script);
+        Assert.Contains("CK_Devices_SerialNumber_NotEmpty", script);
+
+        // Sin valor por defecto: no rellena datos existentes en silencio.
+        Assert.DoesNotContain("SET [Specialty]", script, StringComparison.OrdinalIgnoreCase);
     }
 }

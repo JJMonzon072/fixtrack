@@ -1,0 +1,16 @@
+@model FixTrack.Web.Models.Forms.FormErrors
+@if (Model.Count > 0)
+{
+    <div class="error-summary" role="alert" tabindex="-1" data-error-summary aria-labelledby="error-summary-title">
+        <icon name="triangle-alert" />
+        <div>
+            <h2 class="error-summary__title" id="error-summary-title">Revisa @(Model.Count == 1 ? "el siguiente campo" : $"los siguientes {Model.Count} campos")</h2>
+            <ul class="error-summary__list" role="list">
+                @foreach (var error in Model.Items)
+                {
+                    <li><a href="#@error.Anchor">@error.Label: @error.Message</a></li>
+                }
+            </ul>
+        </div>
+    </div>
+}

@@ -4,14 +4,10 @@
 @{
     ViewData["Title"] = "Clientes";
     var paging = Model.Result.Page;
-    var statusValue = CustomerIndexViewModel.StatusParameter(Model.Status);
+    var statusValue = StatusFilterQuery.ToParameter(Model.Status);
 
-    (CustomerStatusFilter Filter, string Label, int Count)[] tabs =
-    [
-        (CustomerStatusFilter.Active, "Activos", Model.Result.ActiveCount),
-        (CustomerStatusFilter.Inactive, "Inactivos", Model.Result.InactiveCount),
-        (CustomerStatusFilter.All, "Todos", Model.Result.ActiveCount + Model.Result.InactiveCount),
-    ];
+    var tabs = new StatusTabsViewModel(Model.Status, Model.Result.ActiveCount, Model.Result.InactiveCount,
+        filter => Url.Action("Index", new { buscar = Model.SearchText, estado = StatusFilterQuery.ToParameter(filter) })!);
 
     string PageUrl(int number) => Url.Action("Index", new
     {
@@ -66,16 +62,7 @@ else
                 <button class="button button--secondary" type="submit">Buscar</button>
             </form>
 
-            <nav class="tabs" aria-label="Filtrar por estado">
-                @foreach (var tab in tabs)
-                {
-                    <a class="tabs__item" aria-current="@(tab.Filter == Model.Status ? "page" : null)"
-                       href="@Url.Action("Index", new { buscar = Model.SearchText, estado = CustomerIndexViewModel.StatusParameter(tab.Filter) })">
-                        @tab.Label
-                        <span class="tabs__count">@tab.Count</span>
-                    </a>
-                }
-            </nav>
+            <partial name="_StatusTabs" model="tabs" />
         </div>
 
         @if (paging.TotalCount == 0)
@@ -92,7 +79,7 @@ else
                 }
                 else
                 {
-                    <h3 class="empty-state__title">@(Model.Status == CustomerStatusFilter.Inactive ? "No hay clientes inactivos" : "No hay clientes activos")</h3>
+                    <h3 class="empty-state__title">@(Model.Status == StatusFilter.Inactive ? "No hay clientes inactivos" : "No hay clientes activos")</h3>
                     <p class="empty-state__text">Cambia el filtro de estado para ver el resto de clientes.</p>
                 }
             </div>
@@ -117,16 +104,16 @@ else
                             <tr>
                                 <td data-label="Cliente">
                                     <div class="person">
-                                        <span class="avatar" aria-hidden="true">@CustomerDisplay.Initials(customer.FullName)</span>
+                                        <span class="avatar" aria-hidden="true">@ContactDisplay.Initials(customer.FullName)</span>
                                         <span class="person__text">
                                             <a class="person__name row-link" asp-action="Details" asp-route-id="@customer.Id">@customer.FullName</a>
                                             <span class="person__meta">@(customer.Email ?? "Sin correo electrónico")</span>
                                         </span>
                                     </div>
                                 </td>
-                                <td data-label="Teléfono" class="mono">@customer.Phone</td>
-                                <td data-label="Equipos" class="data-table__numeric mono">@customer.DeviceCount</td>
-                                <td data-label="Registrado">
+                                <td data-label="Teléfono" class="mono" data-indent>@customer.Phone</td>
+                                <td data-label="Equipos" class="data-table__numeric mono" data-hide-mobile>@customer.DeviceCount</td>
+                                <td data-label="Registrado" data-hide-mobile>
                                     <time datetime="@FixTrack.Web.Services.DateDisplay.Iso(customer.CreatedAtUtc)">@Dates.Short(customer.CreatedAtUtc)</time>
                                 </td>
                                 <td data-label="Estado">
@@ -145,31 +132,7 @@ else
                 </table>
             </div>
 
-            <footer class="pagination">
-                <p class="pagination__summary">
-                    Mostrando <span class="mono">@paging.FirstItemNumber–@paging.LastItemNumber</span> de <span class="mono">@paging.TotalCount</span>
-                </p>
-                @if (paging.TotalPages > 1)
-                {
-                    <nav class="pagination__nav" aria-label="Paginación">
-                        @if (paging.HasPrevious)
-                        {
-                            <a class="button button--secondary button--small" href="@PageUrl(paging.Page - 1)" rel="prev">
-                                <icon name="chevron-left" />
-                                Anterior
-                            </a>
-                        }
-                        <span class="pagination__current">Página @paging.Page de @paging.TotalPages</span>
-                        @if (paging.HasNext)
-                        {
-                            <a class="button button--secondary button--small" href="@PageUrl(paging.Page + 1)" rel="next">
-                                Siguiente
-                                <icon name="chevron-right" />
-                            </a>
-                        }
-                    </nav>
-                }
-            </footer>
+            <partial name="_Pagination" model="new PaginationViewModel(paging, PageUrl)" />
         }
     </section>
 }

@@ -9,6 +9,12 @@ public interface ICustomerService
 
     Task<CustomerDetails?> GetAsync(int id, CancellationToken cancellationToken);
 
+    /// <summary>Sugerencias para el selector de propietario: solo clientes activos, como máximo 8.</summary>
+    Task<IReadOnlyList<CustomerOption>> SuggestActiveAsync(string? text, CancellationToken cancellationToken);
+
+    /// <summary>Datos básicos de un cliente (activo o no) para mostrarlo como propietario.</summary>
+    Task<CustomerOption?> GetOptionAsync(int id, CancellationToken cancellationToken);
+
     /// <summary>Registra un cliente. Si tiene éxito, devuelve su Id.</summary>
     Task<CommandResult<int>> CreateAsync(CustomerInput input, CancellationToken cancellationToken);
 

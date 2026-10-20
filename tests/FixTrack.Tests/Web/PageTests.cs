@@ -48,8 +48,6 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
 
     [Theory]
     [InlineData("/ordenes", "Nueva orden")]
-    [InlineData("/equipos", "Registrar equipo")]
-    [InlineData("/tecnicos", "Nuevo técnico")]
     public async Task Pending_modules_show_an_empty_state_with_a_disabled_action(string url, string actionLabel)
     {
         using var client = factory.CreateClient();

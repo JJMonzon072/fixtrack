@@ -102,15 +102,18 @@ public sealed class ServiceOrder : Entity
     /// <summary>Una orden entregada o cancelada ya no admite cambios de estado.</summary>
     public bool IsClosed => Status is ServiceOrderStatus.Delivered or ServiceOrderStatus.Cancelled;
 
-    public void AssignTechnician(int technicianId, DateTime assignedAtUtc)
+    /// <summary>Asigna un técnico responsable. Solo los técnicos activos pueden recibir asignaciones.</summary>
+    public void AssignTechnician(Technician technician, DateTime assignedAtUtc)
     {
+        ArgumentNullException.ThrowIfNull(technician);
         EnsureOpen();
-        if (technicianId <= 0)
+        if (!technician.IsActive)
         {
-            throw new DomainException("El técnico no es válido.");
+            throw new DomainException("No se puede asignar un técnico inactivo.");
         }
 
-        TechnicianId = technicianId;
+        Technician = technician;
+        TechnicianId = technician.Id;
         UpdatedAtUtc = UtcClock.Ensure(assignedAtUtc, nameof(assignedAtUtc));
     }
 

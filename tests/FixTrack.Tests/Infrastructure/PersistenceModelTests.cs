@@ -1,6 +1,7 @@
 using FixTrack.Domain.Customers;
 using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
+using FixTrack.Domain.Technicians;
 using Microsoft.EntityFrameworkCore;
 
 namespace FixTrack.Tests.Infrastructure;
@@ -25,8 +26,7 @@ public sealed class PersistenceModelTests : IDisposable
             context.Customers.Add(customer);
             await context.SaveChangesAsync(Token);
 
-            var device = new Device(customer.Id, DeviceType.Laptop, "Dell", "Latitude 5440", "SN-001", null, Now);
-            context.Devices.Add(device);
+            var device = customer.RegisterDevice(DeviceType.Laptop, "Dell", "Latitude 5440", "SN-001", null, Now);
             await context.SaveChangesAsync(Token);
 
             var order = new ServiceOrder(device.Id, "No enciende", ServiceOrderPriority.High, Now, Now.AddDays(2), 350.50m);
@@ -48,10 +48,12 @@ public sealed class PersistenceModelTests : IDisposable
     [Fact]
     public async Task A_device_cannot_reference_a_missing_customer()
     {
+        // El dominio no permite crear un equipo sin propietario; se prueba la clave foránea con SQL directo.
         await using var context = _database.CreateContext();
-        context.Devices.Add(new Device(customerId: 999, DeviceType.Desktop, "HP", null, null, null, Now));
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync(Token));
+        await Assert.ThrowsAnyAsync<Exception>(() => context.Database.ExecuteSqlRawAsync(
+            "INSERT INTO Devices (CustomerId, Type, Brand, CreatedAtUtc) VALUES (999, 1, 'HP', '2026-10-19 15:00:00')",
+            Token));
     }
 
     [Fact]
@@ -61,7 +63,7 @@ public sealed class PersistenceModelTests : IDisposable
         var customer = new Customer("Ana López", "5555-1234", null, null, Now);
         context.Customers.Add(customer);
         await context.SaveChangesAsync(Token);
-        context.Devices.Add(new Device(customer.Id, DeviceType.Tablet, "Apple", "iPad", null, null, Now));
+        customer.RegisterDevice(DeviceType.Tablet, "Apple", "iPad", null, null, Now);
         await context.SaveChangesAsync(Token);
 
         // Simula un borrado directo en la base: la clave foránea lo impide (ON DELETE NO ACTION).
@@ -96,14 +98,71 @@ public sealed class PersistenceModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Serial_numbers_are_unique_within_a_brand()
+    {
+        await using var context = _database.CreateContext();
+        var customer = new Customer("Ana López", "5555-1234", null, null, Now);
+        context.Customers.Add(customer);
+        await context.SaveChangesAsync(Token);
+        customer.RegisterDevice(DeviceType.Laptop, "Dell", null, "SN-1", null, Now);
+        customer.RegisterDevice(DeviceType.Printer, "HP", null, "SN-1", null, Now);
+        customer.RegisterDevice(DeviceType.Monitor, "Dell", null, null, null, Now);
+        customer.RegisterDevice(DeviceType.Monitor, "Dell", null, null, null, Now);
+        await context.SaveChangesAsync(Token);
+
+        customer.RegisterDevice(DeviceType.Desktop, "Dell", null, "SN-1", null, Now);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync(Token));
+    }
+
+    [Theory]
+    [InlineData("UPDATE Devices SET SerialNumber = ''")]
+    [InlineData("UPDATE Technicians SET Specialty = ''")]
+    [InlineData("UPDATE Technicians SET IsActive = 0")]
+    public async Task The_database_rejects_empty_values_and_inconsistent_states(string sql)
+    {
+        await using var context = _database.CreateContext();
+        var customer = new Customer("Ana López", "5555-1234", null, null, Now);
+        context.Customers.Add(customer);
+        context.Technicians.Add(new Technician("Luis Pérez", "Laptops", null, null, Now));
+        await context.SaveChangesAsync(Token);
+        customer.RegisterDevice(DeviceType.Laptop, "Dell", null, "SN-1", null, Now);
+        await context.SaveChangesAsync(Token);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => context.Database.ExecuteSqlRawAsync(sql, Token));
+    }
+
+    [Fact]
+    public async Task Deactivating_a_customer_keeps_its_devices_and_their_history()
+    {
+        int customerId;
+        await using (var context = _database.CreateContext())
+        {
+            var customer = new Customer("Ana López", "5555-1234", null, null, Now);
+            context.Customers.Add(customer);
+            await context.SaveChangesAsync(Token);
+            var device = customer.RegisterDevice(DeviceType.Laptop, "Dell", null, null, null, Now);
+            await context.SaveChangesAsync(Token);
+            context.ServiceOrders.Add(new ServiceOrder(device.Id, "No enciende", ServiceOrderPriority.Normal, Now, null, null));
+            customer.Deactivate(Now.AddDays(1));
+            await context.SaveChangesAsync(Token);
+            customerId = customer.Id;
+        }
+
+        await using var reader = _database.CreateContext();
+        Assert.False(reader.Customers.Single(c => c.Id == customerId).IsActive);
+        Assert.Equal(1, reader.Devices.Count(d => d.CustomerId == customerId));
+        Assert.Equal(1, reader.ServiceOrderStatusHistory.Count());
+    }
+
+    [Fact]
     public async Task The_database_rejects_out_of_range_statuses_and_negative_amounts()
     {
         await using var context = _database.CreateContext();
         var customer = new Customer("Ana López", "5555-1234", null, null, Now);
         context.Customers.Add(customer);
         await context.SaveChangesAsync(Token);
-        var device = new Device(customer.Id, DeviceType.Laptop, "Lenovo", null, null, null, Now);
-        context.Devices.Add(device);
+        var device = customer.RegisterDevice(DeviceType.Laptop, "Lenovo", null, null, null, Now);
         await context.SaveChangesAsync(Token);
         context.ServiceOrders.Add(new ServiceOrder(device.Id, "Pantalla rota", ServiceOrderPriority.Normal, Now, null, null));
         await context.SaveChangesAsync(Token);

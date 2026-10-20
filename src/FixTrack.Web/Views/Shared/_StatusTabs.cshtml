@@ -1,0 +1,18 @@
+@model FixTrack.Web.Models.StatusTabsViewModel
+@{
+    (StatusFilter Filter, string Label, int Count)[] tabs =
+    [
+        (StatusFilter.Active, "Activos", Model.ActiveCount),
+        (StatusFilter.Inactive, "Inactivos", Model.InactiveCount),
+        (StatusFilter.All, "Todos", Model.ActiveCount + Model.InactiveCount),
+    ];
+}
+<nav class="tabs" aria-label="Filtrar por estado">
+    @foreach (var tab in tabs)
+    {
+        <a class="tabs__item" aria-current="@(tab.Filter == Model.Current ? "page" : null)" href="@Model.Url(tab.Filter)">
+            @tab.Label
+            <span class="tabs__count">@tab.Count</span>
+        </a>
+    }
+</nav>

@@ -1,0 +1,29 @@
+@model FixTrack.Web.Models.PaginationViewModel
+@{
+    var paging = Model.Page;
+}
+<footer class="pagination">
+    <p class="pagination__summary">
+        Mostrando <span class="mono">@paging.FirstItemNumber–@paging.LastItemNumber</span> de <span class="mono">@paging.TotalCount</span>
+    </p>
+    @if (paging.TotalPages > 1)
+    {
+        <nav class="pagination__nav" aria-label="Paginación">
+            @if (paging.HasPrevious)
+            {
+                <a class="button button--secondary button--small" href="@Model.PageUrl(paging.Page - 1)" rel="prev">
+                    <icon name="chevron-left" />
+                    Anterior
+                </a>
+            }
+            <span class="pagination__current">Página @paging.Page de @paging.TotalPages</span>
+            @if (paging.HasNext)
+            {
+                <a class="button button--secondary button--small" href="@Model.PageUrl(paging.Page + 1)" rel="next">
+                    Siguiente
+                    <icon name="chevron-right" />
+                </a>
+            }
+        </nav>
+    }
+</footer>

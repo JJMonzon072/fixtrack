@@ -2,7 +2,13 @@
 
 Este documento describe las tablas de la base de datos FixTrackDB (SQL Server), sus relaciones y las reglas que las protegen. Sirve como referencia para preparar los diagramas entidad-relación y de clases del proyecto.
 
-El esquema se crea con la migración de Entity Framework Core `20261020031151_InitialCreate`, ubicada en `src/FixTrack.Infrastructure/Persistence/Migrations/`. Las entidades de C# están en `src/FixTrack.Domain/` y su configuración de base de datos en `src/FixTrack.Infrastructure/Persistence/Configurations/`.
+El esquema se crea con las migraciones de Entity Framework Core de `src/FixTrack.Infrastructure/Persistence/Migrations/`:
+
+| Migración | Fase | Cambios |
+| --- | --- | --- |
+| `20261020031151_InitialCreate` | 2A | Crea las cinco tablas, sus claves, restricciones, índices y el trigger del historial |
+| `20261020045452_TechnicianSpecialtyAndDeviceSerialRules` | 2B | `Technicians.Specialty` pasa a ser obligatoria (`NOT NULL` y no vacía); `Devices.SerialNumber`, si existe, no puede ser una cadena vacía |
+ Las entidades de C# están en `src/FixTrack.Domain/` y su configuración de base de datos en `src/FixTrack.Infrastructure/Persistence/Configurations/`.
 
 ## Diagrama entidad-relación
 
@@ -44,7 +50,7 @@ erDiagram
         nvarchar FullName
         varchar Phone
         nvarchar Email "único si existe"
-        nvarchar Specialty
+        nvarchar Specialty "obligatoria"
         bit IsActive
         datetime2 CreatedAtUtc
         datetime2 UpdatedAtUtc
@@ -126,7 +132,9 @@ Computadoras, laptops y otros dispositivos de un cliente.
 | `Notes` | nvarchar(500) | Sí | Estado físico, accesorios entregados |
 | `CreatedAtUtc`, `UpdatedAtUtc` | datetime2(3) | No / Sí | Auditoría (UTC) |
 
-Restricciones: `CK_Devices_Type` (1 a 7), `CK_Devices_Brand_NotEmpty`.
+Restricciones: `CK_Devices_Type` (1 a 7), `CK_Devices_Brand_NotEmpty`, `CK_Devices_SerialNumber_NotEmpty` (la serie es `NULL` o tiene texto; una cadena vacía chocaría con otras en el índice único).
+
+El número de serie se guarda en mayúsculas y solo admite letras sin tilde, números, espacios, guiones, puntos y barras (la columna es `varchar`). Su unicidad por marca no distingue mayúsculas: `Dell / dl-01` y `DELL / DL-01` son el mismo equipo.
 
 Índices: `IX_Devices_CustomerId`, `UX_Devices_Brand_SerialNumber` (único por marca, filtrado `WHERE SerialNumber IS NOT NULL`).
 
@@ -140,10 +148,10 @@ Personal técnico del taller. Igual que los clientes, se desactiva en lugar de e
 | `FullName` | nvarchar(150), `Modern_Spanish_100_CI_AI` | No | Nombre completo |
 | `Phone` | varchar(20) | Sí | Teléfono |
 | `Email` | nvarchar(254) | Sí | Único entre técnicos cuando existe |
-| `Specialty` | nvarchar(100) | Sí | Especialidad |
+| `Specialty` | nvarchar(100) | No | Especialidad, de 3 a 100 caracteres |
 | `IsActive`, `CreatedAtUtc`, `UpdatedAtUtc`, `DeactivatedAtUtc` | | | Igual que en Customers |
 
-Restricciones: `CK_Technicians_FullName_NotEmpty`, `CK_Technicians_Email_Format`, `CK_Technicians_Deactivation`.
+Restricciones: `CK_Technicians_FullName_NotEmpty`, `CK_Technicians_Specialty_NotEmpty`, `CK_Technicians_Email_Format`, `CK_Technicians_Deactivation`.
 
 Índices: `UX_Technicians_Email` (único filtrado), `IX_Technicians_IsActive_FullName`.
 
@@ -204,6 +212,13 @@ Trigger `TR_ServiceOrderStatusHistory_AppendOnly`: rechaza cualquier `UPDATE` o 
 | Teléfono: 7 a 15 dígitos, `+` solo al inicio | Dominio (`ContactRules`) |
 | Correo: formato válido, en minúsculas, único entre clientes | Dominio, aplicación y base de datos (índice único) |
 | Los clientes se desactivan y reactivan; no se eliminan | Dominio (`Customer.Deactivate/Reactivate`), restricción `CK_Customers_Deactivation` y claves foráneas |
+| Un equipo se registra solo a nombre de un cliente **activo**; los equipos de un cliente inactivo se conservan y pueden consultarse | Dominio (`Customer.RegisterDevice`) y aplicación (`DeviceService`) |
+| El propietario de un equipo no cambia: su historial de reparaciones queda vinculado al equipo | Dominio (`Device` no expone un cambio de propietario; `UpdateDetails` solo modifica datos técnicos) |
+| Marca obligatoria; modelo, serie y observaciones opcionales con longitud limitada; serie única por marca | Dominio (`DeviceRules`), aplicación e índice `UX_Devices_Brand_SerialNumber` |
+| Técnico: nombre y especialidad obligatorios; teléfono y correo opcionales con formato válido; correo único | Dominio (`TechnicianRules`), aplicación e índice `UX_Technicians_Email` |
+| Los técnicos se desactivan y reactivan; no se eliminan | Dominio (`Technician.Deactivate/Reactivate`) y restricción `CK_Technicians_Deactivation` |
+| No se puede desactivar un técnico con órdenes abiertas (ni entregadas ni canceladas) asignadas; primero hay que reasignarlas | Aplicación (`TechnicianService.DeactivateAsync`) |
+| Solo un técnico activo puede recibir asignaciones | Dominio (`ServiceOrder.AssignTechnician`) |
 | Toda orden nace como Recibida y registra ese estado en el historial | Dominio (`ServiceOrder`) |
 | Una orden no vuelve a Recibida; solo se entrega si estaba Lista para entrega; una orden entregada o cancelada ya no cambia | Dominio (`ServiceOrder.ChangeStatus`) |
 | Montos con dos decimales, no negativos, hasta 99 999 999.99 | Dominio y restricciones CHECK |
@@ -215,4 +230,9 @@ Trigger `TR_ServiceOrderStatusHistory_AppendOnly`: rechaza cualquier `UPDATE` o 
 - **Diagrama de clases:** las entidades `Customer`, `Device`, `Technician`, `ServiceOrder` y `ServiceOrderStatusChange` heredan de `Entity`, que aporta `Id` y la igualdad por identidad. `ServiceOrderStatusChange` es la clase que corresponde a la tabla `ServiceOrderStatusHistory`.
 - **Enumeraciones:** `DeviceType`, `ServiceOrderStatus` y `ServiceOrderPriority` se guardan como enteros. Sus valores están en las tablas anteriores.
 - **Tabla técnica:** `__EFMigrationsHistory` la crea Entity Framework Core para registrar las migraciones aplicadas. No forma parte del modelo del negocio.
-- **Estado de la implementación:** en la fase 2A solo el módulo Clientes usa estas tablas desde la interfaz. Equipos, técnicos y órdenes ya tienen su estructura y reglas, pero sus pantallas llegan en fases posteriores.
+- **Operaciones del dominio** (útiles para el diagrama de clases):
+  - `Customer`: `UpdateDetails`, `Deactivate`, `Reactivate`, `RegisterDevice`.
+  - `Device`: `UpdateDetails`. Se crea únicamente con `Customer.RegisterDevice`.
+  - `Technician`: `UpdateDetails`, `Deactivate`, `Reactivate`.
+  - `ServiceOrder`: `AssignTechnician`, `ChangeStatus`.
+- **Estado de la implementación:** desde la fase 2B, Clientes, Equipos y Técnicos usan estas tablas desde la interfaz. Las órdenes de servicio ya tienen su estructura y reglas, pero su pantalla llega en una fase posterior.

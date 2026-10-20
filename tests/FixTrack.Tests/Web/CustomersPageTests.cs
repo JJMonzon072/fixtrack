@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace FixTrack.Tests.Web;
 
 /// <summary>Módulo Clientes de punta a punta (HTTP, MVC, servicio y EF Core sobre SQLite en memoria).</summary>
-public sealed partial class CustomersPageTests(FixTrackWebApplicationFactory factory)
+public sealed class CustomersPageTests(FixTrackWebApplicationFactory factory)
     : IClassFixture<FixTrackWebApplicationFactory>
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
@@ -18,7 +18,7 @@ public sealed partial class CustomersPageTests(FixTrackWebApplicationFactory fac
     {
         using var client = factory.CreateClient();
 
-        var response = await PostFormAsync(client, "/clientes/nuevo", new()
+        var response = await FormPost.SendAsync(client, "/clientes/nuevo", new()
         {
             ["FullName"] = "  Ana   Registro ",
             ["Phone"] = "+502 5555 1001",
@@ -54,7 +54,7 @@ public sealed partial class CustomersPageTests(FixTrackWebApplicationFactory fac
     {
         using var client = factory.CreateClient();
 
-        var response = await PostFormAsync(client, "/clientes/nuevo", new()
+        var response = await FormPost.SendAsync(client, "/clientes/nuevo", new()
         {
             ["FullName"] = "A",
             ["Phone"] = "12",
@@ -78,7 +78,7 @@ public sealed partial class CustomersPageTests(FixTrackWebApplicationFactory fac
         using var client = factory.CreateClient();
         await CreateCustomerAsync(client, "Carla Duplicado", "5555-1002", "carla.dup@example.com");
 
-        var response = await PostFormAsync(client, "/clientes/nuevo", new()
+        var response = await FormPost.SendAsync(client, "/clientes/nuevo", new()
         {
             ["FullName"] = "Otra Carla",
             ["Phone"] = "5555-1003",
@@ -96,7 +96,7 @@ public sealed partial class CustomersPageTests(FixTrackWebApplicationFactory fac
         using var client = factory.CreateClient();
         var id = await CreateCustomerAsync(client, "Luis Edición", "5555-1004", null);
 
-        var response = await PostFormAsync(client, $"/clientes/{id}/editar", new()
+        var response = await FormPost.SendAsync(client, $"/clientes/{id}/editar", new()
         {
             ["FullName"] = "Luis Alberto Edición",
             ["Phone"] = "5555-1005",
@@ -115,7 +115,7 @@ public sealed partial class CustomersPageTests(FixTrackWebApplicationFactory fac
         using var client = factory.CreateClient();
         var id = await CreateCustomerAsync(client, "Marta Estado", "5555-1006", null);
 
-        var deactivated = await (await PostFormAsync(client, $"/clientes/{id}/desactivar", [])).Content.ReadAsStringAsync(Token);
+        var deactivated = await (await FormPost.SendAsync(client, $"/clientes/{id}/desactivar", [])).Content.ReadAsStringAsync(Token);
         Assert.Contains("Cliente desactivado.", deactivated);
         Assert.Contains("Este cliente está inactivo desde", deactivated);
 
@@ -124,7 +124,7 @@ public sealed partial class CustomersPageTests(FixTrackWebApplicationFactory fac
         Assert.DoesNotContain(">Marta Estado</a>", activeList);
         Assert.Contains(">Marta Estado</a>", inactiveList);
 
-        var reactivated = await (await PostFormAsync(client, $"/clientes/{id}/reactivar", [])).Content.ReadAsStringAsync(Token);
+        var reactivated = await (await FormPost.SendAsync(client, $"/clientes/{id}/reactivar", [])).Content.ReadAsStringAsync(Token);
         Assert.Contains("Cliente reactivado.", reactivated);
         Assert.True(await CustomerExistsAsync("Marta Estado"));
     }
@@ -167,27 +167,14 @@ public sealed partial class CustomersPageTests(FixTrackWebApplicationFactory fac
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    private async Task<int> CreateCustomerAsync(HttpClient client, string name, string phone, string? email, string? notes = null)
-    {
-        var response = await PostFormAsync(client, "/clientes/nuevo", new()
+    private static async Task<int> CreateCustomerAsync(HttpClient client, string name, string phone, string? email, string? notes = null) =>
+        FormPost.CreatedId(await FormPost.SendAsync(client, "/clientes/nuevo", new()
         {
             ["FullName"] = name,
             ["Phone"] = phone,
             ["Email"] = email ?? string.Empty,
             ["Notes"] = notes ?? string.Empty,
-        });
-
-        var path = response.RequestMessage!.RequestUri!.AbsolutePath;
-        return int.Parse(DetailsPath().Match(path).Groups["id"].Value, System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    /// <summary>Obtiene el token antifalsificación del formulario de registro y envía el POST con él.</summary>
-    private static async Task<HttpResponseMessage> PostFormAsync(HttpClient client, string url, Dictionary<string, string> fields)
-    {
-        var form = await client.GetStringAsync("/clientes/nuevo", Token);
-        fields["__RequestVerificationToken"] = AntiforgeryToken().Match(form).Groups["token"].Value;
-        return await client.PostAsync(url, new FormUrlEncodedContent(fields), Token);
-    }
+        }));
 
     private async Task<bool> CustomerExistsAsync(string fullName)
     {
@@ -195,10 +182,4 @@ public sealed partial class CustomersPageTests(FixTrackWebApplicationFactory fac
         var db = scope.ServiceProvider.GetRequiredService<FixTrackDbContext>();
         return await db.Customers.AnyAsync(c => c.FullName == fullName, Token);
     }
-
-    [GeneratedRegex("name=\"__RequestVerificationToken\" type=\"hidden\" value=\"(?<token>[^\"]+)\"")]
-    private static partial Regex AntiforgeryToken();
-
-    [GeneratedRegex(@"/clientes/(?<id>\d+)$")]
-    private static partial Regex DetailsPath();
 }

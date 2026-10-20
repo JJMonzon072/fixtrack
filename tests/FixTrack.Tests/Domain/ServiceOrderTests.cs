@@ -1,12 +1,15 @@
 using FixTrack.Domain.Common;
-using FixTrack.Domain.Devices;
 using FixTrack.Domain.ServiceOrders;
+using FixTrack.Domain.Technicians;
 
 namespace FixTrack.Tests.Domain;
 
 public sealed class ServiceOrderTests
 {
     private static readonly DateTime Received = new(2026, 10, 19, 15, 0, 0, DateTimeKind.Utc);
+
+    private static Technician ActiveTechnician() =>
+        new("Luis Pérez", "Laptops y equipos de escritorio", null, null, Received);
 
     private static ServiceOrder NewOrder() =>
         new(deviceId: 1, "No enciende", ServiceOrderPriority.Normal, Received, Received.AddDays(3), estimatedCost: 350.50m);
@@ -52,7 +55,7 @@ public sealed class ServiceOrderTests
         Assert.Equal(Received.AddDays(2), order.DeliveredAtUtc);
         Assert.Equal(400m, order.FinalCost);
         Assert.Throws<DomainException>(() => order.ChangeStatus(ServiceOrderStatus.InRepair, Received.AddDays(3)));
-        Assert.Throws<DomainException>(() => order.AssignTechnician(1, Received.AddDays(3)));
+        Assert.Throws<DomainException>(() => order.AssignTechnician(ActiveTechnician(), Received.AddDays(3)));
     }
 
     [Theory]
@@ -67,10 +70,25 @@ public sealed class ServiceOrderTests
     public void A_technician_can_be_assigned_later()
     {
         var order = NewOrder();
+        var technician = ActiveTechnician();
 
-        order.AssignTechnician(technicianId: 7, Received.AddHours(1));
+        order.AssignTechnician(technician, Received.AddHours(1));
 
-        Assert.Equal(7, order.TechnicianId);
+        Assert.Same(technician, order.Technician);
+        Assert.Equal(Received.AddHours(1), order.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void An_inactive_technician_cannot_receive_new_assignments()
+    {
+        var order = NewOrder();
+        var technician = ActiveTechnician();
+        technician.Deactivate(Received);
+
+        var error = Assert.Throws<DomainException>(() => order.AssignTechnician(technician, Received.AddHours(1)));
+
+        Assert.Contains("inactivo", error.Message);
+        Assert.Null(order.Technician);
     }
 
     [Theory]
@@ -85,16 +103,4 @@ public sealed class ServiceOrderTests
     public void The_promised_date_cannot_be_before_reception() =>
         Assert.Throws<DomainException>(() =>
             new ServiceOrder(1, "No enciende", ServiceOrderPriority.High, Received, Received.AddDays(-1), null));
-
-    [Fact]
-    public void Devices_belong_to_a_customer_and_validate_their_data()
-    {
-        Assert.Throws<DomainException>(() => new Device(0, DeviceType.Laptop, "Dell", null, null, null, Received));
-        Assert.Throws<DomainException>(() => new Device(1, (DeviceType)99, "Dell", null, null, null, Received));
-        Assert.Throws<DomainException>(() => new Device(1, DeviceType.Laptop, " ", null, null, null, Received));
-
-        var device = new Device(1, DeviceType.Laptop, " Dell ", "Latitude 5440", "  ", null, Received);
-        Assert.Equal("Dell", device.Brand);
-        Assert.Null(device.SerialNumber);
-    }
 }

@@ -12,6 +12,7 @@ internal sealed class TechnicianConfiguration : IEntityTypeConfiguration<Technic
         builder.ToTable("Technicians", table =>
         {
             table.HasCheckConstraint("CK_Technicians_FullName_NotEmpty", "[FullName] <> ''");
+            table.HasCheckConstraint("CK_Technicians_Specialty_NotEmpty", "[Specialty] <> ''");
             table.HasCheckConstraint("CK_Technicians_Email_Format", "[Email] IS NULL OR [Email] LIKE '%_@_%._%'");
             table.HasCheckConstraint(
                 "CK_Technicians_Deactivation",
@@ -29,7 +30,7 @@ internal sealed class TechnicianConfiguration : IEntityTypeConfiguration<Technic
             .IsUnicode(false);
 
         builder.Property(technician => technician.Email).HasMaxLength(ContactRules.EmailMaxLength);
-        builder.Property(technician => technician.Specialty).HasMaxLength(Technician.SpecialtyMaxLength);
+        builder.Property(technician => technician.Specialty).HasMaxLength(TechnicianRules.SpecialtyMaxLength);
 
         builder.HasIndex(technician => technician.Email)
             .IsUnique()

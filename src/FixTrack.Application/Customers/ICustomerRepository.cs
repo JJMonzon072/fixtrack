@@ -14,5 +14,10 @@ public interface ICustomerRepository
 
     Task<bool> EmailExistsAsync(string email, int? excludingCustomerId, CancellationToken cancellationToken);
 
+    /// <summary>Clientes activos cuyo nombre, teléfono o correo contiene el texto, ordenados por nombre.</summary>
+    Task<IReadOnlyList<CustomerOption>> SuggestActiveAsync(string? text, int limit, CancellationToken cancellationToken);
+
+    Task<CustomerOption?> GetOptionAsync(int id, CancellationToken cancellationToken);
+
     void Add(Customer customer);
 }

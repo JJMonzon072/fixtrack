@@ -1740,6 +1740,308 @@ button {
     margin-top: var(--space-6);
 }
 
+/* 8c. Equipos y técnicos ----------------------------------------------------- */
+
+.toolbar__filters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+/* Lista desplegable con la misma apariencia que los campos de texto */
+.select {
+    position: relative;
+}
+
+.select__control {
+    padding-right: 2.25rem;
+    cursor: pointer;
+    appearance: none;
+}
+
+.select__icon {
+    position: absolute;
+    top: calc(50% + 0.125rem);
+    right: 0.75rem;
+    color: var(--color-text-tertiary);
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.select--compact .select__control {
+    height: 2rem;
+    margin-top: 0;
+    font-size: var(--text-sm);
+}
+
+.select--compact .select__icon {
+    top: 50%;
+}
+
+/* Buscador de clientes (combobox accesible) */
+.combobox {
+    position: relative;
+}
+
+.combobox__control {
+    position: relative;
+}
+
+.combobox__icon {
+    position: absolute;
+    top: calc(50% + 0.125rem);
+    left: 0.75rem;
+    color: var(--color-text-tertiary);
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.combobox__input {
+    padding-left: 2.25rem;
+}
+
+.combobox__list {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    z-index: 30;
+    max-height: 18rem;
+    margin: var(--space-1) 0 0;
+    padding: var(--space-1);
+    overflow-y: auto;
+    list-style: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-lg);
+}
+
+.combobox__option {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.combobox__option[aria-selected="true"] {
+    background: var(--color-surface-hover);
+}
+
+.combobox__option-name {
+    font-size: var(--text-sm);
+    font-weight: 500;
+}
+
+.combobox__option-meta,
+.combobox__empty {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+}
+
+.combobox__empty {
+    padding: var(--space-3);
+}
+
+.combobox__selected {
+    margin-top: var(--space-1);
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+}
+
+/* Ícono de un equipo (equivalente al avatar de una persona) */
+.thing-icon {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-subtle);
+    color: var(--color-text-secondary);
+}
+
+.thing-icon--large {
+    width: 3rem;
+    height: 3rem;
+    border-radius: var(--radius-md);
+}
+
+.thing-icon--large .icon {
+    width: 1.375rem;
+    height: 1.375rem;
+}
+
+/* Un enlace dentro de una fila clicable queda por encima del enlace de la fila. */
+.link--above-row {
+    position: relative;
+    z-index: 1;
+}
+
+.card--full {
+    grid-column: 1 / -1;
+}
+
+.detail-grid__stack {
+    display: grid;
+    align-content: start;
+    gap: var(--space-5);
+    min-width: 0;
+}
+
+.card__title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.card__header > .button {
+    flex-shrink: 0;
+}
+
+.card__note {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: 0 var(--space-4) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-subtle);
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+}
+
+.card__note .icon {
+    margin-top: 0.15rem;
+    width: 0.875rem;
+    height: 0.875rem;
+}
+
+.card__hint {
+    margin-top: var(--space-3);
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+}
+
+/* Lista de registros relacionados (equipos dentro del detalle de un cliente) */
+.item-list {
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.item-list__item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    transition: background-color var(--duration-fast) ease;
+}
+
+.item-list__item + .item-list__item {
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.item-list__item:last-child {
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.item-list__item:hover {
+    background: var(--color-surface-subtle);
+}
+
+.item-list__text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.item-list__title {
+    font-size: var(--text-sm);
+    font-weight: 500;
+}
+
+.item-list__title:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.item-list__meta {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+}
+
+.item-list__aside {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+.item-list__chevron {
+    color: var(--color-text-tertiary);
+}
+
+/* Propietario de un equipo */
+.owner-box {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-top: var(--space-1);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-subtle);
+}
+
+.owner-box--plain {
+    margin-top: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+}
+
+.owner-box__text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+    font-size: var(--text-sm);
+}
+
+.owner-box__meta {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    overflow-wrap: anywhere;
+}
+
+/* Contadores reales (por ejemplo, órdenes de un técnico) */
+.stat-row {
+    display: flex;
+    gap: var(--space-8);
+    padding: 0 var(--space-4) var(--space-3);
+}
+
+.stat-row__item dt {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+}
+
+.stat-row__item dd {
+    font-size: var(--text-xl);
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.dialog__icon--warning {
+    background: var(--color-warning-subtle);
+    color: var(--color-warning-text);
+}
+
 /* 9. Utilidades ------------------------------------------------------------ */
 
 .mono {
@@ -1995,17 +2297,29 @@ button {
         border: 0;
     }
 
-    .data-table--stack td[data-label="Cliente"] {
+    /* La primera celda (nombre) ocupa toda la tarjeta; data-indent alinea con el texto tras el avatar. */
+    .data-table--stack td:first-child {
         grid-column: 1 / -1;
     }
 
-    .data-table--stack td[data-label="Teléfono"] {
+    .data-table--stack td[data-indent] {
         padding-left: 2.75rem;
     }
 
-    .data-table--stack td[data-label="Equipos"],
-    .data-table--stack td[data-label="Registrado"] {
+    .data-table--stack td[data-hide-mobile] {
         display: none;
+    }
+
+    .toolbar__filters {
+        width: 100%;
+    }
+
+    .toolbar__filters .select {
+        flex: 1;
+    }
+
+    .stat-row {
+        gap: var(--space-6);
     }
 }
 

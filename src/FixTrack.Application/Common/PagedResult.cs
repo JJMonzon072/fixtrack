@@ -1,7 +1,25 @@
 namespace FixTrack.Application.Common;
 
+/// <summary>Datos de paginación, independientes del tipo de elemento (los usa la vista de paginación).</summary>
+public interface IPageInfo
+{
+    int Page { get; }
+
+    int TotalCount { get; }
+
+    int TotalPages { get; }
+
+    bool HasPrevious { get; }
+
+    bool HasNext { get; }
+
+    int FirstItemNumber { get; }
+
+    int LastItemNumber { get; }
+}
+
 /// <summary>Una página de resultados y los datos necesarios para paginar.</summary>
-public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount)
+public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount) : IPageInfo
 {
     public int TotalPages => TotalCount == 0 ? 1 : (int)Math.Ceiling(TotalCount / (double)PageSize);
 

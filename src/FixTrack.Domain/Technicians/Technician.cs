@@ -2,34 +2,15 @@ using FixTrack.Domain.Common;
 
 namespace FixTrack.Domain.Technicians;
 
-/// <summary>Técnico del taller. Se desactiva en lugar de eliminarse para conservar sus órdenes.</summary>
+/// <summary>
+/// Técnico del taller. Se desactiva en lugar de eliminarse para conservar sus órdenes.
+/// Un técnico inactivo no puede recibir nuevas asignaciones.
+/// </summary>
 public sealed class Technician : Entity
 {
-    public const int SpecialtyMaxLength = 100;
-
-    public Technician(string fullName, string? phone, string? email, string? specialty, DateTime createdAtUtc)
+    public Technician(string fullName, string specialty, string? phone, string? email, DateTime createdAtUtc)
     {
-        var cleanName = Text.Clean(fullName);
-        var cleanPhone = Text.CleanOrNull(phone);
-        var cleanEmail = ContactRules.NormalizeEmail(email);
-        var cleanSpecialty = Text.CleanOrNull(specialty);
-
-        var error = ContactRules.ValidateName(cleanName)
-            ?? (cleanPhone is null ? null : ContactRules.ValidatePhone(cleanPhone))
-            ?? (cleanEmail is null ? null : ContactRules.ValidateEmail(cleanEmail))
-            ?? (cleanSpecialty is { Length: > SpecialtyMaxLength }
-                ? $"La especialidad no puede superar {SpecialtyMaxLength} caracteres."
-                : null);
-
-        if (error is not null)
-        {
-            throw new DomainException(error);
-        }
-
-        FullName = cleanName;
-        Phone = cleanPhone;
-        Email = cleanEmail;
-        Specialty = cleanSpecialty;
+        SetDetails(fullName, specialty, phone, email);
         IsActive = true;
         CreatedAtUtc = UtcClock.Ensure(createdAtUtc, nameof(createdAtUtc));
     }
@@ -41,12 +22,13 @@ public sealed class Technician : Entity
 
     public string FullName { get; private set; } = string.Empty;
 
+    /// <summary>Área de trabajo, por ejemplo "Laptops y equipos de escritorio".</summary>
+    public string Specialty { get; private set; } = string.Empty;
+
     public string? Phone { get; private set; }
 
     /// <summary>Correo electrónico en minúsculas. Es único entre los técnicos cuando existe.</summary>
     public string? Email { get; private set; }
-
-    public string? Specialty { get; private set; }
 
     public bool IsActive { get; private set; }
 
@@ -54,5 +36,58 @@ public sealed class Technician : Entity
 
     public DateTime? UpdatedAtUtc { get; private set; }
 
+    /// <summary>Momento de la última desactivación. Es <c>null</c> mientras el técnico está activo.</summary>
     public DateTime? DeactivatedAtUtc { get; private set; }
+
+    public void UpdateDetails(string fullName, string specialty, string? phone, string? email, DateTime updatedAtUtc)
+    {
+        SetDetails(fullName, specialty, phone, email);
+        UpdatedAtUtc = UtcClock.Ensure(updatedAtUtc, nameof(updatedAtUtc));
+    }
+
+    /// <summary>
+    /// Desactiva al técnico. La capa de aplicación verifica antes que no tenga órdenes abiertas asignadas.
+    /// </summary>
+    public void Deactivate(DateTime deactivatedAtUtc)
+    {
+        if (!IsActive)
+        {
+            throw new DomainException("El técnico ya está inactivo.");
+        }
+
+        IsActive = false;
+        DeactivatedAtUtc = UtcClock.Ensure(deactivatedAtUtc, nameof(deactivatedAtUtc));
+        UpdatedAtUtc = DeactivatedAtUtc;
+    }
+
+    public void Reactivate(DateTime reactivatedAtUtc)
+    {
+        if (IsActive)
+        {
+            throw new DomainException("El técnico ya está activo.");
+        }
+
+        IsActive = true;
+        DeactivatedAtUtc = null;
+        UpdatedAtUtc = UtcClock.Ensure(reactivatedAtUtc, nameof(reactivatedAtUtc));
+    }
+
+    private void SetDetails(string fullName, string specialty, string? phone, string? email)
+    {
+        var cleanName = Text.Clean(fullName);
+        var cleanSpecialty = Text.Clean(specialty);
+        var cleanPhone = Text.CleanOrNull(phone);
+        var cleanEmail = ContactRules.NormalizeEmail(email);
+
+        var errors = TechnicianRules.Validate(cleanName, cleanSpecialty, cleanPhone, cleanEmail);
+        if (errors.Count > 0)
+        {
+            throw new DomainException(errors.Values.First());
+        }
+
+        FullName = cleanName;
+        Specialty = cleanSpecialty;
+        Phone = cleanPhone;
+        Email = cleanEmail;
+    }
 }
