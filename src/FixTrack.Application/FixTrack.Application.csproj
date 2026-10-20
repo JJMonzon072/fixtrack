@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Capa de aplicación: lógica de negocio y contratos. Depende solo del dominio. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\FixTrack.Domain\FixTrack.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+</Project>
