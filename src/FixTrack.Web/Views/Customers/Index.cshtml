@@ -111,9 +111,9 @@ else
                                         </span>
                                     </div>
                                 </td>
-                                <td data-label="Teléfono" class="mono">@customer.Phone</td>
-                                <td data-label="Equipos" class="data-table__numeric mono">@customer.DeviceCount</td>
-                                <td data-label="Registrado">
+                                <td data-label="Teléfono" class="mono" data-indent>@customer.Phone</td>
+                                <td data-label="Equipos" class="data-table__numeric mono" data-hide-mobile>@customer.DeviceCount</td>
+                                <td data-label="Registrado" data-hide-mobile>
                                     <time datetime="@FixTrack.Web.Services.DateDisplay.Iso(customer.CreatedAtUtc)">@Dates.Short(customer.CreatedAtUtc)</time>
                                 </td>
                                 <td data-label="Estado">

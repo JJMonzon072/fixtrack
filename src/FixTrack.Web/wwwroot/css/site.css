@@ -1995,16 +1995,16 @@ button {
         border: 0;
     }
 
-    .data-table--stack td[data-label="Cliente"] {
+    /* La primera celda (nombre) ocupa toda la tarjeta; data-indent alinea con el texto tras el avatar. */
+    .data-table--stack td:first-child {
         grid-column: 1 / -1;
     }
 
-    .data-table--stack td[data-label="Teléfono"] {
+    .data-table--stack td[data-indent] {
         padding-left: 2.75rem;
     }
 
-    .data-table--stack td[data-label="Equipos"],
-    .data-table--stack td[data-label="Registrado"] {
+    .data-table--stack td[data-hide-mobile] {
         display: none;
     }
 }
