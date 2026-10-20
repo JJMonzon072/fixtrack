@@ -309,6 +309,45 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Pages_carry_security_headers_and_a_per_request_script_nonce()
+    {
+        using var client = AnonymousClient();
+
+        using var first = await client.GetAsync("/cuenta/iniciar-sesion", Token);
+        using var second = await client.GetAsync("/cuenta/iniciar-sesion", Token);
+        var html = await first.Content.ReadAsStringAsync(Token);
+        var policy = first.Headers.GetValues("Content-Security-Policy").Single();
+        var nonce = Regex.Match(policy, "'nonce-(?<value>[^']+)'").Groups["value"].Value;
+
+        Assert.Contains("default-src 'self'", policy);
+        Assert.Contains("frame-ancestors 'none'", policy);
+        Assert.DoesNotContain("unsafe-inline", policy);
+        Assert.Contains($"<script nonce=\"{nonce}\">", html);
+        Assert.NotEqual(policy, second.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Equal("nosniff", first.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal("DENY", first.Headers.GetValues("X-Frame-Options").Single());
+        Assert.Equal("strict-origin-when-cross-origin", first.Headers.GetValues("Referrer-Policy").Single());
+        Assert.Equal("no-store", first.Headers.CacheControl?.ToString());
+    }
+
+    [Fact]
+    public async Task Login_attempts_are_limited_per_address()
+    {
+        using var client = factory
+            .WithWebHostBuilder(builder => builder.UseSetting("Security:LoginAttemptsPerMinute", "3"))
+            .CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var statuses = new List<HttpStatusCode>();
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            using var response = await AuthenticatedClients.LogInAsync(client, "nadie@fixtrack.test", "Cualquier1234");
+            statuses.Add(response.StatusCode);
+        }
+
+        Assert.Equal([HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.TooManyRequests], statuses);
+    }
+
+    [Fact]
     public async Task A_disabled_account_loses_its_open_session_and_cannot_sign_in_again()
     {
         var account = await CreateAccountAsync();

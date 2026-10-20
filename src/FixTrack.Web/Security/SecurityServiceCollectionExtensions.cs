@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using FixTrack.Infrastructure.Identity;
 using FixTrack.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -8,10 +9,14 @@ namespace FixTrack.Web.Security;
 
 public static class SecurityServiceCollectionExtensions
 {
+    /// <summary>Nombre de la política de límite de intentos del formulario de inicio de sesión.</summary>
+    public const string LoginRateLimit = "inicio-de-sesion";
+
     public const string LoginPath = "/cuenta/iniciar-sesion";
 
     /// <summary>
-    /// Autenticación con ASP.NET Core Identity y cookie, políticas de autorización y claves de Data Protection en la base.
+    /// Autenticación con ASP.NET Core Identity y cookie, políticas de autorización, claves de Data Protection en la base
+    /// y límite de intentos de inicio de sesión por dirección IP.
     /// </summary>
     public static IServiceCollection AddSecurity(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
@@ -57,6 +62,20 @@ public static class SecurityServiceCollectionExtensions
         services.AddDataProtection()
             .SetApplicationName("FixTrack")
             .PersistKeysToDbContext<FixTrackDbContext>();
+
+        var attemptsPerMinute = configuration.GetValue("Security:LoginAttemptsPerMinute", 10);
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.AddPolicy(LoginRateLimit, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = attemptsPerMinute,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                }));
+        });
 
         return services;
     }

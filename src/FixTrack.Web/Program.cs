@@ -31,8 +31,10 @@ if (!app.Environment.IsDevelopment() || HttpsEndpoint.IsConfigured(app.Configura
     app.UseHttpsRedirection();
 }
 
+app.UseSecurityHeaders();
 app.UseRequestLocalization();
 app.UseRouting();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

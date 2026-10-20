@@ -3,10 +3,12 @@ using FixTrack.Application.Common;
 using FixTrack.Application.Security;
 using FixTrack.Infrastructure.Identity;
 using FixTrack.Web.Models.Account;
+using FixTrack.Web.Security;
 using FixTrack.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace FixTrack.Web.Controllers;
 
@@ -40,6 +42,7 @@ public sealed class AccountController(
 
     [AllowAnonymous]
     [HttpPost("iniciar-sesion")]
+    [EnableRateLimiting(SecurityServiceCollectionExtensions.LoginRateLimit)]
     public async Task<IActionResult> Login(LoginFormModel form, [FromQuery(Name = "volver")] string? returnUrl, CancellationToken cancellationToken)
     {
         var email = form.Email?.Trim();

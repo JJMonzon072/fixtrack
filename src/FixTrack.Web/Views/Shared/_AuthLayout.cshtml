@@ -1,3 +1,4 @@
+@using FixTrack.Web.Security
 @{
     var title = ViewData["Title"] as string ?? "FixTrack";
 }
@@ -10,7 +11,7 @@
     <meta name="description" content="FixTrack: gestión y seguimiento de órdenes de servicio técnico." />
     <meta name="robots" content="noindex" />
     <title>@title · FixTrack</title>
-    <script>
+    <script nonce="@Context.CspNonce()">
         // Aplica el tema guardado antes de pintar la página para evitar un parpadeo.
         try {
             const theme = localStorage.getItem("fixtrack-theme");
