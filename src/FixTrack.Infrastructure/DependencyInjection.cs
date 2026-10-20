@@ -1,6 +1,7 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Application.Devices;
+using FixTrack.Application.Technicians;
 using FixTrack.Infrastructure.Persistence;
 using FixTrack.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
+        services.AddScoped<ITechnicianRepository, TechnicianRepository>();
 
         return services;
     }
