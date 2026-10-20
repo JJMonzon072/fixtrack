@@ -106,6 +106,10 @@ public sealed record ServiceOrderHistoryEntry(
     string? Note,
     string? ChangedByName);
 
+/// <summary>Cambio registrado en la auditoría que no es de estado ni de técnico (planificación, diagnóstico).</summary>
+/// <param name="Summary">Resumen sin el número de la orden.</param>
+public sealed record ServiceOrderActivityEntry(string Action, DateTime OccurredAtUtc, string UserName, string Summary);
+
 /// <summary>Asignación o reasignación de técnico, con los nombres actuales de los técnicos.</summary>
 public sealed record ServiceOrderAssignmentEntry(
     string? FromTechnicianName,
@@ -135,7 +139,8 @@ public sealed record ServiceOrderDetails(
     ServiceOrderDeviceInfo Device,
     ServiceOrderTechnicianInfo? Technician,
     IReadOnlyList<ServiceOrderHistoryEntry> History,
-    IReadOnlyList<ServiceOrderAssignmentEntry> Assignments)
+    IReadOnlyList<ServiceOrderAssignmentEntry> Assignments,
+    IReadOnlyList<ServiceOrderActivityEntry> Activity)
 {
     public string Number => ServiceOrder.FormatNumber(Id);
 

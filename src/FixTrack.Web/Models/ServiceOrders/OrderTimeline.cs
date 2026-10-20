@@ -1,4 +1,5 @@
 using FixTrack.Application.ServiceOrders;
+using FixTrack.Domain.Auditing;
 
 namespace FixTrack.Web.Models.ServiceOrders;
 
@@ -9,8 +10,9 @@ namespace FixTrack.Web.Models.ServiceOrders;
 public sealed record TimelineEntry(string Tone, string Icon, string Title, string? Detail, DateTime AtUtc, string? Author, string? Note);
 
 /// <summary>
-/// Une en orden cronológico el historial de estados y el de asignaciones. Son registros distintos (un cambio de
-/// técnico no cambia el estado), pero se leen juntos. Con la misma hora, el estado va antes que la asignación.
+/// Une en orden cronológico el historial de estados, el de asignaciones y los cambios de planificación y diagnóstico de
+/// la auditoría. Son registros distintos (un cambio de técnico no cambia el estado), pero se leen juntos. Con la misma
+/// hora, el estado va antes que la asignación y esta antes que los demás cambios.
 /// </summary>
 public static class OrderTimeline
 {
@@ -34,7 +36,16 @@ public static class OrderTimeline
             entry.AssignedByName,
             entry.Note)));
 
-        return [.. statuses.Concat(assignments)
+        var activity = order.Activity.Select((entry, index) => (Kind: 2, Index: index, Entry: new TimelineEntry(
+            "note",
+            entry.Action == AuditActions.PlanChanged ? "calendar-clock" : "scan-search",
+            entry.Action == AuditActions.PlanChanged ? "Planificación actualizada" : "Diagnóstico",
+            null,
+            entry.OccurredAtUtc,
+            entry.UserName,
+            entry.Summary)));
+
+        return [.. statuses.Concat(assignments).Concat(activity)
             .OrderBy(item => item.Entry.AtUtc)
             .ThenBy(item => item.Kind)
             .ThenBy(item => item.Index)

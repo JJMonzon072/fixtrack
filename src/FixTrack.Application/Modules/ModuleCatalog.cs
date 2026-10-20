@@ -54,6 +54,12 @@ internal sealed class ModuleCatalog : IModuleCatalog
                 "Cuentas de acceso al sistema y sus roles. Solo para administradores.",
                 ModuleStatus.Available,
                 []),
+            new ModuleInfo(
+                ModuleKey.Audit,
+                "Auditoría",
+                "Quién hizo cada operación importante y cuándo. Solo para administradores.",
+                ModuleStatus.Available,
+                []),
         ];
 
         _modulesByKey = Modules.ToDictionary(module => module.Key);

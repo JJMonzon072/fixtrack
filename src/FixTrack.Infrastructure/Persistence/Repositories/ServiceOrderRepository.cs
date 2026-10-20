@@ -4,6 +4,7 @@ using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Application.Devices;
 using FixTrack.Application.ServiceOrders;
+using FixTrack.Domain.Auditing;
 using FixTrack.Domain.ServiceOrders;
 using Microsoft.EntityFrameworkCore;
 
@@ -133,7 +134,8 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
                     .ThenBy(change => change.Id)
                     .Select(change => new ServiceOrderHistoryEntry(change.FromStatus, change.ToStatus, change.ChangedAtUtc, change.Note, change.ChangedByName))
                     .ToList(),
-                Array.Empty<ServiceOrderAssignmentEntry>()))
+                Array.Empty<ServiceOrderAssignmentEntry>(),
+                Array.Empty<ServiceOrderActivityEntry>()))
             .SingleOrDefaultAsync(cancellationToken);
         if (details is null)
         {
@@ -153,7 +155,24 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
                 assignment.AssignedByName,
                 assignment.Note))
             .ToListAsync(cancellationToken);
-        return details with { Assignments = assignments };
+
+        // Tercera consulta: los cambios de planificación y diagnóstico están en la auditoría.
+        var orderId = id.ToString(CultureInfo.InvariantCulture);
+        var prefix = details.Number + ": ";
+        var activity = await db.AuditEvents
+            .AsNoTracking()
+            .Where(audit => audit.EntityType == AuditActions.Order && audit.EntityId == orderId
+                && (audit.Action == AuditActions.PlanChanged || audit.Action == AuditActions.DiagnosisRecorded))
+            .OrderBy(audit => audit.OccurredAtUtc)
+            .ThenBy(audit => audit.Id)
+            .Select(audit => new ServiceOrderActivityEntry(audit.Action, audit.OccurredAtUtc, audit.UserName, audit.Summary))
+            .ToListAsync(cancellationToken);
+
+        return details with
+        {
+            Assignments = assignments,
+            Activity = [.. activity.Select(entry => entry.Summary.StartsWith(prefix, StringComparison.Ordinal) ? entry with { Summary = entry.Summary[prefix.Length..] } : entry)],
+        };
     }
 
     public async Task<CustomerServiceOrders> ListByCustomerAsync(int customerId, int take, CancellationToken cancellationToken)

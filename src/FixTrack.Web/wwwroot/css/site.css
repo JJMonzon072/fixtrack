@@ -2935,6 +2935,36 @@ fieldset.field > legend {
     overflow-wrap: anywhere;
 }
 
+/* Registro de auditoría */
+.audit-date {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.audit-action {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.audit-action .icon {
+    width: 1rem;
+    height: 1rem;
+    color: var(--color-text-tertiary);
+}
+
+.audit-summary {
+    max-width: 48rem;
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.audit-link {
+    font-size: var(--text-xs);
+}
+
 /* Siguientes pasos de una orden abierta */
 .next-steps {
     margin: 0;

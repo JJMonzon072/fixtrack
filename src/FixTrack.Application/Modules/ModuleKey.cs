@@ -10,4 +10,5 @@ public enum ModuleKey
     Devices,
     Technicians,
     Users,
+    Audit,
 }

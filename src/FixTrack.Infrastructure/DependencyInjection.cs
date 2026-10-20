@@ -1,3 +1,4 @@
+using FixTrack.Application.Auditing;
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Application.Dashboard;
@@ -60,6 +61,7 @@ public static class DependencyInjection
         services.AddScoped<ITechnicianRepository, TechnicianRepository>();
         services.AddScoped<IServiceOrderRepository, ServiceOrderRepository>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
+        services.AddScoped<IAuditTrail, AuditTrail>();
 
         // Requiere el UserManager de ASP.NET Core Identity, que registra la capa de presentación (AddIdentity).
         services.AddScoped<IUserAccountService, UserAccountService>();

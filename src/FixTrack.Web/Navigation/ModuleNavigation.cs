@@ -11,7 +11,8 @@ public sealed record NavigationGroup(string? Title, IReadOnlyList<ModuleKey> Mod
 public static class ModuleNavigation
 {
     /// <summary>Política que debe cumplir la cuenta para ver el módulo en el menú (null: cualquier rol del taller).</summary>
-    public static string? RequiredPolicy(ModuleKey key) => key == ModuleKey.Users ? Security.AuthorizationPolicies.ManageAccounts : null;
+    public static string? RequiredPolicy(ModuleKey key) =>
+        key is ModuleKey.Users or ModuleKey.Audit ? Security.AuthorizationPolicies.ManageAccounts : null;
 
     /// <summary>Estructura del menú lateral.</summary>
     public static IReadOnlyList<NavigationGroup> Groups { get; } =
@@ -19,7 +20,7 @@ public static class ModuleNavigation
         new(null, [ModuleKey.Dashboard]),
         new("Operación", [ModuleKey.ServiceOrders, ModuleKey.WorkQueue]),
         new("Gestión", [ModuleKey.Customers, ModuleKey.Devices, ModuleKey.Technicians]),
-        new("Administración", [ModuleKey.Users]),
+        new("Administración", [ModuleKey.Users, ModuleKey.Audit]),
     ];
 
     public static ModuleRoute For(ModuleKey key) => key switch
@@ -31,6 +32,7 @@ public static class ModuleNavigation
         ModuleKey.Devices => new("Devices", "laptop"),
         ModuleKey.Technicians => new("Technicians", "wrench"),
         ModuleKey.Users => new("Users", "user-cog"),
+        ModuleKey.Audit => new("Audit", "scroll-text"),
         _ => throw new ArgumentOutOfRangeException(nameof(key), key, "Módulo sin ruta asignada."),
     };
 }
