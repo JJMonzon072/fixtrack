@@ -1,0 +1,57 @@
+@model FixTrack.Web.Models.Forms.FormField
+@{
+    var field = Model;
+    var invalid = field.Error is null ? null : "true";
+    var controlClass = "input" + (field.Mono ? " mono-input" : string.Empty);
+}
+<div class="field@(field.Wide ? " field--wide" : string.Empty)">
+    <div class="field__label-row">
+        <label class="field__label" for="@field.Name">
+            @field.Label
+            @if (field.Optional)
+            {
+                <span class="field__optional">(opcional)</span>
+            }
+        </label>
+        @if (field.Rows is not null && field.MaxLength is not null)
+        {
+            <span class="field__counter mono" data-char-counter-for="@field.Name" aria-hidden="true"></span>
+        }
+    </div>
+    @if (field.Hint is not null)
+    {
+        <p class="field__hint" id="@field.HintId">@field.Hint</p>
+    }
+
+    @if (field.Options is not null)
+    {
+        <div class="select">
+            <select class="input select__control" id="@field.Name" name="@field.Name"
+                    aria-invalid="@invalid" aria-describedby="@field.DescribedBy" required="@(!field.Optional)">
+                <option value="" selected="@(string.IsNullOrEmpty(field.Value))">@(field.Placeholder ?? "Selecciona una opción")</option>
+                @foreach (var option in field.Options)
+                {
+                    <option value="@option.Value" selected="@(option.Value == field.Value)">@option.Text</option>
+                }
+            </select>
+            <icon name="chevron-down" class="select__icon" />
+        </div>
+    }
+    else if (field.Rows is not null)
+    {
+        <textarea class="@controlClass textarea" id="@field.Name" name="@field.Name" rows="@field.Rows"
+                  maxlength="@field.MaxLength" aria-invalid="@invalid" aria-describedby="@field.DescribedBy">@field.Value</textarea>
+    }
+    else
+    {
+        <input class="@controlClass" id="@field.Name" name="@field.Name" type="@field.InputType" value="@field.Value"
+               maxlength="@field.MaxLength" autocomplete="@field.Autocomplete" inputmode="@field.InputMode"
+               spellcheck="@(field.Spellcheck ? null : "false")" required="@(!field.Optional)"
+               aria-invalid="@invalid" aria-describedby="@field.DescribedBy" />
+    }
+
+    @if (field.Error is not null)
+    {
+        <p class="field__error" id="@field.ErrorId"><icon name="triangle-alert" />@field.Error</p>
+    }
+</div>
