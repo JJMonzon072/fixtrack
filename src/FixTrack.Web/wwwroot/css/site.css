@@ -4093,6 +4093,43 @@ fieldset.field > legend {
         grid-column: 1 / -1;
     }
 
+    /* Auditoría en tarjetas: operación y fecha en la primera línea; el detalle y el autor debajo, a todo el ancho. */
+    .audit-table tbody tr {
+        grid-template-areas:
+            "action date"
+            "detail detail"
+            "author author";
+    }
+
+    .audit-table td:nth-child(1) {
+        grid-area: date;
+        justify-self: end;
+        font-size: var(--text-xs);
+        color: var(--color-text-tertiary);
+    }
+
+    .audit-table td:nth-child(2) {
+        grid-area: action;
+    }
+
+    .audit-table td:nth-child(3) {
+        grid-area: detail;
+    }
+
+    .audit-table td:nth-child(4) {
+        grid-area: author;
+        font-size: var(--text-xs);
+        color: var(--color-text-secondary);
+    }
+
+    .audit-table td:nth-child(4)::before {
+        content: "Por ";
+    }
+
+    .audit-action {
+        white-space: normal;
+    }
+
     .data-table--stack td[data-align-end] {
         justify-self: end;
     }
