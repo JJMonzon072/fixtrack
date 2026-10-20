@@ -1,14 +1,18 @@
+using FixTrack.Application.Common;
+using FixTrack.Application.Customers;
 using FixTrack.Application.Modules;
+using FixTrack.Infrastructure.Persistence;
 using FixTrack.Web.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FixTrack.Tests.Web;
 
 /// <summary>Verifica la configuración de inyección de dependencias de la aplicación.</summary>
-public sealed class CompositionTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public sealed class CompositionTests(FixTrackWebApplicationFactory factory)
+    : IClassFixture<FixTrackWebApplicationFactory>
 {
     [Fact]
     public void Services_from_every_layer_are_registered()
@@ -17,8 +21,20 @@ public sealed class CompositionTests(WebApplicationFactory<Program> factory)
         var services = scope.ServiceProvider;
 
         Assert.NotNull(services.GetService<IModuleCatalog>());   // Aplicación
+        Assert.NotNull(services.GetService<ICustomerService>());  // Aplicación
+        Assert.NotNull(services.GetService<IUnitOfWork>());       // Infraestructura
         Assert.Same(TimeProvider.System, services.GetService<TimeProvider>());   // Infraestructura
         Assert.NotNull(services.GetService<ApplicationInfo>());   // Presentación
+    }
+
+    [Fact]
+    public void Automated_tests_never_use_the_real_sql_server_database()
+    {
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<FixTrackDbContext>();
+
+        Assert.Equal("Microsoft.EntityFrameworkCore.Sqlite", context.Database.ProviderName);
+        Assert.Contains(":memory:", context.Database.GetConnectionString(), StringComparison.Ordinal);
     }
 
     [Fact]
