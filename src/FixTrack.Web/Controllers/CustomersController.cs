@@ -1,5 +1,6 @@
 using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
+using FixTrack.Web.Models;
 using FixTrack.Web.Models.Customers;
 using FixTrack.Web.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -17,7 +18,7 @@ public sealed class CustomersController(ICustomerService customers) : Controller
         [FromQuery(Name = "pagina")] int page,
         CancellationToken cancellationToken)
     {
-        var filter = CustomerIndexViewModel.ParseStatus(status);
+        var filter = StatusFilterQuery.Parse(status);
         var result = await customers.SearchAsync(new CustomerSearch(search, filter, page), cancellationToken);
         return View(new CustomerIndexViewModel(search?.Trim(), filter, result));
     }

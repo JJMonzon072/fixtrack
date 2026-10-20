@@ -15,20 +15,6 @@ public sealed record CustomerIndexViewModel(string? SearchText, StatusFilter Sta
 
     /// <summary>No existe ningún cliente registrado todavía.</summary>
     public bool IsFirstUse => !HasSearch && Result.ActiveCount + Result.InactiveCount == 0;
-
-    public static string StatusParameter(StatusFilter status) => status switch
-    {
-        StatusFilter.Inactive => "inactivos",
-        StatusFilter.All => "todos",
-        _ => "activos",
-    };
-
-    public static StatusFilter ParseStatus(string? value) => value?.Trim().ToLowerInvariant() switch
-    {
-        "inactivos" => StatusFilter.Inactive,
-        "todos" => StatusFilter.All,
-        _ => StatusFilter.Active,
-    };
 }
 
 public static class CustomerDisplay
