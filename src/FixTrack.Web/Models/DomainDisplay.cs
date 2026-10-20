@@ -48,16 +48,7 @@ public static class DomainDisplay
     /// <summary>Marca y modelo, por ejemplo "Dell Latitude 5440".</summary>
     public static string DeviceTitle(string brand, string? model) => model is null ? brand : $"{brand} {model}";
 
-    public static string Name(ServiceOrderStatus status) => status switch
-    {
-        ServiceOrderStatus.Received => "Recibida",
-        ServiceOrderStatus.Diagnosing => "En diagnóstico",
-        ServiceOrderStatus.InRepair => "En reparación",
-        ServiceOrderStatus.AwaitingParts => "En espera de repuestos",
-        ServiceOrderStatus.ReadyForPickup => "Lista para entrega",
-        ServiceOrderStatus.Delivered => "Entregada",
-        _ => "Cancelada",
-    };
+    public static string Name(ServiceOrderStatus status) => ServiceOrderWorkflow.Name(status);
 
     public static string BadgeClass(ServiceOrderStatus status) => status switch
     {
