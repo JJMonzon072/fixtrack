@@ -172,6 +172,7 @@ public sealed class MigrationTests
         Assert.Contains("INSERT INTO [ServiceOrderAssignments]", script);
         Assert.Contains("o.[TechnicianAssignedAtUtc]", script);
         Assert.Contains("NOT EXISTS (SELECT 1 FROM [ServiceOrderAssignments]", script);
+        Assert.Contains("ORDER BY o.[Id]", script);
         foreach (var forbidden in new[] { "DROP", "ALTER", "UPDATE", "DELETE", "TRUNCATE" })
         {
             Assert.DoesNotContain(forbidden, script, StringComparison.OrdinalIgnoreCase);
