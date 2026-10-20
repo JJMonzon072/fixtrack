@@ -50,15 +50,16 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task Dashboard_does_not_present_sample_metrics()
+    public async Task Dashboard_metrics_are_numbers_from_the_database_not_placeholders()
     {
         using var client = factory.CreateClient();
 
         var html = await client.GetStringAsync("/", CancellationToken);
+        var values = MetricValue().Matches(html).Select(match => match.Groups["value"].Value).ToList();
 
-        Assert.Contains("No se muestran datos de ejemplo", html);
-        Assert.Equal(4, MetricValue().Matches(html).Count);
-        Assert.All(MetricValue().Matches(html), match => Assert.Contains("Sin datos", match.Value));
+        Assert.Equal(6, values.Count);
+        Assert.All(values, value => Assert.Matches(@"^\d+$", value));
+        Assert.DoesNotContain("Sin datos", html);
     }
 
     [Fact]
@@ -91,6 +92,6 @@ public sealed partial class PageTests(FixTrackWebApplicationFactory factory)
     [GeneratedRegex("<a class=\"nav-link\"[^>]*aria-current=\"page\"[^>]*>")]
     private static partial Regex ActiveNavigationLink();
 
-    [GeneratedRegex("<dd class=\"metric__value\">.*?</dd>", RegexOptions.Singleline)]
+    [GeneratedRegex("<dd class=\"metric__value\">(?<value>[^<]*)</dd>")]
     private static partial Regex MetricValue();
 }

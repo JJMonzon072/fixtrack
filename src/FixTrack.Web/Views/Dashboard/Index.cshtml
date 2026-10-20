@@ -1,7 +1,38 @@
+@using FixTrack.Domain.ServiceOrders
+@using FixTrack.Web.Services
 @model DashboardViewModel
+@inject DateDisplay Dates
 @{
     ViewData["Title"] = "Panel";
-    string[] indicators = ["Órdenes abiertas", "En reparación", "Listas para entrega", "Con entrega vencida"];
+    var summary = Model.Summary;
+    var counts = summary.Counts;
+    var now = summary.CalculatedAtUtc;
+
+    var statusBars = ServiceOrderWorkflow.OpenStatuses
+        .Select(status => new BarItem(
+            DomainDisplay.Name(status),
+            counts.ForStatus(status),
+            counts.Open,
+            DomainDisplay.Tone(status),
+            Url.Action("Index", "ServiceOrders", new { estado = DomainDisplay.Slug(status) })))
+        .ToList();
+    var priorityBars = DomainDisplay.Priorities.Reverse()
+        .Select(priority => new BarItem(
+            DomainDisplay.Name(priority),
+            counts.OpenWithPriority(priority),
+            counts.Open,
+            null,
+            Url.Action("Index", "ServiceOrders", new { prioridad = DomainDisplay.Slug(priority) })))
+        .ToList();
+    var workloadTotal = Math.Max(1, summary.Workload.Sum(technician => technician.OpenOrderCount));
+    var workloadBars = summary.Workload
+        .Select(technician => new BarItem(
+            technician.FullName,
+            technician.OpenOrderCount,
+            workloadTotal,
+            null,
+            Url.Action("Index", "ServiceOrders", new { tecnico = technician.Id })))
+        .ToList();
 }
 
 <header class="page-header">
@@ -11,103 +42,240 @@
             <span>@Model.Today</span>
         </p>
         <h1 class="page-title">Panel general</h1>
-        <p class="page-description">Resumen de la operación del taller de servicio técnico.</p>
+        <p class="page-description">Estado de la operación del taller, calculado con las órdenes registradas.</p>
+    </div>
+    <div class="page-header__actions">
+        <a class="button button--secondary" asp-controller="WorkQueue" asp-action="Index">
+            <icon name="list-ordered" />
+            Cola de trabajo
+        </a>
+        <a class="button button--primary" asp-controller="ServiceOrders" asp-action="Create">
+            <icon name="plus" />
+            Nueva orden
+        </a>
     </div>
 </header>
 
 <section class="section" aria-labelledby="indicators-title">
     <div class="section__header">
         <h2 class="section__title" id="indicators-title">Indicadores de operación</h2>
-        <span class="badge badge--neutral">Sin datos</span>
+        <span class="section__meta">Actualizado a las <time datetime="@DateDisplay.Iso(now)">@Dates.Time(now)</time></span>
     </div>
 
-    <dl class="metrics">
-        @foreach (var indicator in indicators)
-        {
-            <div class="metric">
-                <dt class="metric__label">@indicator</dt>
-                <dd class="metric__value"><span aria-hidden="true">—</span><span class="visually-hidden">Sin datos</span></dd>
-            </div>
-        }
+    <dl class="metrics metrics--six">
+        <div class="metric">
+            <dt class="metric__label"><a class="metric__link" asp-controller="ServiceOrders" asp-action="Index">Órdenes abiertas</a></dt>
+            <dd class="metric__value">@counts.Open</dd>
+            <dd class="metric__meta">@(counts.HighPriorityOpen == 1 ? "1 de prioridad alta o urgente" : $"{counts.HighPriorityOpen} de prioridad alta o urgente")</dd>
+        </div>
+        <div class="metric">
+            <dt class="metric__label"><a class="metric__link" asp-controller="ServiceOrders" asp-action="Index" asp-route-estado="@DomainDisplay.Slug(ServiceOrderStatus.InRepair)">En reparación</a></dt>
+            <dd class="metric__value">@counts.InRepair</dd>
+            <dd class="metric__meta">@(counts.AwaitingParts == 1 ? "1 en espera de repuestos" : $"{counts.AwaitingParts} en espera de repuestos")</dd>
+        </div>
+        <div class="metric">
+            <dt class="metric__label"><a class="metric__link" asp-controller="ServiceOrders" asp-action="Index" asp-route-estado="@DomainDisplay.Slug(ServiceOrderStatus.ReadyForPickup)">Listas para entrega</a></dt>
+            <dd class="metric__value">@counts.ReadyForPickup</dd>
+            <dd class="metric__meta">Esperan que el cliente las retire</dd>
+        </div>
+        <div class="metric@(counts.Overdue > 0 ? " metric--alert" : string.Empty)">
+            <dt class="metric__label"><a class="metric__link" asp-controller="ServiceOrders" asp-action="Index" asp-route-vista="vencidas">Con entrega vencida</a></dt>
+            <dd class="metric__value">@counts.Overdue</dd>
+            <dd class="metric__meta">@(counts.Overdue > 0 ? "Requieren atención inmediata" : "Todas dentro de su fecha")</dd>
+        </div>
+        <div class="metric@(counts.Unassigned > 0 ? " metric--warning" : string.Empty)">
+            <dt class="metric__label"><a class="metric__link" asp-controller="ServiceOrders" asp-action="Index" asp-route-tecnico="sin-asignar">Sin técnico asignado</a></dt>
+            <dd class="metric__value">@counts.Unassigned</dd>
+            <dd class="metric__meta">Órdenes abiertas sin responsable</dd>
+        </div>
+        <div class="metric">
+            <dt class="metric__label"><a class="metric__link" asp-controller="ServiceOrders" asp-action="Index" asp-route-vista="todas">Recibidas recientemente</a></dt>
+            <dd class="metric__value">@counts.ReceivedRecently</dd>
+            <dd class="metric__meta">En los últimos @summary.RecentDays días</dd>
+        </div>
     </dl>
-
-    <p class="notice">
-        <icon name="info" />
-        <span>Los indicadores se calcularán con las órdenes registradas cuando el módulo de órdenes de servicio esté disponible. No se muestran datos de ejemplo.</span>
-    </p>
 </section>
 
 <div class="dashboard-grid">
-    <section class="card" aria-labelledby="setup-title">
+    <section class="card" aria-labelledby="actions-title">
         <header class="card__header">
             <div>
-                <h2 class="card__title" id="setup-title">Puesta en marcha</h2>
-                <p class="card__description">Cada orden de servicio requiere un técnico, un cliente y un equipo.</p>
+                <h2 class="card__title" id="actions-title">Acciones recomendadas</h2>
+                <p class="card__description">Las órdenes abiertas con mayor puntuación según el algoritmo de priorización.</p>
             </div>
-        </header>
-
-        <ol class="step-list" role="list">
-            @for (var i = 0; i < Model.SetupSteps.Count; i++)
+            @if (summary.RecommendedActions.Count > 0)
             {
-                var step = Model.SetupSteps[i];
-                var route = ModuleNavigation.For(step.Key);
-                <li>
-                    <a class="step" asp-controller="@route.Controller" asp-action="Index">
-                        <span class="step__number" aria-hidden="true">@(i + 1)</span>
-                        <span class="step__body">
-                            <span class="step__title">@step.Name</span>
-                            <span class="step__description">@step.Description</span>
-                        </span>
-                        @if (step.IsAvailable)
-                        {
-                            <span class="step__status step__status--available">
-                                <icon name="check" />
-                                Disponible
-                            </span>
-                        }
-                        else
-                        {
-                            <span class="step__status">
-                                <icon name="circle-dashed" />
-                                Planificado
-                            </span>
-                        }
-                        <icon name="chevron-right" class="step__chevron" />
-                    </a>
-                </li>
+                <a class="button button--secondary button--small" asp-controller="WorkQueue" asp-action="Index">Ver la cola completa</a>
             }
-        </ol>
+        </header>
+        @if (summary.RecommendedActions.Count == 0)
+        {
+            <div class="card__body inline-empty">
+                <icon name="circle-check" />
+                <p>No hay órdenes abiertas. Cuando registres una, aquí aparecerá lo que conviene atender primero.</p>
+            </div>
+        }
+        else
+        {
+            <ol class="action-list" role="list">
+                @foreach (var item in summary.RecommendedActions)
+                {
+                    var order = item.Order;
+                    <li class="action-list__item">
+                        <span class="action-list__score mono" title="Puntuación">@item.Score.Total</span>
+                        <div class="action-list__body">
+                            <p class="action-list__title">
+                                <a class="link" asp-controller="ServiceOrders" asp-action="Details" asp-route-id="@order.Id">@order.Number</a>
+                                · @DomainDisplay.DeviceTitle(order.DeviceBrand, order.DeviceModel)
+                                <partial name="_OrderStatus" model="order.Status" />
+                            </p>
+                            <p class="action-list__meta">
+                                @order.CustomerName · @string.Join(" · ", item.Score.Factors.Select(factor => factor.Description))
+                            </p>
+                        </div>
+                        <partial name="_RecommendedAction" model="item" />
+                    </li>
+                }
+            </ol>
+        }
     </section>
 
-    <section class="card" aria-labelledby="system-title">
+    <section class="card" aria-labelledby="deliveries-title">
         <header class="card__header">
             <div>
-                <h2 class="card__title" id="system-title">Estado del sistema</h2>
-                <p class="card__description">Información de esta instancia de FixTrack.</p>
+                <h2 class="card__title" id="deliveries-title">Próximas entregas</h2>
+                <p class="card__description">Órdenes abiertas por fecha de entrega comprometida.</p>
             </div>
         </header>
-
-        <dl class="meta-list">
-            <div class="meta-list__row">
-                <dt>Versión</dt>
-                <dd class="mono">@Model.Application.Version</dd>
+        @if (summary.UpcomingDeliveries.Count == 0)
+        {
+            <div class="card__body inline-empty">
+                <icon name="calendar-clock" />
+                <p>No hay entregas comprometidas pendientes.</p>
             </div>
-            <div class="meta-list__row">
-                <dt>Entorno</dt>
-                <dd>@Model.Application.EnvironmentName</dd>
-            </div>
-            <div class="meta-list__row">
-                <dt>Plataforma</dt>
-                <dd class="mono">@Model.Application.Runtime</dd>
-            </div>
-            <div class="meta-list__row">
-                <dt>Módulos habilitados</dt>
-                <dd><span class="mono">@Model.AvailableModules</span> de <span class="mono">@Model.TotalModules</span></dd>
-            </div>
-            <div class="meta-list__row">
-                <dt>Base de datos</dt>
-                <dd>SQL Server</dd>
-            </div>
-        </dl>
+        }
+        else
+        {
+            <ul class="item-list" role="list">
+                @foreach (var order in summary.UpcomingDeliveries)
+                {
+                    <li class="item-list__item">
+                        <span class="item-list__text">
+                            <a class="item-list__title row-link" asp-controller="ServiceOrders" asp-action="Details" asp-route-id="@order.Id">
+                                <span class="mono">@order.Number</span> · @DomainDisplay.DeviceTitle(order.DeviceBrand, order.DeviceModel)
+                            </a>
+                            <span class="item-list__meta">@order.CustomerName</span>
+                        </span>
+                        <span class="item-list__aside">
+                            <partial name="_OrderDue" model="new OrderDueViewModel(order.Status, order.PromisedAtUtc, order.DeliveredAtUtc, now)" />
+                        </span>
+                    </li>
+                }
+            </ul>
+        }
     </section>
 </div>
+
+@if (Model.HasOrders)
+{
+    <div class="dashboard-charts">
+        <section class="card" aria-labelledby="by-status-title">
+            <header class="card__header">
+                <h2 class="card__title" id="by-status-title">Órdenes abiertas por estado</h2>
+            </header>
+            <partial name="_BarList" model="statusBars" />
+        </section>
+        <section class="card" aria-labelledby="by-priority-title">
+            <header class="card__header">
+                <h2 class="card__title" id="by-priority-title">Órdenes abiertas por prioridad</h2>
+            </header>
+            <partial name="_BarList" model="priorityBars" />
+        </section>
+        <section class="card" aria-labelledby="workload-title">
+            <header class="card__header">
+                <h2 class="card__title" id="workload-title">Carga de los técnicos</h2>
+            </header>
+            @if (workloadBars.Count == 0)
+            {
+                <div class="card__body inline-empty">
+                    <icon name="wrench" />
+                    <p>No hay técnicos activos.</p>
+                </div>
+            }
+            else
+            {
+                <partial name="_BarList" model="workloadBars" />
+            }
+        </section>
+    </div>
+
+    <section class="card section" aria-labelledby="recent-title">
+        <header class="card__header">
+            <div>
+                <h2 class="card__title" id="recent-title">Recibidas recientemente</h2>
+                <p class="card__description">Las últimas órdenes registradas, de cualquier estado.</p>
+            </div>
+            <a class="button button--secondary button--small" asp-controller="ServiceOrders" asp-action="Index" asp-route-vista="todas">Ver todas</a>
+        </header>
+        <partial name="_OrderSummaryTable" model='new OrderSummaryTableViewModel(summary.RecentlyReceived, now, "Órdenes recibidas recientemente", ShowDevice: true, ShowCustomer: true)' />
+    </section>
+}
+else
+{
+    <div class="dashboard-grid">
+        <section class="card" aria-labelledby="setup-title">
+            <header class="card__header">
+                <div>
+                    <h2 class="card__title" id="setup-title">Puesta en marcha</h2>
+                    <p class="card__description">Cada orden de servicio requiere un técnico, un cliente y un equipo.</p>
+                </div>
+            </header>
+
+            <ol class="step-list" role="list">
+                @for (var i = 0; i < Model.SetupSteps.Count; i++)
+                {
+                    var step = Model.SetupSteps[i];
+                    var route = ModuleNavigation.For(step.Key);
+                    <li>
+                        <a class="step" asp-controller="@route.Controller" asp-action="Index">
+                            <span class="step__number" aria-hidden="true">@(i + 1)</span>
+                            <span class="step__body">
+                                <span class="step__title">@step.Name</span>
+                                <span class="step__description">@step.Description</span>
+                            </span>
+                            <icon name="chevron-right" class="step__chevron" />
+                        </a>
+                    </li>
+                }
+            </ol>
+        </section>
+
+        <section class="card" aria-labelledby="system-title">
+            <header class="card__header">
+                <div>
+                    <h2 class="card__title" id="system-title">Estado del sistema</h2>
+                    <p class="card__description">Información de esta instancia de FixTrack.</p>
+                </div>
+            </header>
+
+            <dl class="meta-list">
+                <div class="meta-list__row">
+                    <dt>Versión</dt>
+                    <dd class="mono">@Model.Application.Version</dd>
+                </div>
+                <div class="meta-list__row">
+                    <dt>Entorno</dt>
+                    <dd>@Model.Application.EnvironmentName</dd>
+                </div>
+                <div class="meta-list__row">
+                    <dt>Plataforma</dt>
+                    <dd class="mono">@Model.Application.Runtime</dd>
+                </div>
+                <div class="meta-list__row">
+                    <dt>Base de datos</dt>
+                    <dd>SQL Server</dd>
+                </div>
+            </dl>
+        </section>
+    </div>
+}

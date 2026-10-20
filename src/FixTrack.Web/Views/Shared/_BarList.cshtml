@@ -1,0 +1,14 @@
+@model IReadOnlyList<BarItem>
+<ul class="bar-list" role="list">
+    @foreach (var bar in Model)
+    {
+        <li class="bar-list__item" data-status="@bar.Tone">
+            <a class="bar-list__label" href="@bar.Url">@bar.Label</a>
+            <span class="bar-list__value mono">@bar.Count</span>
+            <svg class="bar-list__bar" viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label="@bar.Percent % del total" focusable="false">
+                <rect class="bar-list__track" width="100" height="6" rx="3" />
+                <rect class="bar-list__fill" width="@bar.Percent" height="6" rx="3" />
+            </svg>
+        </li>
+    }
+</ul>
