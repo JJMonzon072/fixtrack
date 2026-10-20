@@ -1,6 +1,7 @@
 using System.Text;
 using FixTrack.Application.Security;
 using FixTrack.Infrastructure.Persistence;
+using FixTrack.Infrastructure.Persistence.Backups;
 using FixTrack.Web.Security;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,6 +16,9 @@ namespace FixTrack.Web.Hosting;
 /// <item><c>aplicar-migraciones</c>: aplica a la base configurada las migraciones pendientes.</item>
 /// <item><c>proteger-claves</c>: crea una clave de Data Protection cifrada con el certificado configurado; con
 /// <c>--revocar-sin-cifrar</c>, además revoca las claves guardadas sin cifrar.</item>
+/// <item><c>exportar-respaldo &lt;carpeta&gt;</c>: respaldo lógico de la base (solo lectura) en una carpeta fuera del
+/// repositorio. <c>verificar-respaldo &lt;archivo&gt;</c> comprueba un respaldo sin conectarse a la base, y
+/// <c>restaurar-respaldo &lt;archivo&gt;</c> lo carga en una base vacía (ver <see cref="DatabaseBackup"/>).</item>
 /// </list>
 /// Nunca escriben contraseñas en la consola ni en las bitácoras.
 /// </summary>
@@ -24,8 +28,12 @@ public static class ConsoleCommands
     public const string ApplyMigrations = "aplicar-migraciones";
     public const string ProtectKeys = "proteger-claves";
     public const string RevokeUnencryptedOption = "--revocar-sin-cifrar";
+    public const string ExportBackup = "exportar-respaldo";
+    public const string VerifyBackup = "verificar-respaldo";
+    public const string RestoreBackup = "restaurar-respaldo";
 
-    public static bool IsCommand(string[] args) => args.Length > 0 && args[0] is CreateAdministrator or ApplyMigrations or ProtectKeys;
+    public static bool IsCommand(string[] args) =>
+        args.Length > 0 && args[0] is CreateAdministrator or ApplyMigrations or ProtectKeys or ExportBackup or VerifyBackup or RestoreBackup;
 
     public static async Task<int> RunAsync(WebApplication app, string[] args)
     {
@@ -34,8 +42,77 @@ public static class ConsoleCommands
         {
             CreateAdministrator => await CreateAdministratorAsync(scope.ServiceProvider, app.Configuration),
             ProtectKeys => await ProtectKeysAsync(scope.ServiceProvider, args.Contains(RevokeUnencryptedOption)),
+            ExportBackup or VerifyBackup or RestoreBackup => await BackupAsync(scope.ServiceProvider, args),
             _ => await ApplyMigrationsAsync(scope.ServiceProvider),
         };
+    }
+
+    private static async Task<int> BackupAsync(IServiceProvider services, string[] args)
+    {
+        if (args.Length != 2 || string.IsNullOrWhiteSpace(args[1]))
+        {
+            Console.Error.WriteLine(args[0] == ExportBackup
+                ? $"Uso: {ExportBackup} <carpeta fuera del repositorio>"
+                : $"Uso: {args[0]} <archivo .zip del respaldo>");
+            return 2;
+        }
+
+        try
+        {
+            switch (args[0])
+            {
+                case ExportBackup:
+                    var export = await services.GetRequiredService<DatabaseBackup>().ExportAsync(args[1], CancellationToken.None);
+                    WriteTables(export.Manifest);
+                    Console.WriteLine($"Respaldo creado: {export.FilePath}");
+                    Console.WriteLine($"SHA-256 del archivo: {export.FileSha256}");
+                    Console.WriteLine("Contiene datos personales, hashes de contraseñas y claves de Data Protection: guárdalo cifrado y fuera de GitHub.");
+                    return 0;
+                case VerifyBackup:
+                    var manifest = await DatabaseBackup.VerifyAsync(args[1], CancellationToken.None);
+                    WriteTables(manifest);
+                    Console.WriteLine("El respaldo está íntegro: cada tabla coincide con su manifiesto.");
+                    return 0;
+                default:
+                    var restore = await services.GetRequiredService<DatabaseBackup>().RestoreAsync(args[1], CancellationToken.None);
+                    WriteTables(restore.Manifest);
+                    if (restore.MigratedEmptyDatabase)
+                    {
+                        Console.WriteLine($"La base estaba vacía: se le aplicaron las {restore.Manifest.Migrations.Count} migraciones del respaldo.");
+                    }
+
+                    if (restore.AlreadyPresent.Count > 0)
+                    {
+                        Console.WriteLine($"Ya estaban idénticas (datos iniciales de las migraciones): {string.Join(", ", restore.AlreadyPresent)}.");
+                    }
+
+                    Console.WriteLine("Restauración completa: cada tabla de la base coincide con el hash de su manifiesto.");
+                    if (restore.PendingMigrations.Count > 0)
+                    {
+                        Console.WriteLine($"El respaldo es anterior a esta versión: ejecuta {ApplyMigrations} para aplicar {restore.PendingMigrations.Count} migración(es) más.");
+                    }
+
+                    return 0;
+            }
+        }
+        catch (BackupException error)
+        {
+            Console.Error.WriteLine(error.Message);
+            return 1;
+        }
+    }
+
+    private static void WriteTables(BackupManifest manifest)
+    {
+        Console.WriteLine(
+            $"Base {manifest.Database} · {manifest.CreatedAtUtc:yyyy-MM-dd HH:mm:ss} UTC · lectura {manifest.Isolation} · " +
+            $"{manifest.Migrations.Count} migraciones (última: {manifest.Migrations.LastOrDefault() ?? "ninguna"})");
+        foreach (var table in manifest.Tables)
+        {
+            Console.WriteLine($" - {table.Name}: {table.Rows} fila(s) · sha256 {table.Sha256[..16]}…");
+        }
+
+        Console.WriteLine($"Total: {manifest.Tables.Count} tablas, {manifest.TotalRows} filas.");
     }
 
     private static async Task<int> CreateAdministratorAsync(IServiceProvider services, IConfiguration configuration)

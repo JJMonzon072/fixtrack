@@ -20,6 +20,7 @@ public sealed class DisposableSqlServerDatabase : IAsyncLifetime
     public const string ServerVariable = "FIXTRACK_TEST_SQLSERVER_SERVER";
     private const string NamePrefix = "FixTrackPrueba_";
 
+    private readonly List<string> _extraDatabases = [];
     private string? _serverConnectionString;
     private string? _databaseName;
 
@@ -75,9 +76,28 @@ public sealed class DisposableSqlServerDatabase : IAsyncLifetime
         SqlConnection.ClearAllPools();
         await using var master = new SqlConnection(_serverConnectionString);
         await master.OpenAsync();
-        await using var drop = master.CreateCommand();
-        drop.CommandText = $"ALTER DATABASE [{_databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{_databaseName}];";
-        await drop.ExecuteNonQueryAsync();
+        foreach (var name in _extraDatabases.Append(_databaseName))
+        {
+            await using var drop = master.CreateCommand();
+            drop.CommandText = $"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{name}];";
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    /// <summary>Otra base vacía (sin migraciones) en el mismo servidor, que también se elimina al terminar.</summary>
+    public async Task<string> CreateEmptyDatabaseAsync()
+    {
+        var name = NamePrefix + Guid.NewGuid().ToString("N");
+        await using (var master = new SqlConnection(_serverConnectionString ?? throw new InvalidOperationException("La base desechable no está configurada.")))
+        {
+            await master.OpenAsync();
+            await using var create = master.CreateCommand();
+            create.CommandText = $"CREATE DATABASE [{name}]";
+            await create.ExecuteNonQueryAsync();
+        }
+
+        _extraDatabases.Add(name);
+        return new SqlConnectionStringBuilder(_serverConnectionString) { InitialCatalog = name }.ConnectionString;
     }
 
     public FixTrackDbContext CreateContext() =>

@@ -497,3 +497,10 @@ docker-compose.override.yml
 
 # Evidencias locales de QA (capturas de pantalla), no se versionan
 qa-evidence/
+
+# El código de respaldos sí se versiona (la regla Backup*/ de Visual Studio lo ocultaba)
+!src/FixTrack.Infrastructure/Persistence/Backups/
+
+# Respaldos de la base (datos personales y hashes de contraseñas): nunca en el repositorio
+fixtrack-respaldo-*.zip
+*.zip.parcial
