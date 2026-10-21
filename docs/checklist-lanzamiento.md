@@ -16,7 +16,7 @@ Referencias: [README](../README.md) (configuración y comandos), [arquitectura.m
 | Se ejecuta sin root | Verificado | Proceso con UID 1654 (usuario `app` de la imagen *chiseled*, sin shell) |
 | Configuración solo por variables de entorno | Verificado | La imagen no contiene cadenas de conexión, certificados ni contraseñas |
 | Autenticación obligatoria y sin registro público | Verificado | 10 rutas privadas redirigen al inicio de sesión y el JSON responde 401. No existe página de registro: sin sesión, cualquier ruta (también las de registro habituales) lleva al inicio de sesión, y con sesión responden 404 |
-| Autorización por roles | Verificado | Administrador y Operador en páginas y en POST manuales con token válido (también el intento de ascenderse); prueba automática sobre **todos** los POST de administración |
+| Autorización por roles | Verificado | Administrador, Operador y Consulta en páginas y en POST manuales con token válido (también el intento de ascenderse); pruebas automáticas sobre **todos** los POST de administración (Operador) y sobre **todos** los POST de la aplicación (Consulta, que solo puede cerrar sesión) |
 | Cookies | Verificado | Sesión: `Secure`, `HttpOnly`, `SameSite=Lax`, no persistente. Antifalsificación: `HttpOnly`, `SameSite=Strict` y `Secure` cuando la aplicación ve HTTPS (ver la sección 5.6) |
 | Protección CSRF | Verificado | POST sin token: 400 |
 | Encabezados | Verificado | CSP con *nonce* y sin `unsafe-inline` en scripts, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, COOP, `Cache-Control: no-store`, sin `Server` |
@@ -122,6 +122,26 @@ Resultado esperado: `Se creó la clave cifrada …`, `Claves revocadas: 1` y la 
 
 La rama de producción de Render es `main`. Publicar requiere que QA apruebe la fase e integre `JJ` en `main`.
 
+### 3.5 Rol Consulta: migración y cuenta de demostración
+
+El rol **Consulta** ve todas las pantallas (también usuarios y auditoría) y no puede guardar nada: sirve para que otras personas exploren FixTrack y para preparar el manual de usuario. Llega con la migración `20261021023314_ReadOnlyRole`, que solo inserta una fila en `AspNetRoles`; la versión ya publicada no usa ese rol, así que se puede aplicar antes o después del despliegue. Se ensayó sobre una copia restaurada del último respaldo de FixTrackDB: se aplicó solo esa migración, el comando creó la cuenta, las pantallas mostraron el aviso de solo consulta y un envío respondió 403 sin guardar nada.
+
+- [ ] Respaldo previo (3.2).
+- [ ] Aplicar la migración. Debe decir `Aplicando 1 migración(es): 20261021023314_ReadOnlyRole`:
+
+  ```bash
+  dotnet run --project src/FixTrack.Web -c Release -- aplicar-migraciones
+  ```
+
+- [ ] Crear la cuenta (pide la contraseña dos veces, sin mostrarla). Usa un correo que no sea de una persona, por ejemplo uno de tu dominio o `@fixtrack.invalid`:
+
+  ```bash
+  dotnet run --project src/FixTrack.Web -c Release -- crear-cuenta-consulta <correo> "<nombre completo>"
+  ```
+
+- [ ] Compartir el correo y la contraseña solo por un canal privado y con personas de confianza: la cuenta ve los datos personales de los clientes y los correos de las cuentas. Nunca en GitHub.
+- [ ] Si alguien la bloquea con cinco intentos fallidos, se desbloquea desde `/usuarios`. Cuando ya no haga falta, deshabilitarla ahí mismo.
+
 ## 4. Configuración de Render, paso a paso
 
 Según la documentación de Render consultada el 2026-10-20 ([plan gratuito](https://render.com/docs/free), [Docker](https://render.com/docs/docker), [variables](https://render.com/docs/configure-environment-variables), [despliegues](https://render.com/docs/deploys), [health checks](https://render.com/docs/health-checks), [rollbacks](https://render.com/docs/rollbacks), [planes](https://render.com/docs/compute-plans)).
@@ -188,6 +208,7 @@ curl -sI https://<servicio>.onrender.com/cuenta/iniciar-sesion             # 200
 Las cuentas QA de Somee están deshabilitadas y no se deben tocar sin autorización. Para probar el rol Operador hace falta una cuenta Operador:
 
 - [ ] Opción recomendada: crear desde `/usuarios` una cuenta Operador temporal con un correo propio, probar con ella (sin Administración; `/usuarios` y `/auditoria` responden 403) y **deshabilitarla** al terminar. Queda en la auditoría.
+- [ ] Con la cuenta Consulta (3.5): todas las pantallas muestran el aviso de solo consulta, también `/usuarios` y `/auditoria`. Enviar cualquier formulario muestra "Esta cuenta es de solo consulta" y no guarda nada; cerrar sesión sí funciona.
 
 ### 5.5 Pruebas de funcionamiento
 
@@ -284,12 +305,14 @@ No afirmes que HSTS o el límite por IP real funcionan hasta completar los pasos
 - resiliencia;
 - medición con los recursos de Render;
 - accesibilidad;
+- rol Consulta (solo lectura), ensayado sobre una copia de FixTrackDB;
 - pruebas automáticas.
 
 **Requiere al propietario:**
 
 - guardar las contraseñas en un gestor y la copia de recuperación en un medio externo (3.1);
 - integración a `main` por QA (3.4);
+- aplicar la migración del rol Consulta y crear la cuenta de demostración (3.5);
 - autorizar y crear el servicio en Render (4 y 5);
 - crear y deshabilitar la cuenta Operador de prueba (5.4);
 - configurar el proxy real (5.6);

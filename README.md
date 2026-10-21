@@ -31,7 +31,7 @@ La aplicación guarda sus datos en **SQL Server** (FixTrackDB, alojada en Somee)
 - **Cola de trabajo:** las órdenes abiertas ordenadas por un algoritmo determinista y explicable, separadas en reparaciones, en espera de repuestos y listas para entrega, cada una con su acción recomendada. La base de datos calcula la puntuación y devuelve las 100 primeras de cada lista.
 - **Panel:** indicadores calculados en SQL (abiertas, en reparación, listas, vencidas, sin asignar, recientes), distribución por estado y prioridad, acciones recomendadas, próximas entregas, órdenes recientes y carga por técnico. Con la base vacía muestra ceros, no datos de ejemplo.
 - **Clientes, Equipos y Técnicos:** registro, búsqueda, edición y desactivación, con aviso si otra persona modificó el registro mientras se editaba. Sus detalles muestran las órdenes relacionadas. No se puede desactivar a un técnico con órdenes abiertas; al desactivar un cliente, el sistema avisa cuántas tiene.
-- **Cuentas de acceso:** inicio de sesión, roles Administrador y Operador, administración de cuentas (incluido el desbloqueo) y cambio de contraseña.
+- **Cuentas de acceso:** inicio de sesión, roles Administrador, Operador y Consulta (solo lectura, para demostraciones y para preparar el manual), administración de cuentas (incluido el desbloqueo) y cambio de contraseña.
 - **Auditoría:** el administrador consulta quién hizo cada operación importante y cuándo (`/auditoria`).
 - **Operación:** página 503 clara si la base no responde, comprobaciones de salud, respaldo y restauración de la base con comandos.
 
@@ -138,6 +138,7 @@ ASP.NET Core lee la misma configuración desde user-secrets o desde variables de
 | `Security__FailedLoginMinimumMilliseconds` | Duración mínima de un inicio de sesión fallido, para no revelar si el correo existe | 500 |
 | `TZ` | Zona horaria para mostrar fechas (se guardan en UTC) | `America/Guatemala` en la imagen |
 | `InitialAdmin__Email`, `InitialAdmin__FullName`, `InitialAdmin__Password` | Solo para el comando `crear-administrador`. La contraseña es un **secreto** y es opcional: si falta, el comando la pide | Ninguno |
+| `ReadOnlyAccount__Password` | Solo para el comando `crear-cuenta-consulta`, cuando no hay una terminal para pedir la contraseña. Es un **secreto** | Ninguno |
 
 Si falta una variable obligatoria (la cadena de conexión, el certificado o la decisión sobre el proxy), la aplicación no arranca y el mensaje dice qué falta.
 
@@ -189,6 +190,29 @@ El comando pide la contraseña dos veces sin mostrarla. Debe tener al menos 12 c
 | 3 | Ya existe un administrador habilitado: no se creó otra cuenta |
 
 Con la imagen Docker: `docker run --rm -it -e ConnectionStrings__FixTrack -e InitialAdmin__Email -e InitialAdmin__FullName fixtrack crear-administrador` (las variables se toman del entorno de tu terminal; no escribas sus valores en el comando).
+
+## Cuenta de solo consulta
+
+El rol **Consulta** abre todas las pantallas, también **Usuarios** y **Auditoría**, y sus formularios, pero no registra, modifica ni elimina nada: el servidor responde 403 a cualquier envío (POST), aunque se haga a mano con un token válido. Solo puede cerrar sesión; tampoco cambia su propia contraseña. Cada página muestra un aviso de que la cuenta es de solo consulta. Sirve para demostraciones y para preparar el manual de usuario.
+
+Un administrador la crea desde **Administración → Usuarios → Nueva cuenta**, eligiendo el rol Consulta, o con un comando desde un equipo con la cadena de conexión configurada:
+
+```bash
+dotnet run --project src/FixTrack.Web -c Release -- crear-cuenta-consulta manual@ejemplo.com "Manual De Usuario"
+```
+
+El comando pide la contraseña dos veces sin mostrarla (mismas reglas que las demás cuentas) y queda en la auditoría como "Cuenta creada" por *Sistema*. Solo puede crear cuentas de este rol.
+
+| Código de salida | Significado |
+| --- | --- |
+| 0 | Cuenta creada |
+| 1 | Datos no válidos (correo repetido, contraseña débil, contraseñas que no coinciden) |
+| 2 | Faltan el correo o el nombre, o falta la contraseña y no hay una terminal para pedirla |
+
+Antes de compartirla, ten en cuenta:
+
+- **Ve datos personales:** nombres, teléfonos y correos de los clientes, y los correos de las cuentas de acceso. Compártela solo con personas de confianza, y solo mientras haga falta.
+- **Si se comparte, todos usan la misma contraseña.** Cinco intentos fallidos seguidos la bloquean 15 minutos para todos; un administrador puede desbloquearla, restablecer su contraseña o deshabilitarla desde **Usuarios**.
 
 ## Respaldos y recuperación
 
@@ -291,7 +315,7 @@ Ninguna exige sesión, ninguna muestra detalles (ni el servidor ni el error) y n
 
 ## Rutas disponibles
 
-Todas exigen iniciar sesión, salvo el inicio de sesión, las páginas de error, los archivos estáticos y las comprobaciones de salud.
+Todas exigen iniciar sesión, salvo el inicio de sesión, las páginas de error, los archivos estáticos y las comprobaciones de salud. La cuenta **Consulta** abre todas estas páginas, incluidas las de administración, pero cualquier POST le responde 403, salvo cerrar sesión.
 
 | Ruta | Página | Rol |
 | --- | --- | --- |
@@ -411,7 +435,7 @@ Toda la interfaz se construye desde `src/FixTrack.Web/wwwroot/css/site.css`, org
 dotnet test -c Release
 ```
 
-Hay **613 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan **590** y se omiten **23**: las que necesitan SQL Server real (ver más abajo). Con un SQL Server local desechable pasan los **613**. Las demás usan **SQLite en memoria** y funcionan igual en GitHub Actions, sin credenciales.
+Hay **623 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan **600** y se omiten **23**: las que necesitan SQL Server real (ver más abajo). Con un SQL Server local desechable pasan los **623**. Las demás usan **SQLite en memoria** y funcionan igual en GitHub Actions, sin credenciales.
 
 | Grupo | Archivo | Casos | Qué verifica |
 | --- | --- | --- | --- |
@@ -436,7 +460,7 @@ Hay **613 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan 
 | Infraestructura | `Infrastructure/ServiceOrderRepositoryTests.cs` | 23 | Búsqueda, vistas, filtros, orden, conteos, detalle con historial; la puntuación en SQL ordena exactamente como el algoritmo y sus umbrales son parámetros |
 | Infraestructura | `Infrastructure/DashboardRepositoryTests.cs` | 3 | Todos los indicadores en una agregación, próximas entregas y recientes, base vacía |
 | Infraestructura | `Infrastructure/UnitOfWorkTests.cs` | 6 | Transacciones confirmadas y revertidas, bloqueo del técnico solo dentro de una transacción, conflictos de concurrencia |
-| Infraestructura | `Infrastructure/MigrationTests.cs` | 10 | Migraciones sincronizadas con el modelo, sin operaciones destructivas; cada migración de las fases 3 y 4 solo agrega |
+| Infraestructura | `Infrastructure/MigrationTests.cs` | 11 | Migraciones sincronizadas con el modelo, sin operaciones destructivas; cada migración de las fases 3, 4 y 5 solo agrega (la del rol Consulta solo inserta el rol) |
 | Infraestructura | `Infrastructure/BackupFileTests.cs` | 5 | Respaldos nunca dentro de un repositorio Git; archivos dañados, incompletos o ajenos se rechazan |
 | Web | `Web/PageTests.cs` | 19 | Rutas principales, menú activo, panel con números reales, 404 y recursos estáticos |
 | Web | `Web/PresentationTests.cs` | 30 | Montos en quetzales, fechas locales y UTC, parámetros de las listas |
@@ -446,6 +470,7 @@ Hay **613 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan 
 | Web | `Web/ServiceOrdersPageTests.cs` | 28 | Módulo Órdenes: registro, validaciones, flujo completo, formulario desactualizado, envío repetido, línea de tiempo con asignaciones y autores |
 | Web | `Web/DashboardPageTests.cs` | 4 | Panel y cola de trabajo con datos reales y sin datos |
 | Web | `Web/SecurityTests.cs` (y `.Login.cs`, `.Administration.cs`) | 48 | Acceso anónimo, cookies (antifalsificación `Secure` por HTTPS y sin error 500 por HTTP), bloqueo, límite por IP, permisos por rol, **todos los POST de administración rechazados a un Operador**, CSRF, encabezados y CSP, sin encabezado `Server`, inicio de sesión sin enumeración (mismo mensaje y tiempo), contraseñas fuera de registros |
+| Web | `Web/ReadOnlyRoleTests.cs` | 9 | Rol Consulta: abre **todas** las páginas con el aviso de solo consulta (también usuarios, auditoría y formularios); **todos los POST** con token válido responden 403 y no cambia nada, ni siquiera su rol; cierre de sesión; menú sin cambio de contraseña; comando `crear-cuenta-consulta` |
 | Web | `Web/UsersPageTests.cs` | 9 | Cuentas: alta, validaciones, roles, deshabilitar, restablecer y cambiar contraseña, último administrador |
 | Web | `Web/AccountAdministrationTests.cs` | 11 | Desbloqueo, edición concurrente de cuentas, cambio de la propia contraseña, auditoría de cuentas sin contraseñas, Operador sin acceso por solicitudes manuales |
 | Web | `Web/AuditPageTests.cs` | 3 | Auditoría solo para administradores, con autor y filtros por área; la planificación aparece en la línea de tiempo de la orden |
@@ -492,7 +517,7 @@ Con la aplicación en ejecución y una cuenta de administrador:
 7. **Cola de trabajo:** las órdenes aparecen en tres listas con su puntuación desglosada y su acción recomendada.
 8. **Técnicos:** intenta desactivar a un técnico con órdenes abiertas: el diálogo explica que primero hay que reasignarlas. Reasigna una orden con un motivo: la línea de tiempo muestra el técnico anterior, el nuevo, el motivo y quién lo hizo.
 9. **Clientes:** abre el diálogo para desactivar un cliente con órdenes abiertas: avisa cuántas tiene.
-10. **Cuentas:** crea una cuenta Operador, inicia sesión con ella en otra ventana privada y comprueba que no ve Administración ni los botones de técnicos, y que `/usuarios` y `/auditoria` responden 403. Equivoca su contraseña 5 veces: el mensaje es el mismo que con un correo inexistente; como administrador, desbloquéala desde su editor. Deshabilítala: su sesión termina en menos de un minuto.
+10. **Cuentas:** crea una cuenta Operador, inicia sesión con ella en otra ventana privada y comprueba que no ve Administración ni los botones de técnicos, y que `/usuarios` y `/auditoria` responden 403. Equivoca su contraseña 5 veces: el mensaje es el mismo que con un correo inexistente; como administrador, desbloquéala desde su editor. Deshabilítala: su sesión termina en menos de un minuto. Con una cuenta Consulta, abre cualquier pantalla (aparece el aviso de solo consulta) y envía un formulario: la página 403 lo explica y no se guarda nada.
 11. **Auditoría:** `/auditoria` muestra cada operación anterior con su autor; prueba los filtros por área.
 12. **Tema, responsive y teclado:** cambia entre tema claro y oscuro, reduce la ventana a 375 px (sin desplazamiento horizontal) y recorre la página con Tab.
 13. **Cerrar sesión** desde el menú de usuario.
@@ -516,7 +541,7 @@ Para desarrollar sin Somee se puede usar cualquier SQL Server 2022 compatible y 
 
 ## Limitaciones conocidas de la aplicación
 
-- **No hay rol Técnico.** Solo existen Administrador y Operador. Un rol Técnico correcto exige autorización por registro (cada técnico limitado a sus órdenes). El diseño propuesto está en [docs/arquitectura.md](docs/arquitectura.md#autorización).
+- **No hay rol Técnico.** Solo existen Administrador, Operador y Consulta (solo lectura). Un rol Técnico correcto exige autorización por registro (cada técnico limitado a sus órdenes). El diseño propuesto está en [docs/arquitectura.md](docs/arquitectura.md#autorización).
 - **El proxy de Render no está configurado como confiable** hasta conocer su dirección real después del primer despliegue ([checklist, 5.6](docs/checklist-lanzamiento.md#56-proxy-de-render-descubrir-y-verificar-su-dirección)). Mientras tanto no se envía HSTS, la cookie antifalsificación no es `Secure` y el límite de intentos de inicio de sesión por IP se comparte entre todos los usuarios.
 - **En el plan gratuito de Render, la primera visita después de 15 minutos sin uso espera** alrededor de un minuto de la plataforma más unos 16–18 s de arranque, y el primer inicio de sesión tarda unos 15 s (medido localmente con 0.1 CPU).
 - **Las reasignaciones anteriores a la fase 4 no se conocen:** esas órdenes muestran solo su asignación vigente, con la nota correspondiente. Los cambios de estado anteriores no tienen autor.

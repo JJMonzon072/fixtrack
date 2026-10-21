@@ -15,8 +15,9 @@ El esquema se crea con las migraciones de Entity Framework Core de `src/FixTrack
 | `20261020165523_RecordVersions` | 4 | Columna `Version` (`int NOT NULL DEFAULT 0`) en `Customers`, `Devices` y `Technicians` |
 | `20261020165922_OrderCreationRequests` | 4 | Columna `ServiceOrders.CreationRequestId` (`uniqueidentifier NULL`) con índice único filtrado |
 | `20261020174027_BackfillCurrentAssignments` | 4 | Solo inserta: registra en `ServiceOrderAssignments` la asignación vigente de las órdenes que ya tenían técnico, con su fecha real y sin autor |
+| `20261021023314_ReadOnlyRole` | 5 | Solo inserta: el rol **Consulta** (solo lectura) en `AspNetRoles`, con identificador fijo |
 
-Ninguna migración borra tablas, columnas, índices ni datos, ni actualiza filas existentes: una prueba (`MigrationTests`) rechaza `DROP TABLE`, `DROP COLUMN`, `DROP INDEX`, `TRUNCATE`, `DELETE FROM` y `UPDATE` en el script completo. Las de las fases 3 y 4 solo agregan columnas que admiten `NULL` o tienen valor inicial, restricciones que los datos existentes ya cumplían, tablas nuevas y filas nuevas. Antes de aplicarlas a FixTrackDB se revisó su script SQL y se ensayaron sobre una copia restaurada de la base real; después de aplicarlas, la base real coincidió tabla por tabla con el ensayo. FixTrackDB tiene aplicadas las nueve migraciones.
+Ninguna migración borra tablas, columnas, índices ni datos, ni actualiza filas existentes: una prueba (`MigrationTests`) rechaza `DROP TABLE`, `DROP COLUMN`, `DROP INDEX`, `TRUNCATE`, `DELETE FROM` y `UPDATE` en el script completo. Las de las fases 3, 4 y 5 solo agregan columnas que admiten `NULL` o tienen valor inicial, restricciones que los datos existentes ya cumplían, tablas nuevas y filas nuevas. Antes de aplicarlas a FixTrackDB se revisó su script SQL y se ensayaron sobre una copia restaurada de la base real; después de aplicarlas, la base real coincidió tabla por tabla con el ensayo. FixTrackDB tiene aplicadas las nueve migraciones de las fases 2A a 4; `ReadOnlyRole` se aplica con `aplicar-migraciones`, después de un respaldo ([checklist, 3.5](checklist-lanzamiento.md#35-rol-consulta-migración-y-cuenta-de-demostración)).
 
 Las entidades de C# están en `src/FixTrack.Domain/` y su configuración de base de datos en `src/FixTrack.Infrastructure/Persistence/Configurations/`.
 
@@ -158,7 +159,7 @@ erDiagram
 
     AspNetRoles {
         nvarchar Id PK
-        nvarchar Name "Administrador u Operador"
+        nvarchar Name "Administrador, Operador o Consulta"
     }
 
     AspNetUserRoles {
@@ -355,7 +356,7 @@ Tablas estándar de ASP.NET Core Identity. FixTrack agrega tres columnas a `AspN
 - El correo es el usuario: `Email` y `UserName` tienen el mismo valor y son únicos (`UserNameIndex`).
 - La contraseña se guarda solo como hash (`PasswordHash`, PBKDF2 de Identity).
 - **Cuenta deshabilitada:** `LockoutEnd` = `9999-12-31 23:59:59.9999999 +00:00`. Se distingue del bloqueo temporal por intentos fallidos, que dura 15 minutos. Al deshabilitar se renueva `SecurityStamp`, lo que cierra las sesiones abiertas en menos de un minuto.
-- `AspNetRoles` se crea con dos filas de identificador fijo: **Administrador** y **Operador**. Cada cuenta tiene exactamente un rol.
+- `AspNetRoles` tiene tres filas de identificador fijo: **Administrador** y **Operador** (fase 3) y **Consulta** (fase 5, solo lectura). Cada cuenta tiene exactamente un rol.
 
 ### DataProtectionKeys (fase 3)
 

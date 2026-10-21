@@ -141,19 +141,21 @@ Las claves que cifran la cookie de sesión y los tokens antifalsificación se gu
 
 Toda ruta exige una cuenta con rol, salvo el inicio de sesión, las páginas de error, los archivos estáticos y las comprobaciones de salud. La regla está en una **política de respaldo** (`FallbackPolicy`), así que un controlador nuevo queda protegido aunque se olvide el atributo. También protege los endpoints JSON.
 
-| Función | Administrador | Operador |
-| --- | :---: | :---: |
-| Panel y cola de trabajo | ✓ | ✓ |
-| Clientes: consultar, registrar, editar, desactivar y reactivar | ✓ | ✓ |
-| Equipos: consultar, registrar y editar | ✓ | ✓ |
-| Órdenes: registrar, asignar, diagnosticar, planificar y cambiar de estado | ✓ | ✓ |
-| Técnicos: consultar | ✓ | ✓ |
-| Técnicos: registrar, editar, desactivar y reactivar | ✓ | — |
-| Cuentas de acceso: crear, editar rol, deshabilitar, habilitar, desbloquear y restablecer contraseña | ✓ | — |
-| Auditoría (`/auditoria`) | ✓ | — |
-| Cambiar la propia contraseña | ✓ | ✓ |
+| Función | Administrador | Operador | Consulta |
+| --- | :---: | :---: | :---: |
+| Panel y cola de trabajo | ✓ | ✓ | Ver |
+| Clientes: consultar, registrar, editar, desactivar y reactivar | ✓ | ✓ | Solo consultar |
+| Equipos: consultar, registrar y editar | ✓ | ✓ | Solo consultar |
+| Órdenes: registrar, asignar, diagnosticar, planificar y cambiar de estado | ✓ | ✓ | Solo consultar |
+| Técnicos: consultar | ✓ | ✓ | ✓ |
+| Técnicos: registrar, editar, desactivar y reactivar | ✓ | — | Solo ver los formularios |
+| Cuentas de acceso: crear, editar rol, deshabilitar, habilitar, desbloquear y restablecer contraseña | ✓ | — | Solo ver la lista y los formularios |
+| Auditoría (`/auditoria`) | ✓ | — | ✓ |
+| Cambiar la propia contraseña | ✓ | ✓ | — |
 
-Las políticas son `Taller` (Administrador u Operador), `GestionarTecnicos` y `GestionarCuentas` (solo Administrador). La interfaz oculta lo que el rol no permite y el servidor lo rechaza con 403 aunque se llame directamente. Una prueba recorre **todos** los POST protegidos por las políticas de administración (los actuales y los que se agreguen) y los envía con la sesión y el token antifalsificación válidos de un Operador, usando su propio Id (el intento de ascenderse a Administrador): comprueba el 403 en cada uno y que ninguna cuenta ni técnico cambió. Una solicitud JSON sin sesión recibe 401, no una redirección.
+Las políticas son `Taller` (Administrador u Operador), `GestionarTecnicos` y `GestionarCuentas` (solo Administrador). La interfaz oculta lo que el rol no permite y el servidor lo rechaza con 403 aunque se llame directamente.
+
+**Consulta (solo lectura).** Las tres políticas, incluida la de respaldo, usan el mismo requisito (`RoleAccessRequirement`, en `Web/Security/RoleAccess.cs`): los roles de la política pueden todo y el rol Consulta pasa solo si la solicitud es GET o HEAD. Por eso una acción nueva queda protegida para Consulta sin declararlo, y abrir una página nunca cambia datos. Cerrar sesión (`[Authorize]`, solo exige sesión) es el único POST que puede enviar. Cuando una vista consulta una política sin recurso (para decidir qué enlaces mostrar), la cuenta de consulta los ve; cualquier envío se vuelve a evaluar con la solicitud y recibe 403, con una página que explica que la cuenta es de solo consulta. Una prueba recorre **todos** los POST de la aplicación con la sesión y el token válidos de una cuenta Consulta (también el intento de ascenderse con su propio Id) y comprueba el 403 en cada uno y que ninguna tabla cambió; otra abre todas las páginas GET y comprueba el 200 y el aviso. Una prueba recorre **todos** los POST protegidos por las políticas de administración (los actuales y los que se agreguen) y los envía con la sesión y el token antifalsificación válidos de un Operador, usando su propio Id (el intento de ascenderse a Administrador): comprueba el 403 en cada uno y que ninguna cuenta ni técnico cambió. Una solicitud JSON sin sesión recibe 401, no una redirección.
 
 Reglas de las cuentas: un administrador no puede deshabilitarse ni cambiar su propio rol desde la administración de usuarios (para su contraseña usa "Cambiar mi contraseña"), y siempre debe quedar al menos un administrador habilitado. Una cuenta deshabilitada no se elimina, para conservar la trazabilidad.
 

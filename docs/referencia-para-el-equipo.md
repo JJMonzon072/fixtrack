@@ -12,6 +12,7 @@ FixTrack es una aplicación web para un taller de reparación de computadoras. R
 | --- | --- | --- |
 | **Administrador** | Sí | Todo lo del Operador, más gestionar técnicos y cuentas de acceso y consultar la auditoría |
 | **Operador** (recepción o personal del taller) | Sí | Panel, cola de trabajo, clientes, equipos y todas las operaciones de órdenes; consultar técnicos |
+| **Consulta** (visitante, quien prepara el manual) | Sí | Ver todas las pantallas, incluidas usuarios y auditoría, sin registrar, modificar ni eliminar nada |
 | **Cliente** | No | Entrega y retira el equipo. Sus datos los registra el personal |
 | **Técnico** | No, por ahora | Recibe órdenes asignadas. Sus datos los registra un administrador. Un rol Técnico con acceso propio queda propuesto para otra fase |
 
@@ -38,7 +39,12 @@ FixTrack es una aplicación web para un taller de reparación de computadoras. R
 - Crear cuentas de acceso, cambiar su rol, deshabilitarlas, habilitarlas, desbloquearlas y restablecer su contraseña.
 - Consultar la auditoría: quién hizo cada operación importante y cuándo.
 
-**Fuera de la interfaz (comandos de consola):** crear el primer administrador, aplicar migraciones, proteger las claves de sesión con un certificado y exportar, verificar o restaurar un respaldo de la base.
+**Consulta**
+
+- Iniciar y cerrar sesión.
+- Ver todas las pantallas del Administrador, incluidos los formularios, sin poder guardar: cada envío se rechaza con un aviso.
+
+**Fuera de la interfaz (comandos de consola):** crear el primer administrador, crear una cuenta de solo consulta, aplicar migraciones, proteger las claves de sesión con un certificado y exportar, verificar o restaurar un respaldo de la base.
 
 ## Datos principales (para los diagramas entidad-relación y de clases)
 
@@ -168,7 +174,7 @@ Las flechas apuntan hacia el dominio: las reglas del negocio no dependen de la b
 5. Pasar a lista para entrega y entregar con el costo final; mostrar la línea de tiempo.
 6. Intentar desactivar a un técnico con órdenes abiertas: el sistema lo impide y explica por qué.
 7. Reasignar la orden a otro técnico con un motivo: la línea de tiempo muestra quién lo hizo y por qué.
-8. Mostrar que el Operador no ve Administración. Iniciar sesión como Administrador y mostrar las cuentas de acceso y la auditoría.
+8. Mostrar que el Operador no ve Administración. Iniciar sesión como Administrador y mostrar las cuentas de acceso y la auditoría. Para que el público explore por su cuenta, usar una cuenta Consulta: ve todo y no puede cambiar nada.
 9. Cerrar con la arquitectura por capas, el algoritmo y las pruebas automáticas en GitHub Actions.
 
 ## Glosario
