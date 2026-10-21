@@ -3,6 +3,7 @@ using FixTrack.Application.Common;
 using FixTrack.Application.Customers;
 using FixTrack.Application.Dashboard;
 using FixTrack.Application.Devices;
+using FixTrack.Application.Reports;
 using FixTrack.Application.Security;
 using FixTrack.Application.ServiceOrders;
 using FixTrack.Application.Technicians;
@@ -86,6 +87,7 @@ public static class DependencyInjection
         services.AddScoped<ITechnicianRepository, TechnicianRepository>();
         services.AddScoped<IServiceOrderRepository, ServiceOrderRepository>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
+        services.AddScoped<IReportRepository, ReportRepository>();
         services.AddScoped<IAuditTrail, AuditTrail>();
         services.AddScoped<DatabaseBackup>();
 
