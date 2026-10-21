@@ -91,7 +91,8 @@
             <p class="card__description">Cada cuenta tiene un rol. Los permisos se aplican en el servidor, no solo en los menús.</p>
         </div>
     </header>
-    <div class="table-scroll">
+    @* En móvil la tabla se desplaza de lado: la región recibe el foco para recorrerla con el teclado. *@
+    <div class="table-scroll" tabindex="0" role="region" aria-labelledby="roles-title">
         <table class="data-table permissions-table">
             <caption class="visually-hidden">Permisos de cada rol</caption>
             <thead>
