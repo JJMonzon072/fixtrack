@@ -1,0 +1,107 @@
+# FixTrack · demostración local con datos ficticios (ver docs/demo-portafolio.md).
+#
+# Todo corre en este equipo: SQL Server en un contenedor sin puertos publicados, una base nueva (FixTrackDemo) y la
+# aplicación en http://localhost:8080. Nunca se conecta a la base real del proyecto ni a Render.
+#
+#   ./demo/demo.sh iniciar        (genera demo/.env con contraseñas aleatorias y levanta todo)
+#
+# Las contraseñas llegan desde demo/.env, que está en .gitignore y lo crea demo.sh en cada entorno nuevo.
+
+name: fixtrack-demo
+
+x-fixtrack: &fixtrack
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  image: fixtrack-demo/app:local
+  environment: &fixtrack-environment
+    ConnectionStrings__FixTrack: "Server=sqlserver;Database=FixTrackDemo;User ID=fixtrack_demo;Password=${DEMO_APP_PASSWORD:?ejecuta ./demo/demo.sh iniciar};Encrypt=True;TrustServerCertificate=True"
+    DataProtection__Certificate__Path: /certificado/fixtrack-demo-dp.pfx
+    DataProtection__Certificate__Password: ${DEMO_CERTIFICATE_PASSWORD:?ejecuta ./demo/demo.sh iniciar}
+    # Sin proxy delante: la aplicación recibe las solicitudes directamente.
+    ReverseProxy__IgnoreForwardedHeaders: "true"
+  volumes:
+    - certificado:/certificado:ro
+
+x-herramienta: &herramienta
+  build:
+    context: ..
+    dockerfile: tools/FixTrack.Demo/Dockerfile
+  image: fixtrack-demo/herramienta:local
+  environment:
+    Demo__Server: sqlserver
+    Demo__Database: FixTrackDemo
+    Demo__AppLogin: fixtrack_demo
+    Demo__SaPassword: ${DEMO_SA_PASSWORD:?ejecuta ./demo/demo.sh iniciar}
+    Demo__AppPassword: ${DEMO_APP_PASSWORD:?ejecuta ./demo/demo.sh iniciar}
+    Demo__CertificatePath: /certificado/fixtrack-demo-dp.pfx
+    Demo__CertificatePassword: ${DEMO_CERTIFICATE_PASSWORD:?ejecuta ./demo/demo.sh iniciar}
+    Demo__AdminPassword: ${DEMO_ADMIN_PASSWORD:?ejecuta ./demo/demo.sh iniciar}
+    Demo__OperatorPassword: ${DEMO_OPERATOR_PASSWORD:?ejecuta ./demo/demo.sh iniciar}
+    Demo__ReadOnlyPassword: ${DEMO_READONLY_PASSWORD:?ejecuta ./demo/demo.sh iniciar}
+
+services:
+  # SQL Server 2022 Developer (la misma imagen fijada en CI). Solo existe para x86-64: en un Mac con Apple Silicon,
+  # Docker Desktop la emula con Rosetta. No publica puertos: solo la ven los demás servicios de esta demostración.
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718 # 2022-latest
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${DEMO_SA_PASSWORD:?ejecuta ./demo/demo.sh iniciar}
+      TZ: America/Guatemala
+    volumes:
+      - datos-sql:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "SQLCMDPASSWORD=\"$$MSSQL_SA_PASSWORD\" /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+
+  # 1. Base FixTrackDemo, login propio de la aplicación (no sa) y certificado de Data Protection de este entorno.
+  preparar:
+    <<: *herramienta
+    command: ["preparar"]
+    volumes:
+      - certificado:/certificado
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+
+  # 2. Esquema con las migraciones de FixTrack, con el mismo comando que se usa en producción.
+  migraciones:
+    <<: *fixtrack
+    command: ["aplicar-migraciones"]
+    depends_on:
+      preparar:
+        condition: service_completed_successfully
+
+  # 3. Cuentas y datos ficticios, creados con los servicios de aplicación (validaciones, historial y auditoría).
+  datos:
+    <<: *herramienta
+    command: ["cargar"]
+    depends_on:
+      migraciones:
+        condition: service_completed_successfully
+
+  # 4. FixTrack con los tres extras de portafolio habilitados (en el proyecto vienen desactivados).
+  app:
+    <<: *fixtrack
+    environment:
+      <<: *fixtrack-environment
+      PortfolioFeatures__Reports: "true"
+      PortfolioFeatures__PrintableSheets: "true"
+      PortfolioFeatures__ReadOnlyApi: "true"
+    ports:
+      # Solo en este equipo (127.0.0.1): no queda expuesta a la red local.
+      - "127.0.0.1:${DEMO_PORT:-8080}:8080"
+    depends_on:
+      datos:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  datos-sql:
+  certificado:
