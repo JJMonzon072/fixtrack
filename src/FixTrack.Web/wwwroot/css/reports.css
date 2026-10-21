@@ -310,8 +310,11 @@
     text-decoration: none;
 }
 
-.report-bars__item--empty {
-    opacity: 0.55;
+/* Estados sin órdenes: texto terciario (con el contraste mínimo) en lugar de transparencia. */
+.report-bars__item--empty .bar-list__label,
+.report-bars__item--empty .bar-list__value {
+    color: var(--color-text-tertiary);
+    font-weight: 400;
 }
 
 .report-bars__percent {
