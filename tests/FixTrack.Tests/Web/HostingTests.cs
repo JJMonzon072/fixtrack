@@ -215,6 +215,50 @@ public sealed class HostingTests(FixTrackWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task An_ipv4_address_in_ipv6_notation_is_logged_as_ipv4_so_it_can_be_copied_to_the_configuration()
+    {
+        // Docker Desktop (y otras plataformas) entregan la conexión como ::ffff:a.b.c.d.
+        var logs = new LogCapture();
+        using var client = BehindProxy("::ffff:10.99.0.8", trustProxy: false, configure: builder => builder.ConfigureLogging(logging => logging.AddProvider(logs)))
+            .CreateClient(NoRedirects);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/salud");
+        request.Headers.Add("X-Forwarded-Proto", "https");
+
+        using var response = await client.SendAsync(request, Token);
+
+        var warning = Assert.Single(logs.Messages, message => message.Contains("Se ignoraron encabezados reenviados", StringComparison.Ordinal));
+        Assert.Contains("desde 10.99.0.8:", warning);
+        Assert.DoesNotContain("::ffff:", warning);
+    }
+
+    [Theory]
+    [InlineData("::ffff:10.20.30.41", "::ffff:10.20.30.41")]
+    [InlineData("::ffff:10.20.30.41", "10.20.30.41")]
+    [InlineData("10.20.30.41", "::ffff:10.20.30.41")]
+    public async Task A_proxy_is_trusted_in_either_notation_and_is_no_longer_reported(string configured, string remoteIp)
+    {
+        var logs = new LogCapture();
+        using var client = factory.WithWebHostBuilder(builder => builder
+                .UseEnvironment("Production")
+                .UseSetting("https_port", "443")
+                .UseSetting("ReverseProxy:KnownProxies:0", configured)
+                .ConfigureLogging(logging => logging.AddProvider(logs))
+                .ConfigureServices(services => services.AddSingleton<IStartupFilter>(new RemoteAddressFilter(IPAddress.Parse(remoteIp)))))
+            .CreateClient(NoRedirects);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/cuenta/iniciar-sesion");
+        request.Headers.Add("X-Forwarded-Proto", "https");
+        request.Headers.Add("X-Forwarded-For", "203.0.113.7");
+        request.Headers.Host = "fixtrack.example"; // HSTS nunca se envía a localhost
+
+        using var response = await client.SendAsync(request, Token);
+
+        // Sin confiar en el proxy, la solicitud HTTP se redirigiría a HTTPS y se registraría la advertencia.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.Contains("Strict-Transport-Security"));
+        Assert.DoesNotContain(logs.Messages, message => message.Contains("Se ignoraron encabezados reenviados", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task The_database_status_is_reused_for_a_few_seconds_so_the_endpoint_cannot_flood_the_database()
     {
         var clock = new FixedClock(DateTimeOffset.UtcNow);

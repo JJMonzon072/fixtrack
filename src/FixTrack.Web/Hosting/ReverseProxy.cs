@@ -55,7 +55,7 @@ public static class ReverseProxy
     {
         var section = configuration.GetSection(Section);
         var proxies = Values(section.GetSection("KnownProxies"))
-            .Select(value => IPAddress.TryParse(value, out var address) ? address : throw Invalid("KnownProxies", value))
+            .Select(value => IPAddress.TryParse(value, out var address) ? Normalize(address) : throw Invalid("KnownProxies", value))
             .ToList();
         var networks = Values(section.GetSection("KnownNetworks"))
             .Select(value => System.Net.IPNetwork.TryParse(value, out var network) ? network : throw Invalid("KnownNetworks", value))
@@ -129,6 +129,12 @@ public static class ReverseProxy
         return settings.HasTrustedProxies ? app.UseForwardedHeaders() : app;
     }
 
+    /// <summary>
+    /// Una IPv4 escrita en notación IPv6 (<c>::ffff:10.1.2.3</c>, como la muestran algunas plataformas) se trata como la
+    /// IPv4: así coincide con la dirección de la conexión, que también se compara en IPv4.
+    /// </summary>
+    public static IPAddress Normalize(IPAddress address) => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
+
     private static bool HasForwardedHeaders(IHeaderDictionary headers, string clientIpHeader) =>
         headers.ContainsKey(ForwardedHeadersDefaults.XForwardedProtoHeaderName)
         || headers.ContainsKey(ForwardedHeadersDefaults.XForwardedForHeaderName)
@@ -162,6 +168,6 @@ public sealed class IgnoredForwardedHeadersLog(ILogger<IgnoredForwardedHeadersLo
         logger.LogWarning(
             "Se ignoraron encabezados reenviados (X-Forwarded-*) recibidos desde {RemoteAddress}: esa dirección no está en " +
             "ReverseProxy:KnownProxies ni en ReverseProxy:KnownNetworks. Si es el proxy de la plataforma, agrégala a la configuración.",
-            remote?.ToString() ?? "desconocida");
+            remote is null ? "desconocida" : ReverseProxy.Normalize(remote).ToString());
     }
 }
