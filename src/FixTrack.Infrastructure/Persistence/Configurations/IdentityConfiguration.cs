@@ -16,8 +16,8 @@ internal sealed class FixTrackUserConfiguration : IEntityTypeConfiguration<FixTr
 }
 
 /// <summary>
-/// Los dos roles existen desde la migración: no hace falta crearlos al iniciar la aplicación.
-/// Sus identificadores son fijos para que la migración sea reproducible.
+/// Los roles existen desde las migraciones: no hace falta crearlos al iniciar la aplicación.
+/// Sus identificadores son fijos para que las migraciones sean reproducibles.
 /// </summary>
 internal sealed class RoleConfiguration : IEntityTypeConfiguration<IdentityRole>
 {
@@ -36,5 +36,12 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<IdentityRole>
                 Name = Roles.Operator,
                 NormalizedName = Roles.Operator.ToUpperInvariant(),
                 ConcurrencyStamp = "1c8e7d6f-5a4b-4c3d-9e2f-0a1b2c3d4e52",
+            },
+            new IdentityRole
+            {
+                Id = "c3e9f0a1-5b6c-4d7e-8f90-1a2b3c4d5e63",
+                Name = Roles.ReadOnly,
+                NormalizedName = Roles.ReadOnly.ToUpperInvariant(),
+                ConcurrencyStamp = "2d9f8e7a-6b5c-4d4e-a03f-1b2c3d4e5f74",
             });
 }

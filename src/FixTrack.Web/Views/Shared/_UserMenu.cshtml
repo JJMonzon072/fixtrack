@@ -20,11 +20,15 @@
                 <span class="user-menu__email">@email</span>
                 <span class="badge @(role == Roles.Administrator ? "badge--accent" : "badge--neutral")">@role</span>
             </div>
-            <a class="user-menu__item" asp-controller="Account" asp-action="ChangePassword">
-                <icon name="key-round" />
-                Cambiar contraseña
-            </a>
-            @if (User.IsInRole(Roles.Administrator))
+            @* La cuenta de consulta suele compartirse: no puede cambiar su contraseña (lo hace un administrador). *@
+            @if (!User.IsInRole(Roles.ReadOnly))
+            {
+                <a class="user-menu__item" asp-controller="Account" asp-action="ChangePassword">
+                    <icon name="key-round" />
+                    Cambiar contraseña
+                </a>
+            }
+            @if (User.IsInRole(Roles.Administrator) || User.IsInRole(Roles.ReadOnly))
             {
                 <a class="user-menu__item" asp-controller="Users" asp-action="Index">
                     <icon name="user-cog" />

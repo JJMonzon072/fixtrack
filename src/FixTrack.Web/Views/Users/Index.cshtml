@@ -100,32 +100,36 @@
                     <th scope="col">Operación</th>
                     <th scope="col">@Roles.Administrator</th>
                     <th scope="col">@Roles.Operator</th>
+                    <th scope="col">@Roles.ReadOnly</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var (operation, admin, operatorAllowed) in new (string, bool, bool)[]
+                @foreach (var (operation, admin, operatorAccess, readOnlyAccess) in new (string, string, string, string)[]
                 {
-                    ("Panel y cola de trabajo", true, true),
-                    ("Clientes y equipos: registrar, editar, desactivar", true, true),
-                    ("Órdenes: registrar, asignar, diagnosticar, cambiar estado y entregar", true, true),
-                    ("Técnicos: consultar", true, true),
-                    ("Técnicos: registrar, editar, desactivar y reactivar", true, false),
-                    ("Cuentas de acceso y roles", true, false),
+                    ("Panel y cola de trabajo", "Sí", "Sí", "Ver"),
+                    ("Clientes y equipos: registrar, editar, desactivar", "Sí", "Sí", "Solo ver"),
+                    ("Órdenes: registrar, asignar, diagnosticar, cambiar estado y entregar", "Sí", "Sí", "Solo ver"),
+                    ("Técnicos: consultar", "Sí", "Sí", "Ver"),
+                    ("Técnicos: registrar, editar, desactivar y reactivar", "Sí", "No", "Solo ver"),
+                    ("Cuentas de acceso, roles y auditoría", "Sí", "No", "Solo ver"),
+                    ("Cambiar la propia contraseña", "Sí", "Sí", "No"),
                 })
                 {
                     <tr>
                         <td>@operation</td>
-                        <td>@(admin ? "Sí" : "No")</td>
-                        <td>
-                            @if (operatorAllowed)
-                            {
-                                @:Sí
-                            }
-                            else
-                            {
-                                <span class="meta-list__muted">No</span>
-                            }
-                        </td>
+                        @foreach (var access in new[] { admin, operatorAccess, readOnlyAccess })
+                        {
+                            <td>
+                                @if (access == "No")
+                                {
+                                    <span class="meta-list__muted">No</span>
+                                }
+                                else
+                                {
+                                    @access
+                                }
+                            </td>
+                        }
                     </tr>
                 }
             </tbody>

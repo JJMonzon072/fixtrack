@@ -149,7 +149,9 @@ public static class TestAccounts
 
     public static TestAccount Operator { get; } = new("Oscar Operador", "operador@fixtrack.test", Roles.Operator, RandomPassword());
 
-    public static IReadOnlyList<TestAccount> All { get; } = [Administrator, Operator];
+    public static TestAccount ReadOnly { get; } = new("Carla Consulta", "consulta@fixtrack.test", Roles.ReadOnly, RandomPassword());
+
+    public static IReadOnlyList<TestAccount> All { get; } = [Administrator, Operator, ReadOnly];
 
     /// <summary>Cumple la política (12 caracteres o más, mayúsculas, minúsculas y números) sin ser predecible.</summary>
     public static string RandomPassword() => $"Pr{Guid.NewGuid():N}9z".Insert(10, "Q");

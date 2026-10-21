@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using FixTrack.Application.Security;
 using FixTrack.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,6 +31,12 @@ public sealed class ErrorController : Controller
                 "Página no encontrada",
                 "La dirección que buscas no existe o ya no está disponible.",
                 "compass",
+                RequestId: null),
+            StatusCodes.Status403Forbidden when User.IsInRole(Roles.ReadOnly) => new ErrorViewModel(
+                statusCode,
+                "Esta cuenta es de solo consulta",
+                "Puedes ver todas las pantallas, pero no guardar cambios. Para registrar o modificar datos se necesita una cuenta de Operador o de Administrador.",
+                "eye",
                 RequestId: null),
             StatusCodes.Status403Forbidden => new ErrorViewModel(
                 statusCode,
