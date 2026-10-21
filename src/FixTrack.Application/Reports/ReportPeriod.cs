@@ -196,7 +196,7 @@ public sealed record ReportPeriod
     /// Inicio de un día local en UTC: la medianoche, o el primer minuto válido si ese día la medianoche no existe por un
     /// cambio de horario. Si la medianoche se repite, se toma la primera.
     /// </summary>
-    internal static DateTime StartOfDayUtc(DateOnly day, TimeZoneInfo timeZone)
+    public static DateTime StartOfDayUtc(DateOnly day, TimeZoneInfo timeZone)
     {
         var local = day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
         for (var minutes = 0; timeZone.IsInvalidTime(local) && minutes < 24 * 60; minutes++)
