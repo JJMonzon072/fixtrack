@@ -75,21 +75,7 @@ internal sealed partial class ServiceOrderRepository(FixTrackDbContext db) : ISe
         var items = await ordered
             .Skip((page - 1) * ServiceOrderSearch.PageSize)
             .Take(ServiceOrderSearch.PageSize)
-            .Select(order => new ServiceOrderListItem(
-                order.Id,
-                order.Status,
-                order.Priority,
-                order.Device!.CustomerId,
-                order.Device.Customer!.FullName,
-                order.DeviceId,
-                order.Device.Type,
-                order.Device.Brand,
-                order.Device.Model,
-                order.TechnicianId,
-                order.Technician != null ? order.Technician.FullName : null,
-                order.ReceivedAtUtc,
-                order.PromisedAtUtc,
-                order.DeliveredAtUtc))
+            .Select(ServiceOrderQueries.ListItem)
             .ToListAsync(cancellationToken);
 
         return new ServiceOrderSearchResult(new PagedResult<ServiceOrderListItem>(items, page, ServiceOrderSearch.PageSize, total), counts);
