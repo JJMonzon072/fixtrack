@@ -249,9 +249,13 @@ public sealed partial class ReportsPageTests(PortfolioExtrasFactory factory) : I
         {
             var db = scope.ServiceProvider.GetRequiredService<FixTrackDbContext>();
             var device = await db.Devices.Include(item => item.Customer).FirstAsync(item => item.SerialNumber == "RPT-DELL-1", Token);
-            db.ServiceOrders.Add(new ServiceOrder(
+            var order = new ServiceOrder(
                 device, "=HYPERLINK(\"http://ejemplo.invalid\",\"Ver\"), con \"comillas\"\ny salto", ServiceOrderPriority.Normal,
-                new DateTime(2026, 11, 2, 15, 0, 0, DateTimeKind.Utc), null, null, null));
+                new DateTime(2026, 11, 2, 15, 0, 0, DateTimeKind.Utc), null, null, null);
+
+            // Cancelada: no cambia las órdenes abiertas que comprueban las demás pruebas de esta clase.
+            order.ChangeStatus(ServiceOrderStatus.Cancelled, new DateTime(2026, 11, 2, 16, 0, 0, DateTimeKind.Utc), "Prueba de exportación");
+            db.ServiceOrders.Add(order);
             await db.SaveChangesAsync(Token);
         }
 
