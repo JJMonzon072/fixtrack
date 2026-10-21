@@ -7,6 +7,8 @@
 # La imagen no contiene secretos: la cadena de conexión y cualquier credencial llegan por variables de entorno.
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# Arquitectura de destino que entrega Docker (amd64 en Render, arm64 en un Mac con Apple Silicon).
+ARG TARGETARCH
 WORKDIR /src
 
 # Primero los archivos de proyecto: la restauración se reutiliza mientras no cambien las dependencias.
@@ -15,13 +17,18 @@ COPY src/FixTrack.Domain/FixTrack.Domain.csproj src/FixTrack.Domain/
 COPY src/FixTrack.Application/FixTrack.Application.csproj src/FixTrack.Application/
 COPY src/FixTrack.Infrastructure/FixTrack.Infrastructure.csproj src/FixTrack.Infrastructure/
 COPY src/FixTrack.Web/FixTrack.Web.csproj src/FixTrack.Web/
-RUN dotnet restore src/FixTrack.Web/FixTrack.Web.csproj
+RUN dotnet restore src/FixTrack.Web/FixTrack.Web.csproj -a $TARGETARCH -p:PublishReadyToRun=true
 
 COPY src/ src/
+# ReadyToRun: el código se compila a nativo al construir la imagen. Con los 0.1 CPU del plan gratuito de Render, el
+# arranque y las primeras solicitudes dependían sobre todo de la compilación JIT.
 RUN dotnet publish src/FixTrack.Web/FixTrack.Web.csproj \
     --configuration Release \
     --no-restore \
+    -a $TARGETARCH \
+    --self-contained false \
     --output /app \
+    -p:PublishReadyToRun=true \
     -p:UseAppHost=false
 
 # Imagen "chiseled": sin shell ni gestor de paquetes, y con usuario sin privilegios (app, UID 1654).
