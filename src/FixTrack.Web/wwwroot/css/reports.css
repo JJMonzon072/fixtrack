@@ -1,0 +1,440 @@
+/* ==========================================================================
+   FixTrack · Centro de reportes (extra de portafolio)
+
+   Se carga solo en /reportes, después de site.css, y usa sus tokens (tipografía, espaciado, colores y temas claro y
+   oscuro). No modifica ningún componente existente.
+   ========================================================================== */
+
+:root {
+    /* Series de los gráficos: verde petróleo (recibidas) y ámbar (entregadas), distintos en tono y en luminosidad. */
+    --chart-1: var(--color-accent);
+    --chart-2: #b45309;
+    --chart-grid: var(--color-border-subtle);
+    --chart-axis: var(--color-text-tertiary);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --chart-2: #f0a24f;
+    }
+}
+
+:root[data-theme="dark"] {
+    --chart-2: #f0a24f;
+}
+
+/* Período y filtros ------------------------------------------------------- */
+
+.report-filters {
+    margin-bottom: var(--space-5);
+    padding: var(--space-4) var(--space-5) var(--space-5);
+}
+
+.report-filters__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.report-ranges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.report-range {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+    text-decoration: none;
+    transition: background-color var(--duration-fast) ease, color var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.report-range:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+.report-range:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+}
+
+.report-range[aria-current="true"] {
+    border-color: var(--color-accent-subtle-border);
+    background: var(--color-accent-subtle);
+    color: var(--color-accent-text);
+    font-weight: 500;
+}
+
+.report-filters .error-summary {
+    margin-bottom: var(--space-4);
+}
+
+.report-filters__form {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+    align-items: end;
+    gap: var(--space-3);
+}
+
+.report-filters__actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+/* Contexto del período y exportación -------------------------------------- */
+
+.report-context {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-4);
+    margin-bottom: var(--space-5);
+}
+
+.report-context__period {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-md);
+}
+
+.report-context__period .icon {
+    color: var(--color-accent);
+}
+
+.report-context__meta {
+    flex: 1;
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+}
+
+.report-context__note {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+}
+
+.report-export {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+/* Indicadores -------------------------------------------------------------- */
+
+.report-metric__of {
+    margin-left: 0.25rem;
+    font-family: var(--font-sans);
+    font-size: var(--text-md);
+    font-weight: 400;
+    color: var(--color-text-tertiary);
+}
+
+.report-metric__value--text {
+    font-size: var(--text-xl);
+}
+
+/* Lectura rápida ------------------------------------------------------------ */
+
+.report-insights {
+    margin-bottom: var(--space-5);
+    padding: var(--space-4) var(--space-5);
+}
+
+.report-insights__list {
+    display: grid;
+    gap: var(--space-2);
+    margin: var(--space-3) 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.report-insights__list li {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    font-size: var(--text-base);
+    color: var(--color-text-secondary);
+}
+
+.report-insights__list .icon {
+    flex: none;
+    margin-top: 0.125rem;
+    color: var(--color-accent);
+}
+
+/* Gráficos ------------------------------------------------------------------- */
+
+.report-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-5);
+    margin-bottom: var(--space-5);
+}
+
+.report-grid--even {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.report-chart__body {
+    padding: 0 var(--space-4) var(--space-4);
+}
+
+.chart {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.chart--estrecho {
+    display: none;
+}
+
+.chart__grid line {
+    stroke: var(--chart-grid);
+    stroke-width: 1;
+}
+
+.chart__axis {
+    fill: var(--chart-axis);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.chart__bar--0 {
+    fill: var(--chart-1);
+}
+
+.chart__bar--1 {
+    fill: var(--chart-2);
+}
+
+.chart__area {
+    fill: var(--chart-1);
+    fill-opacity: 0.12;
+}
+
+.chart__line {
+    fill: none;
+    stroke: var(--chart-1);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.chart__point {
+    fill: var(--color-surface);
+    stroke: var(--chart-1);
+    stroke-width: 1.5;
+}
+
+.chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+}
+
+.chart-legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.chart-legend__swatch {
+    width: 0.625rem;
+    height: 0.625rem;
+    border-radius: 2px;
+    background: var(--chart-1);
+}
+
+.chart-legend__swatch--1 {
+    background: var(--chart-2);
+}
+
+/* Datos de un gráfico en forma de tabla */
+.report-data {
+    margin-top: var(--space-3);
+    font-size: var(--text-sm);
+}
+
+.report-data summary {
+    width: fit-content;
+    cursor: pointer;
+    color: var(--color-accent-text);
+}
+
+.report-data summary:focus-visible,
+.report-definitions__summary:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+}
+
+.report-data .table-scroll {
+    max-height: 18rem;
+    margin-top: var(--space-2);
+    overflow: auto;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+}
+
+.report-table {
+    min-width: 0;
+}
+
+.report-table--wide {
+    min-width: 46rem;
+}
+
+/* Distribución por estado */
+.report-bars .bar-list__label:hover {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+}
+
+.report-bars__item--empty {
+    opacity: 0.55;
+}
+
+.report-bars__percent {
+    font-weight: 400;
+    color: var(--color-text-tertiary);
+}
+
+/* Actividad por técnico */
+.report-technicians {
+    margin-bottom: var(--space-5);
+}
+
+.report-meter {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.report-meter .mono {
+    min-width: 1.5rem;
+}
+
+.report-meter__bar {
+    width: 5rem;
+    height: 0.375rem;
+}
+
+.report-meter__fill {
+    fill: var(--chart-2);
+}
+
+/* Definiciones -------------------------------------------------------------- */
+
+.report-definitions {
+    margin-bottom: var(--space-5);
+}
+
+.report-definitions__summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-5);
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.report-definitions__summary .icon {
+    color: var(--color-accent);
+}
+
+.report-definitions__list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3) var(--space-6);
+    margin: 0;
+    padding: 0 var(--space-5) var(--space-5);
+}
+
+.report-definitions__list dt {
+    font-size: var(--text-sm);
+    font-weight: 500;
+}
+
+.report-definitions__list dd {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+}
+
+/* Adaptación --------------------------------------------------------------- */
+
+@media (max-width: 1199.98px) {
+    .report-grid,
+    .report-grid--even {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .report-filters__form {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767.98px) {
+    .report-filters {
+        padding: var(--space-4);
+    }
+
+    .report-filters__form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .report-filters__actions {
+        grid-column: 1 / -1;
+    }
+
+    .report-context__meta {
+        flex-basis: 100%;
+    }
+
+    .report-definitions__list {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 639.98px) {
+    .chart--ancho {
+        display: none;
+    }
+
+    .chart--estrecho {
+        display: block;
+    }
+
+    .report-filters__form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .report-insights,
+    .report-definitions__summary {
+        padding-inline: var(--space-4);
+    }
+
+    .report-definitions__list {
+        padding-inline: var(--space-4);
+    }
+}
