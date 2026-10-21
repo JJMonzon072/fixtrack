@@ -12,6 +12,8 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 namespace FixTrack.Tests.Web;
 
@@ -315,6 +317,43 @@ public sealed partial class SecurityTests(FixTrackWebApplicationFactory factory)
 
         Assert.Contains("secure", cookie, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task In_production_the_antiforgery_cookie_is_secure_over_https()
+    {
+        using var client = ProductionClient("https://localhost");
+
+        using var response = await client.GetAsync("/cuenta/iniciar-sesion", Token);
+        var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"), value => value.StartsWith(".AspNetCore.Antiforgery", StringComparison.Ordinal));
+
+        Assert.Contains("secure", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task In_production_the_login_page_works_when_requests_arrive_over_http()
+    {
+        // Como en Render mientras se ignoran los encabezados reenviados: la aplicación ve HTTP. Con la cookie
+        // antifalsificación en "Always", esta página respondería 500.
+        using var client = ProductionClient("http://localhost");
+
+        using var response = await client.GetAsync("/cuenta/iniciar-sesion", Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(response.Headers.GetValues("Set-Cookie"), value => value.StartsWith(".AspNetCore.Antiforgery", StringComparison.Ordinal));
+    }
+
+    private HttpClient ProductionClient(string baseAddress) =>
+        factory
+            .WithWebHostBuilder(builder => builder
+                .UseEnvironment("Production")
+                .UseSetting("ReverseProxy:IgnoreForwardedHeaders", "true"))
+            .CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri(baseAddress) });
+
+    [Fact]
+    public void The_web_server_does_not_announce_itself() =>
+        Assert.False(factory.Services.GetRequiredService<IOptions<KestrelServerOptions>>().Value.AddServerHeader);
 
     [Fact]
     public async Task Pages_carry_security_headers_and_a_per_request_script_nonce()

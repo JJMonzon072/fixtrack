@@ -14,6 +14,9 @@ try
         builder.WebHost.UseSetting("http_ports", port);
     }
 
+    // Sin el encabezado "Server: Kestrel": no hace falta anunciar qué servidor web atiende.
+    builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
+
     // Raíz de composición: cada capa registra sus propios servicios.
     builder.Services
         .AddApplication()
