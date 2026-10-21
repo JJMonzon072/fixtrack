@@ -22,7 +22,7 @@ namespace FixTrack.Tests.Web;
 /// por completo, de modo que las pruebas nunca pueden conectarse a la base de datos real.
 /// Crea las cuentas de <see cref="TestAccounts"/>, con contraseñas aleatorias generadas en cada ejecución.
 /// </summary>
-public sealed partial class FixTrackWebApplicationFactory : WebApplicationFactory<Program>
+public partial class FixTrackWebApplicationFactory : WebApplicationFactory<Program>
 {
     // El esquema se crea antes de iniciar la aplicación: Data Protection lee sus claves de la base al arrancar.
     private readonly SqliteTestDatabase _database = new();
@@ -33,8 +33,16 @@ public sealed partial class FixTrackWebApplicationFactory : WebApplicationFactor
     // (SQLite Error 5: "unable to delete/modify user-function due to active statements").
     private readonly KeysDatabase _keys = new();
 
+    /// <summary>Configuración adicional de una fábrica derivada (por ejemplo, los extras de portafolio habilitados).</summary>
+    protected virtual IEnumerable<KeyValuePair<string, string>> ExtraSettings => [];
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        foreach (var (key, value) in ExtraSettings)
+        {
+            builder.UseSetting(key, value);
+        }
+
         // Valor ficticio: solo evita que la aplicación se detenga por falta de configuración.
         builder.UseSetting("ConnectionStrings:FixTrack", "Server=pruebas-sin-base-real;Database=NoUsar;");
 
