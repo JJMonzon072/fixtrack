@@ -36,7 +36,17 @@ public sealed class DatabaseUnavailableHandler(ILogger<DatabaseUnavailableHandle
         context.Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         context.Response.Headers.CacheControl = "no-store";
         context.Response.ContentType = "text/html; charset=utf-8";
-        await context.Response.WriteAsync(Page(requestId, seconds), cancellationToken);
+        try
+        {
+            // Sin el token de la solicitud: puede estar cancelado por el tiempo máximo de 30 s justo cuando llega el error
+            // de la base, y entonces no se enviaría ninguna respuesta (la conexión se cortaría sin la página 503).
+            await context.Response.WriteAsync(Page(requestId, seconds), CancellationToken.None);
+        }
+        catch (Exception error) when (error is OperationCanceledException or IOException && context.RequestAborted.IsCancellationRequested)
+        {
+            // El cliente ya se desconectó: no hay a quién responder.
+        }
+
         return true;
     }
 
