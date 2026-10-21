@@ -435,7 +435,7 @@ Toda la interfaz se construye desde `src/FixTrack.Web/wwwroot/css/site.css`, org
 dotnet test -c Release
 ```
 
-Hay **623 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan **600** y se omiten **23**: las que necesitan SQL Server real (ver más abajo). Con un SQL Server local desechable pasan los **623**. Las demás usan **SQLite en memoria** y funcionan igual en GitHub Actions, sin credenciales.
+Hay **835 casos** en `tests/FixTrack.Tests`: los 623 de la versión académica, descritos en esta tabla, y 212 de los [extras de portafolio](docs/portfolio-extras.md#10-pruebas-y-evidencias). Sin configurar un SQL Server pasan **809** y se omiten **26**: las que necesitan SQL Server real (ver más abajo). Con un SQL Server local desechable pasan los **835**. Las demás usan **SQLite en memoria** y funcionan igual en GitHub Actions, sin credenciales.
 
 | Grupo | Archivo | Casos | Qué verifica |
 | --- | --- | --- | --- |
@@ -551,6 +551,13 @@ Para desarrollar sin Somee se puede usar cualquier SQL Server 2022 compatible y 
 - **Los buscadores con sugerencias y el selector de equipos de una nueva orden requieren JavaScript.** Sin JavaScript, se puede registrar desde el detalle del cliente o del equipo, que preseleccionan los datos.
 - **Un POST a una ruta inexistente responde 405** en lugar de 404.
 - **No incluye** facturación, cobros, inventario de repuestos, notificaciones al cliente ni reportes exportables: quedan fuera del alcance de la fase.
+
+## Extras de portafolio (opcionales)
+
+FixTrack incluye tres funciones adicionales para presentar el proyecto como portafolio profesional: un centro de reportes con exportación CSV, fichas de servicio imprimibles y una API REST de solo lectura. Están **desactivadas por defecto** (`PortfolioFeatures` en `appsettings.json`) y, así, la aplicación es exactamente la versión académica que describe este README: sus rutas no existen y ninguna pantalla cambia. No forman parte de los entregables del curso.
+
+- Cómo activarlas, arquitectura, seguridad y pruebas: [docs/portfolio-extras.md](docs/portfolio-extras.md).
+- Presentación del proyecto para GitHub y currículum: [docs/portfolio-presentacion.md](docs/portfolio-presentacion.md).
 
 ## Flujo de trabajo con Git
 
