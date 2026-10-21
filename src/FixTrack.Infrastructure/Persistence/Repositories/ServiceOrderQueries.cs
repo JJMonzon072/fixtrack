@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FixTrack.Application.Devices;
+using FixTrack.Application.ServiceOrders;
 using FixTrack.Domain.ServiceOrders;
 
 namespace FixTrack.Infrastructure.Persistence.Repositories;
@@ -19,6 +20,23 @@ internal static class ServiceOrderQueries
         order.Device.Model,
         order.Device.Customer!.FullName,
         order.Technician != null ? order.Technician.FullName : null);
+
+    /// <summary>Elemento del listado de órdenes con su cliente, equipo y técnico (una sola consulta con JOIN).</summary>
+    public static readonly Expression<Func<ServiceOrder, ServiceOrderListItem>> ListItem = order => new ServiceOrderListItem(
+        order.Id,
+        order.Status,
+        order.Priority,
+        order.Device!.CustomerId,
+        order.Device.Customer!.FullName,
+        order.DeviceId,
+        order.Device.Type,
+        order.Device.Brand,
+        order.Device.Model,
+        order.TechnicianId,
+        order.Technician != null ? order.Technician.FullName : null,
+        order.ReceivedAtUtc,
+        order.PromisedAtUtc,
+        order.DeliveredAtUtc);
 
     /// <summary>
     /// Puntuación del algoritmo de priorización calculada por la base, idéntica a <see cref="WorkPrioritizer.Score"/>

@@ -1,0 +1,459 @@
+/* ==========================================================================
+   FixTrack · Fichas de servicio (extra de portafolio)
+
+   Documento A4 para imprimir o guardar como PDF con el navegador. En pantalla, la hoja se muestra sobre un fondo neutro
+   con una barra de acciones; al imprimir solo sale la hoja, en blanco y negro, con márgenes de @page.
+   ========================================================================== */
+
+@font-face {
+    font-family: "IBM Plex Sans";
+    src: url("../fonts/ibm-plex-sans-latin-wght.woff2") format("woff2");
+    font-weight: 100 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "IBM Plex Mono";
+    src: url("../fonts/ibm-plex-mono-latin-400.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+    color-scheme: light;
+
+    --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    /* El papel es siempre blanco; tinta casi negra y grises que se imprimen bien en blanco y negro. */
+    --paper: #ffffff;
+    --ink: #15171a;
+    --ink-secondary: #4a5058;
+    --ink-tertiary: #6b7179;
+    --rule: #c9cdd2;
+    --rule-strong: #15171a;
+
+    /* Logo (el mismo de la aplicación). */
+    --color-accent: #0f6b63;
+    --color-accent-contrast: #ffffff;
+
+    /* Pantalla */
+    --desk: #e9ebee;
+    --toolbar: #ffffff;
+    --toolbar-border: #d8dbe0;
+    --button-text: #15171a;
+    --button-primary: #0f6b63;
+    --button-primary-text: #ffffff;
+    --focus: #1f8a7f;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --desk: #0b0c0e;
+        --toolbar: #121316;
+        --toolbar-border: #26282d;
+        --button-text: #edeef0;
+        --button-primary: #3db3a5;
+        --button-primary-text: #04211e;
+        --focus: #4fc2b4;
+    }
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --desk: #0b0c0e;
+    --toolbar: #121316;
+    --toolbar-border: #26282d;
+    --button-text: #edeef0;
+    --button-primary: #3db3a5;
+    --button-primary-text: #04211e;
+    --focus: #4fc2b4;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body,
+h1,
+h2,
+p,
+ul,
+dl,
+dd {
+    margin: 0;
+}
+
+.sheet-page {
+    min-height: 100vh;
+    background: var(--desk);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 10.5pt;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Barra de acciones (solo en pantalla) -------------------------------------- */
+
+.sheet-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--toolbar-border);
+    background: var(--toolbar);
+    font-size: 0.875rem;
+}
+
+.sheet-toolbar__hint {
+    flex: 1;
+    min-width: 14rem;
+    color: var(--ink-tertiary);
+    font-size: 0.8125rem;
+}
+
+:root[data-theme="dark"] .sheet-toolbar__hint {
+    color: #a9aeb5;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .sheet-toolbar__hint {
+        color: #a9aeb5;
+    }
+}
+
+.sheet-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.25rem;
+    padding: 0 0.875rem;
+    border: 1px solid var(--toolbar-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--button-text);
+    font: inherit;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.sheet-button--primary {
+    border-color: var(--button-primary);
+    background: var(--button-primary);
+    color: var(--button-primary-text);
+}
+
+.sheet-button:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+}
+
+.icon {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* Hoja A4 ------------------------------------------------------------------- */
+
+.sheet {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 1.5rem auto 3rem;
+    padding: 16mm 15mm 14mm;
+    background: var(--paper);
+    color: var(--ink);
+    box-shadow: 0 1px 3px rgb(16 20 24 / 0.12), 0 12px 32px -12px rgb(16 20 24 / 0.25);
+}
+
+.sheet__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12mm;
+    padding-bottom: 5mm;
+    border-bottom: 1.5pt solid var(--rule-strong);
+}
+
+.sheet__brand {
+    display: flex;
+    align-items: center;
+    gap: 3mm;
+}
+
+.logo-mark {
+    width: 11mm;
+    height: 11mm;
+    flex-shrink: 0;
+    color: var(--color-accent);
+}
+
+.sheet__brand-name {
+    font-size: 15pt;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.sheet__brand-tagline {
+    color: var(--ink-secondary);
+    font-size: 9pt;
+}
+
+.sheet__identity {
+    text-align: right;
+}
+
+.sheet__doc-type {
+    font-size: 16pt;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.sheet__number {
+    margin-top: 1mm;
+    font-family: var(--font-mono);
+    font-size: 13pt;
+    font-weight: 400;
+}
+
+.sheet__issued {
+    margin-top: 1mm;
+    color: var(--ink-tertiary);
+    font-size: 8.5pt;
+}
+
+/* Datos principales en una franja */
+.sheet__facts {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 6mm 0;
+    border: 0.75pt solid var(--rule);
+    border-radius: 2mm;
+}
+
+.sheet__facts > div {
+    padding: 3mm 3.5mm;
+}
+
+.sheet__facts > div + div {
+    border-left: 0.75pt solid var(--rule);
+}
+
+.sheet__facts dt,
+.sheet__list dt {
+    color: var(--ink-tertiary);
+    font-size: 8pt;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.sheet__facts dd {
+    margin-top: 1mm;
+    font-weight: 500;
+}
+
+.sheet__facts-total dd,
+.sheet__list-total dd {
+    font-family: var(--font-mono);
+    font-size: 12pt;
+    font-weight: 400;
+}
+
+/* Secciones */
+.sheet__columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 8mm;
+}
+
+.sheet__section {
+    margin-bottom: 6mm;
+    break-inside: avoid;
+}
+
+/* Un texto largo puede continuar en la página siguiente. */
+.sheet__section--text {
+    break-inside: auto;
+}
+
+.sheet__section-title {
+    margin-bottom: 2.5mm;
+    padding-bottom: 1.5mm;
+    border-bottom: 0.75pt solid var(--rule);
+    font-size: 10pt;
+    font-weight: 600;
+    break-after: avoid;
+}
+
+.sheet__list {
+    display: grid;
+    gap: 2mm;
+}
+
+.sheet__list dd {
+    margin-top: 0.5mm;
+    overflow-wrap: anywhere;
+}
+
+.sheet__text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    orphans: 3;
+    widows: 3;
+}
+
+.sheet__text--empty {
+    color: var(--ink-tertiary);
+    font-style: italic;
+}
+
+.sheet__mono {
+    font-family: var(--font-mono);
+}
+
+.sheet__notes {
+    padding-left: 4.5mm;
+    color: var(--ink-secondary);
+    font-size: 9pt;
+}
+
+.sheet__notes li + li {
+    margin-top: 1mm;
+}
+
+/* Firmas */
+.sheet__signatures {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14mm;
+    margin-top: 16mm;
+    break-inside: avoid;
+}
+
+.sheet__signature-line {
+    height: 16mm;
+    border-bottom: 0.75pt solid var(--rule-strong);
+}
+
+.sheet__signature-label {
+    margin-top: 2mm;
+    font-size: 9pt;
+    font-weight: 600;
+}
+
+.sheet__signature-name {
+    margin-top: 0.5mm;
+    color: var(--ink-secondary);
+    font-size: 8.5pt;
+}
+
+.sheet__footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 6mm;
+    margin-top: 10mm;
+    padding-top: 3mm;
+    border-top: 0.75pt solid var(--rule);
+    color: var(--ink-tertiary);
+    font-size: 8pt;
+    break-inside: avoid;
+}
+
+/* Pantallas angostas: la hoja ocupa el ancho disponible. */
+@media screen and (max-width: 840px) {
+    .sheet {
+        width: auto;
+        min-height: 0;
+        margin: 0;
+        padding: 1.5rem 1rem 2rem;
+        box-shadow: none;
+    }
+
+    .sheet__header,
+    .sheet__footer {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .sheet__identity {
+        text-align: left;
+    }
+
+    .sheet__facts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .sheet__facts > div:nth-child(3) {
+        border-left: 0;
+    }
+
+    .sheet__facts > div:nth-child(n + 3) {
+        border-top: 0.75pt solid var(--rule);
+    }
+
+    .sheet__columns,
+    .sheet__signatures {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* Impresión y PDF ------------------------------------------------------------ */
+
+@page {
+    size: A4;
+    margin: 14mm 14mm 16mm;
+
+    @bottom-right {
+        content: "Página " counter(page) " de " counter(pages);
+        color: #6b7179;
+        font-family: "IBM Plex Sans", sans-serif;
+        font-size: 8pt;
+    }
+}
+
+@media print {
+    .sheet-page {
+        min-height: 0;
+        background: #ffffff;
+        print-color-adjust: economy;
+    }
+
+    .sheet-toolbar {
+        display: none;
+    }
+
+    .sheet {
+        width: auto;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+    }
+
+    /* Blanco y negro: el logo sale en gris oscuro y sin fondos de color. */
+    .logo-mark {
+        color: #15171a;
+    }
+
+    a {
+        color: inherit;
+        text-decoration: none;
+    }
+}

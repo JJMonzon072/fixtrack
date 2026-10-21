@@ -1,0 +1,17 @@
+@using FixTrack.Web.Services
+@model (string DocumentType, string Number, DateTime IssuedAtUtc)
+@inject DateDisplay Dates
+<header class="sheet__header">
+    <div class="sheet__brand">
+        <partial name="_LogoMark" />
+        <div>
+            <p class="sheet__brand-name">FixTrack</p>
+            <p class="sheet__brand-tagline">Servicio técnico de computadoras</p>
+        </div>
+    </div>
+    <div class="sheet__identity">
+        <h1 class="sheet__doc-type">@Model.DocumentType</h1>
+        <p class="sheet__number">@Model.Number</p>
+        <p class="sheet__issued">Emitido el <time datetime="@DateDisplay.Iso(Model.IssuedAtUtc)">@Dates.Long(Model.IssuedAtUtc)</time></p>
+    </div>
+</header>

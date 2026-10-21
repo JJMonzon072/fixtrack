@@ -1,0 +1,28 @@
+@using FixTrack.Web.Controllers
+@model ServiceSheetViewModel
+@{
+    var order = Model.Order;
+    ViewData["Title"] = "Comprobante no disponible";
+    ViewData["ParentTitle"] = order.Number;
+    ViewData["ParentUrl"] = Url.Action("Details", "ServiceOrders", new { id = order.Id });
+}
+
+<section class="error-page" aria-labelledby="comprobante-titulo">
+    <div class="empty-state__icon"><portfolio-icon name="receipt-text" /></div>
+    <p class="error-page__code mono">Error 409</p>
+    <h1 class="error-page__title" id="comprobante-titulo">El comprobante de entrega aún no está disponible</h1>
+    <p class="error-page__message">
+        Solo se genera para órdenes entregadas. La orden @order.Number está «@DomainDisplay.Name(order.Status)»: el comprobante
+        estará disponible cuando se registre su entrega con el costo final.
+    </p>
+    <div class="empty-state__actions">
+        <a class="button button--secondary" asp-controller="ServiceOrders" asp-action="Details" asp-route-id="@order.Id">
+            <portfolio-icon name="arrow-left" />
+            Volver a la orden
+        </a>
+        <a class="button button--secondary" asp-action="Reception" asp-route-id="@order.Id">
+            <portfolio-icon name="file-check" />
+            Ver la ficha de recepción
+        </a>
+    </div>
+</section>

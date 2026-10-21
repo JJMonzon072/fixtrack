@@ -1,0 +1,17 @@
+@using FixTrack.Domain.ServiceOrders
+@model FixTrack.Application.ServiceOrders.ServiceOrderDetails
+@* Extra de portafolio (PortfolioFeatures:PrintableSheets): solo se muestra con el extra habilitado. *@
+<link rel="stylesheet" href="~/css/order-documents.css" asp-append-version="true" />
+<nav class="page-header__actions order-documents" aria-label="Documentos de la orden">
+    <a class="button button--secondary button--small" asp-controller="ServiceSheets" asp-action="Reception" asp-route-id="@Model.Id">
+        <portfolio-icon name="printer" />
+        Ficha de recepción
+    </a>
+    @if (Model.Status == ServiceOrderStatus.Delivered)
+    {
+        <a class="button button--secondary button--small" asp-controller="ServiceSheets" asp-action="Delivery" asp-route-id="@Model.Id">
+            <portfolio-icon name="receipt-text" />
+            Comprobante de entrega
+        </a>
+    }
+</nav>

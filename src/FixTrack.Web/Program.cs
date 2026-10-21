@@ -2,6 +2,7 @@ using FixTrack.Application;
 using FixTrack.Infrastructure;
 using FixTrack.Web;
 using FixTrack.Web.Hosting;
+using FixTrack.Web.Portfolio;
 using FixTrack.Web.Security;
 
 try
@@ -25,7 +26,8 @@ try
         .AddSecurity(builder.Configuration, builder.Environment)
         .AddReverseProxySupport(builder.Configuration, builder.Environment)
         .AddHealthEndpoints()
-        .AddRequestResilience();
+        .AddRequestResilience()
+        .AddPortfolioExtras(builder.Configuration);
 
     var app = builder.Build();
 
@@ -48,6 +50,9 @@ try
     }
 
     app.UseStatusCodePagesWithReExecute("/error/{0}");
+
+    // Extras de portafolio (desactivados por defecto): sin ninguno habilitado no cambian el proceso de las solicitudes.
+    app.UsePortfolioExtras();
 
     // Redirección a HTTPS cuando se conoce el puerto HTTPS (perfil "https", HTTPS_PORT, endpoints de Kestrel).
     // Sin ese dato el middleware no puede redirigir y solo registraría una advertencia: es el caso del contenedor

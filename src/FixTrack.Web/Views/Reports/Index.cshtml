@@ -1,0 +1,441 @@
+@using FixTrack.Application.Reports
+@using FixTrack.Domain.ServiceOrders
+@using FixTrack.Web.Reports
+@using FixTrack.Web.Services
+@model ReportsViewModel
+@inject DateDisplay Dates
+@{
+    ViewData["Title"] = "Reportes";
+    var report = Model.Report;
+    var errors = Model.Errors;
+    var technicianOptions = Model.Technicians
+        .Where(technician => technician.IsActive || technician.Id == report?.Filter.TechnicianId)
+        .ToList();
+    var selectedStatus = report?.Filter.Status ?? DomainDisplay.ParseStatus(Model.Query.Status);
+    var selectedPriority = report?.Filter.Priority ?? DomainDisplay.ParsePriority(Model.Query.Priority);
+    var selectedTechnician = report?.Filter.TechnicianId?.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        ?? (report?.Filter.UnassignedOnly == true ? ReportQuery.UnassignedSlug : Model.Query.Technician);
+
+    string? Error(string key) => errors.GetValueOrDefault(key);
+
+    (string Key, string Label, string Anchor)[] fields =
+    [
+        ("rango", "Período", "reporte-desde"), ("desde", "Desde", "reporte-desde"), ("hasta", "Hasta", "reporte-hasta"),
+        ("estado", "Estado", "reporte-estado"), ("prioridad", "Prioridad", "reporte-prioridad"), ("tecnico", "Técnico", "reporte-tecnico"),
+    ];
+    var errorList = fields.Where(field => errors.ContainsKey(field.Key)).ToList();
+}
+<link rel="stylesheet" href="~/css/reports.css" asp-append-version="true" />
+
+<header class="page-header">
+    <div class="page-header__text">
+        <p class="page-header__eyebrow">
+            <portfolio-icon name="chart-line" />
+            <span>Analítica operativa</span>
+        </p>
+        <h1 class="page-title">Centro de reportes</h1>
+        <p class="page-description">Indicadores calculados por la base de datos con las órdenes registradas. Las fechas se interpretan en la hora local del taller.</p>
+    </div>
+</header>
+
+<section class="card report-filters" aria-labelledby="report-filters-title">
+    <div class="report-filters__header">
+        <h2 class="card__title" id="report-filters-title">Período y filtros</h2>
+        <nav class="report-ranges" aria-label="Períodos rápidos">
+            @foreach (var quick in ReportQuery.QuickRanges)
+            {
+                var active = Model.ActiveQuickRange == quick.Range && !Model.HasRecordFilters;
+                <a class="report-range" aria-current="@(active ? "true" : null)" href="@Url.Action("Index", new { rango = quick.Slug })">@quick.Label</a>
+            }
+        </nav>
+    </div>
+
+    @if (errorList.Count > 0)
+    {
+        <div class="error-summary" role="alert" tabindex="-1" data-error-summary aria-labelledby="report-errors-title">
+            <icon name="triangle-alert" />
+            <div>
+                <h3 class="error-summary__title" id="report-errors-title">Revisa @(errorList.Count == 1 ? "el siguiente filtro" : $"los siguientes {errorList.Count} filtros")</h3>
+                <ul class="error-summary__list" role="list">
+                    @foreach (var field in errorList)
+                    {
+                        <li><a href="#@field.Anchor">@field.Label: @errors[field.Key]</a></li>
+                    }
+                </ul>
+            </div>
+        </div>
+    }
+
+    <form class="report-filters__form" method="get" asp-action="Index">
+        <div class="field">
+            <label class="field__label" for="reporte-desde">Desde</label>
+            <input class="input mono-input" type="date" id="reporte-desde" name="desde" value="@Model.FromValue" max="@Model.Today.ToString(ReportQuery.DateFormat, System.Globalization.CultureInfo.InvariantCulture)" required
+                   aria-invalid="@(Error("desde") is null ? null : "true")" aria-describedby="@(Error("desde") is null ? null : "reporte-desde-error")" />
+            @if (Error("desde") is { } fromError)
+            {
+                <p class="field__error" id="reporte-desde-error">@fromError</p>
+            }
+        </div>
+        <div class="field">
+            <label class="field__label" for="reporte-hasta">Hasta</label>
+            <input class="input mono-input" type="date" id="reporte-hasta" name="hasta" value="@Model.ToValue" max="@Model.Today.ToString(ReportQuery.DateFormat, System.Globalization.CultureInfo.InvariantCulture)" required
+                   aria-invalid="@(Error("hasta") is null ? null : "true")" aria-describedby="@(Error("hasta") is null ? null : "reporte-hasta-error")" />
+            @if (Error("hasta") is { } toError)
+            {
+                <p class="field__error" id="reporte-hasta-error">@toError</p>
+            }
+        </div>
+        <div class="field">
+            <label class="field__label" for="reporte-estado">Estado actual</label>
+            <div class="select">
+                <select class="input select__control" id="reporte-estado" name="estado">
+                    <option value="">Todos</option>
+                    @foreach (var status in DomainDisplay.Statuses)
+                    {
+                        <option value="@DomainDisplay.Slug(status)" selected="@(status == selectedStatus)">@DomainDisplay.Name(status)</option>
+                    }
+                </select>
+                <icon name="chevron-down" class="select__icon" />
+            </div>
+        </div>
+        <div class="field">
+            <label class="field__label" for="reporte-prioridad">Prioridad</label>
+            <div class="select">
+                <select class="input select__control" id="reporte-prioridad" name="prioridad">
+                    <option value="">Todas</option>
+                    @foreach (var priority in DomainDisplay.Priorities.Reverse())
+                    {
+                        <option value="@DomainDisplay.Slug(priority)" selected="@(priority == selectedPriority)">@DomainDisplay.Name(priority)</option>
+                    }
+                </select>
+                <icon name="chevron-down" class="select__icon" />
+            </div>
+        </div>
+        <div class="field">
+            <label class="field__label" for="reporte-tecnico">Técnico</label>
+            <div class="select">
+                <select class="input select__control" id="reporte-tecnico" name="tecnico">
+                    <option value="">Todos</option>
+                    <option value="@ReportQuery.UnassignedSlug" selected="@(selectedTechnician == ReportQuery.UnassignedSlug)">Sin técnico asignado</option>
+                    @foreach (var technician in technicianOptions)
+                    {
+                        var value = technician.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        <option value="@value" selected="@(value == selectedTechnician)">@technician.FullName@(technician.IsActive ? string.Empty : " (inactivo)")</option>
+                    }
+                </select>
+                <icon name="chevron-down" class="select__icon" />
+            </div>
+        </div>
+        <div class="report-filters__actions">
+            <button class="button button--primary" type="submit">
+                <portfolio-icon name="funnel" />
+                Aplicar
+            </button>
+            <a class="button button--secondary" asp-action="Index">Limpiar</a>
+        </div>
+    </form>
+</section>
+
+@if (report is not null)
+{
+    var period = report.Period;
+    <div class="report-context">
+        <p class="report-context__period">
+            <portfolio-icon name="calendar-range" />
+            <span><strong>@ReportsViewModel.PeriodLabel(period)</strong> · @ReportCharts.Plural(period.Days, "día", "días")</span>
+        </p>
+        <p class="report-context__meta">
+            Calculado a las <time datetime="@DateDisplay.Iso(report.CalculatedAtUtc)">@Dates.Time(report.CalculatedAtUtc)</time>
+            @if (Model.HasRecordFilters)
+            {
+                <span> · Filtros: @string.Join(", ", new[]
+                {
+                    report.Filter.Status is { } status ? $"estado {DomainDisplay.Name(status)}" : null,
+                    report.Filter.Priority is { } priority ? $"prioridad {DomainDisplay.Name(priority)}" : null,
+                    report.Filter.UnassignedOnly ? "sin técnico asignado" : null,
+                    report.Filter.TechnicianId is { } technicianId ? $"técnico {Model.Technicians.FirstOrDefault(item => item.Id == technicianId)?.FullName}" : null,
+                }.Where(text => text is not null))</span>
+            }
+        </p>
+        @if (Model.CanExport)
+        {
+            <form class="report-export" method="get" asp-action="Export">
+                @foreach (var (key, value) in Model.RouteValues())
+                {
+                    if (value is not null)
+                    {
+                        <input type="hidden" name="@key" value="@value" />
+                    }
+                }
+                <label class="visually-hidden" for="reporte-exportar-por">Órdenes que se exportan</label>
+                <div class="select select--compact">
+                    <select class="input select__control" id="reporte-exportar-por" name="por">
+                        <option value="recepcion">Recibidas en el período</option>
+                        <option value="entrega">Entregadas en el período</option>
+                    </select>
+                    <icon name="chevron-down" class="select__icon" />
+                </div>
+                <button class="button button--secondary" type="submit">
+                    <portfolio-icon name="download" />
+                    Exportar CSV
+                </button>
+            </form>
+        }
+        else
+        {
+            <p class="report-context__note">La exportación CSV está disponible para las cuentas de Administrador y Operador.</p>
+        }
+    </div>
+
+    <section class="section" aria-labelledby="report-kpi-title">
+        <div class="section__header">
+            <h2 class="section__title" id="report-kpi-title">Indicadores del período</h2>
+            <span class="section__meta">Cada indicador usa la fecha de su propio evento</span>
+        </div>
+        <dl class="metrics report-metrics">
+            <div class="metric">
+                <dt class="metric__label">Órdenes recibidas</dt>
+                <dd class="metric__value">@report.Received</dd>
+                <dd class="metric__meta">Por fecha de recepción</dd>
+            </div>
+            <div class="metric">
+                <dt class="metric__label">Órdenes entregadas</dt>
+                <dd class="metric__value">@report.Delivered</dd>
+                <dd class="metric__meta">Por fecha de entrega</dd>
+            </div>
+            <div class="metric">
+                <dt class="metric__label">Órdenes canceladas</dt>
+                <dd class="metric__value">@report.Cancelled</dd>
+                <dd class="metric__meta">Por fecha de cancelación</dd>
+            </div>
+            <div class="metric@(report.DeliveredLate > 0 ? " metric--warning" : string.Empty)">
+                <dt class="metric__label">Entregas con atraso</dt>
+                <dd class="metric__value">@report.DeliveredLate<span class="report-metric__of"> de @report.DeliveredWithPromise</span></dd>
+                <dd class="metric__meta">@(report.OnTimePercent is { } onTime ? $"{onTime} % a tiempo · solo entregas con fecha comprometida" : "Sin entregas con fecha comprometida")</dd>
+            </div>
+            <div class="metric">
+                <dt class="metric__label">Tiempo promedio de reparación</dt>
+                <dd class="metric__value report-metric__value--text">@ReportsViewModel.Hours(report.AverageHoursToDelivery)</dd>
+                <dd class="metric__meta">De la recepción a la entrega · lista en @ReportsViewModel.Hours(report.AverageHoursToReady)</dd>
+            </div>
+            <div class="metric">
+                <dt class="metric__label">Ingresos registrados</dt>
+                <dd class="metric__value report-metric__value--text">@(report.Delivered == 0 ? "Sin datos" : Money.Format(report.Revenue))</dd>
+                <dd class="metric__meta">Costo final de las entregas · no son cobros</dd>
+            </div>
+            <div class="metric">
+                <dt class="metric__label">Costo promedio por reparación</dt>
+                <dd class="metric__value report-metric__value--text">@ReportsViewModel.Amount(report.AverageFinalCost)</dd>
+                <dd class="metric__meta">@(report.Delivered == 0 ? "Sin entregas en el período" : $"Entre {ReportCharts.Plural(report.Delivered, "entrega", "entregas")}")</dd>
+            </div>
+            <div class="metric">
+                <dt class="metric__label">Costo final frente al estimado</dt>
+                <dd class="metric__value report-metric__value--text">@ReportsViewModel.VariancePercent(report.CostVariance, report.CostVariancePercent)</dd>
+                <dd class="metric__meta">@(report.DeliveredWithEstimate == 0 ? "Sin entregas con costo estimado" : $"{ReportsViewModel.VarianceAmount(report.CostVariance!.Value)} en {ReportCharts.Plural(report.DeliveredWithEstimate, "entrega", "entregas")} con costo estimado")</dd>
+            </div>
+        </dl>
+    </section>
+
+    var insights = ReportInsights.For(report);
+    if (insights.Count > 0)
+    {
+        <section class="card report-insights" aria-labelledby="report-insights-title">
+            <h2 class="card__title" id="report-insights-title">Lectura rápida</h2>
+            <ul class="report-insights__list" role="list">
+                @foreach (var (icon, text) in insights)
+                {
+                    <li><portfolio-icon name="@icon" /><span>@text</span></li>
+                }
+            </ul>
+        </section>
+    }
+
+    if (!report.HasActivity)
+    {
+        <section class="card">
+            <div class="empty-state empty-state--compact">
+                <div class="empty-state__icon"><portfolio-icon name="chart-line" /></div>
+                <h2 class="empty-state__title">Sin actividad en el período</h2>
+                <p class="empty-state__text">No se recibieron, entregaron ni cancelaron órdenes con estos filtros. Prueba con un período más amplio o quita algunos filtros.</p>
+            </div>
+        </section>
+    }
+    else
+    {
+        <div class="report-grid">
+            <section class="card report-chart" aria-labelledby="report-volume-title">
+                <header class="card__header">
+                    <div>
+                        <h2 class="card__title" id="report-volume-title">Órdenes recibidas y entregadas</h2>
+                        <p class="card__description">Volumen @ReportsViewModel.GranularityLabel(period.Granularity), en hora local.</p>
+                    </div>
+                    <ul class="chart-legend" role="list">
+                        <li><span class="chart-legend__swatch chart-legend__swatch--0" aria-hidden="true"></span>Recibidas</li>
+                        <li><span class="chart-legend__swatch chart-legend__swatch--1" aria-hidden="true"></span>Entregadas</li>
+                    </ul>
+                </header>
+                <div class="report-chart__body">
+                    <partial name="_VolumeChart" model="@(new ReportChartModel("grafico-volumen", "Órdenes recibidas y entregadas", ReportInsights.VolumeDescription(report), report.Series, period.Granularity))" />
+                </div>
+            </section>
+            <section class="card report-chart" aria-labelledby="report-revenue-title">
+                <header class="card__header">
+                    <div>
+                        <h2 class="card__title" id="report-revenue-title">Ingresos registrados</h2>
+                        <p class="card__description">Costo final de las órdenes entregadas, @ReportsViewModel.GranularityLabel(period.Granularity). FixTrack no registra pagos: no son cobros confirmados.</p>
+                    </div>
+                </header>
+                <div class="report-chart__body">
+                    <partial name="_RevenueChart" model="@(new ReportChartModel("grafico-ingresos", "Ingresos registrados", ReportInsights.RevenueDescription(report), report.Series, period.Granularity))" />
+                </div>
+            </section>
+        </div>
+
+        <div class="report-grid report-grid--even">
+            <section class="card" aria-labelledby="report-status-title">
+                <header class="card__header">
+                    <div>
+                        <h2 class="card__title" id="report-status-title">Estado actual de las recibidas</h2>
+                        <p class="card__description">Dónde están hoy las @ReportCharts.Plural(report.Received, "orden recibida", "órdenes recibidas") en el período.</p>
+                    </div>
+                </header>
+                <div class="card__body">
+                    @if (report.Received == 0)
+                    {
+                        <p class="inline-empty">Sin órdenes recibidas en el período.</p>
+                    }
+                    else
+                    {
+                        <ul class="bar-list report-bars" role="list">
+                            @foreach (var share in report.ReceivedByStatus)
+                            {
+                                <li class="bar-list__item@(share.Count == 0 ? " report-bars__item--empty" : string.Empty)" data-status="@DomainDisplay.Tone(share.Key)">
+                                    <span class="bar-list__label">@DomainDisplay.Name(share.Key)</span>
+                                    <span class="bar-list__value mono">@share.Count <span class="report-bars__percent">· @share.Percent %</span></span>
+                                    <svg class="bar-list__bar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                                        <rect class="bar-list__track" width="100" height="6" rx="3" />
+                                        <rect class="bar-list__fill" width="@share.Percent" height="6" rx="3" />
+                                    </svg>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </section>
+
+            <section class="card" aria-labelledby="report-priority-title">
+                <header class="card__header">
+                    <div>
+                        <h2 class="card__title" id="report-priority-title">Comparación por prioridad</h2>
+                        <p class="card__description">¿Las órdenes urgentes se atienden más rápido? Recibidas y entregas del período.</p>
+                    </div>
+                </header>
+                <div class="table-scroll" tabindex="0" role="region" aria-label="Comparación por prioridad (desplazable)">
+                    <table class="data-table report-table">
+                        <caption class="visually-hidden">Recibidas, entregas, puntualidad y tiempo promedio por prioridad</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Prioridad</th>
+                                <th scope="col" class="data-table__numeric">Recibidas</th>
+                                <th scope="col" class="data-table__numeric">Entregadas</th>
+                                <th scope="col" class="data-table__numeric">A tiempo</th>
+                                <th scope="col" class="data-table__numeric">Tiempo promedio</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in report.Priorities)
+                            {
+                                <tr>
+                                    <th scope="row"><partial name="_OrderPriority" model="row.Priority" /></th>
+                                    <td class="data-table__numeric mono">@row.Received</td>
+                                    <td class="data-table__numeric mono">@row.Delivered</td>
+                                    <td class="data-table__numeric">@ReportsViewModel.Percent(row.OnTimePercent)</td>
+                                    <td class="data-table__numeric">@ReportsViewModel.Hours(row.AverageHoursToDelivery)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    }
+
+    <section class="card table-card report-technicians" aria-labelledby="report-technicians-title">
+        <header class="card__header">
+            <div>
+                <h2 class="card__title" id="report-technicians-title">Actividad por técnico</h2>
+                <p class="card__description">Recibidas y entregas del período según el técnico asignado; "Abiertas ahora" es la carga actual, sin importar el período.</p>
+            </div>
+        </header>
+        @if (report.Technicians.Count == 0)
+        {
+            <p class="inline-empty card__body">Sin actividad de técnicos con estos filtros.</p>
+        }
+        else
+        {
+            var maxDelivered = Math.Max(1, report.Technicians.Max(row => row.Delivered));
+            <div class="table-scroll" tabindex="0" role="region" aria-label="Actividad por técnico (desplazable)">
+                <table class="data-table report-table report-table--wide">
+                    <caption class="visually-hidden">Actividad por técnico en el período</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Técnico</th>
+                            <th scope="col" class="data-table__numeric">Recibidas</th>
+                            <th scope="col">Entregadas</th>
+                            <th scope="col" class="data-table__numeric">A tiempo</th>
+                            <th scope="col" class="data-table__numeric">Tiempo promedio</th>
+                            <th scope="col" class="data-table__numeric">Ingresos registrados</th>
+                            <th scope="col" class="data-table__numeric">Abiertas ahora</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in report.Technicians)
+                        {
+                            <tr>
+                                <th scope="row">
+                                    @row.Name
+                                    @if (!row.IsActive)
+                                    {
+                                        <span class="badge badge--neutral">Inactivo</span>
+                                    }
+                                </th>
+                                <td class="data-table__numeric mono">@row.Received</td>
+                                <td>
+                                    <span class="report-meter">
+                                        <span class="mono">@row.Delivered</span>
+                                        <svg class="report-meter__bar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                                            <rect class="bar-list__track" width="100" height="6" rx="3" />
+                                            <rect class="report-meter__fill" width="@(row.Delivered * 100 / maxDelivered)" height="6" rx="3" />
+                                        </svg>
+                                    </span>
+                                </td>
+                                <td class="data-table__numeric">@ReportsViewModel.Percent(row.OnTimePercent)</td>
+                                <td class="data-table__numeric">@ReportsViewModel.Hours(row.AverageHoursToDelivery)</td>
+                                <td class="data-table__numeric mono">@(row.Delivered == 0 ? "—" : Money.Format(row.FinalCostSum))</td>
+                                <td class="data-table__numeric mono">@row.OpenNow</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <details class="card report-definitions">
+        <summary class="report-definitions__summary">
+            <portfolio-icon name="info" />
+            Cómo se calcula cada indicador
+        </summary>
+        <dl class="report-definitions__list">
+            <div><dt>Período</dt><dd>Del primer día a las 00:00 al último día a las 23:59 (hora local). En la base se consulta como el intervalo [inicio, fin), con fechas en UTC.</dd></div>
+            <div><dt>Recibidas</dt><dd>Órdenes cuya fecha de recepción cae en el período.</dd></div>
+            <div><dt>Entregadas</dt><dd>Órdenes entregadas cuya fecha de entrega cae en el período, aunque se hayan recibido antes.</dd></div>
+            <div><dt>Canceladas</dt><dd>Órdenes cuyo cambio a "Cancelada" (en su historial) ocurrió en el período.</dd></div>
+            <div><dt>Entregas con atraso</dt><dd>Entregas del período posteriores a la fecha comprometida. Las órdenes sin fecha comprometida no cuentan para la puntualidad.</dd></div>
+            <div><dt>Tiempo promedio de reparación</dt><dd>Promedio entre la recepción y la entrega de las órdenes entregadas en el período. "Lista en" mide hasta el último paso a "Lista para entrega".</dd></div>
+            <div><dt>Ingresos registrados</dt><dd>Suma de los costos finales de las entregas del período. FixTrack no tiene un sistema de pagos: no son cobros confirmados.</dd></div>
+            <div><dt>Costo final frente al estimado</dt><dd>Diferencia entre el costo final y el estimado, solo en las entregas que tenían ambos montos.</dd></div>
+            <div><dt>Filtros</dt><dd>Estado, prioridad y técnico se refieren a la situación actual de cada orden y se aplican a todos los indicadores.</dd></div>
+        </dl>
+    </details>
+}

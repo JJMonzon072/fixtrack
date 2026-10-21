@@ -43,6 +43,9 @@ public sealed class FixTrackDbContext(DbContextOptions<FixTrackDbContext> option
         // Primero el modelo de Identity; después las configuraciones propias, que lo complementan.
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FixTrackDbContext).Assembly);
+
+        // Funciones SQL de las consultas de reportes (no cambian el esquema ni las migraciones).
+        ReportSql.Register(modelBuilder, Database.ProviderName);
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)

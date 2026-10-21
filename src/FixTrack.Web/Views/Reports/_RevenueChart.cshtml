@@ -1,0 +1,66 @@
+@using FixTrack.Web.Reports
+@model ReportChartModel
+@foreach (var size in ChartSize.All)
+{
+    var chart = ReportCharts.Revenue(Model.Series, Model.Granularity, size);
+    var id = $"{Model.Id}-{size.Name}";
+    <svg class="chart chart--@size.Name" viewBox="0 0 @size.Width @size.Height" role="img" aria-labelledby="@id-titulo @id-desc" focusable="false">
+        <title id="@id-titulo">@Model.Title</title>
+        <desc id="@id-desc">@Model.Description</desc>
+        <g class="chart__grid">
+            @foreach (var tick in chart.Ticks)
+            {
+                @* Cada <text> va dentro de un <g>: suelto en un bloque de código, Razor lo tomaría como su etiqueta <text>. *@
+                <g>
+                    <line x1="@size.PadLeft" x2="@(size.Width - ChartSize.PadRight)" y1="@ChartGeometry.N(tick.Y)" y2="@ChartGeometry.N(tick.Y)" />
+                    <text class="chart__axis" x="@(size.PadLeft - 8)" y="@ChartGeometry.N(tick.Y + 4)" text-anchor="end">@tick.Label</text>
+                </g>
+            }
+        </g>
+        @if (chart.AreaPath is not null)
+        {
+            <path class="chart__area" d="@chart.AreaPath" />
+            <path class="chart__line" d="@chart.LinePath" />
+        }
+        @if (chart.Points.Count <= 40)
+        {
+            <g>
+                @foreach (var point in chart.Points)
+                {
+                    <circle class="chart__point" cx="@ChartGeometry.N(point.X)" cy="@ChartGeometry.N(point.Y)" r="2.5"><title>@point.Title</title></circle>
+                }
+            </g>
+        }
+        <g>
+            @foreach (var label in chart.Labels)
+            {
+                <g><text class="chart__axis" x="@ChartGeometry.N(label.X)" y="@(size.Height - 8)" text-anchor="middle">@label.Text</text></g>
+            }
+        </g>
+    </svg>
+}
+<details class="report-data">
+    <summary>Ver los datos del gráfico</summary>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Datos de @Model.Title (desplazable)">
+        <table class="data-table report-table">
+            <caption class="visually-hidden">@Model.Title</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Tramo</th>
+                    <th scope="col" class="data-table__numeric">Entregas</th>
+                    <th scope="col" class="data-table__numeric">Ingresos registrados</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var point in Model.Series)
+                {
+                    <tr>
+                        <th scope="row">@ReportCharts.LongLabel(point, Model.Granularity)</th>
+                        <td class="data-table__numeric mono">@point.Delivered</td>
+                        <td class="data-table__numeric mono">@Money.Format(point.Revenue)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</details>

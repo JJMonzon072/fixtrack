@@ -1,9 +1,12 @@
 using FixTrack.Application.Modules;
 using FixTrack.Web.Models;
 using FixTrack.Web.Navigation;
+using FixTrack.Web.Portfolio;
+using FixTrack.Web.Security;
 using FixTrack.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace FixTrack.Web.ViewComponents;
 
@@ -14,7 +17,8 @@ namespace FixTrack.Web.ViewComponents;
 public sealed class SidebarViewComponent(
     IModuleCatalog modules,
     ApplicationInfo application,
-    IAuthorizationService authorization) : ViewComponent
+    IAuthorizationService authorization,
+    IOptions<PortfolioFeatures> portfolio) : ViewComponent
 {
     public async Task<IViewComponentResult> InvokeAsync()
     {
@@ -39,6 +43,14 @@ public sealed class SidebarViewComponent(
             {
                 groups.Add(new SidebarGroupViewModel(group.Title, items));
             }
+        }
+
+        // Extra de portafolio: solo con PortfolioFeatures:Reports habilitado. Desactivado, el menú es el de siempre.
+        if (portfolio.Value.Reports && (await authorization.AuthorizeAsync(UserClaimsPrincipal, AuthorizationPolicies.Workshop)).Succeeded)
+        {
+            groups.Add(new SidebarGroupViewModel(
+                "Análisis",
+                [new SidebarItemViewModel("Reportes", "Reports", "chart-column", IsAvailable: true, IsActive: currentController == "Reports")]));
         }
 
         return View(new SidebarViewModel(groups, application.Version));

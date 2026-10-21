@@ -1,0 +1,6 @@
+/* FixTrack · Documentos imprimibles en el detalle de una orden (extra de portafolio). Solo se carga con el extra. */
+
+.page-header--entity .order-documents {
+    flex-basis: 100%;
+    order: 3;
+}
