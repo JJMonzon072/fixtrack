@@ -2,7 +2,7 @@
 
 Procedimiento para publicar FixTrack por primera vez y operarlo después. Distingue lo que **ya se verificó**, lo que está **preparado** y lo que **requiere una acción o una autorización del propietario**. No contiene secretos: solo nombres de variables, de elementos del Llavero y de archivos.
 
-> **Estado al cierre de la fase 5:** la aplicación **no está publicada**. Todo lo que se podía comprobar sin exponerla ni modificar la base real se comprobó con la imagen de producción contra una copia aislada de FixTrackDB. Quedan las acciones de las secciones 3 y 5, que necesitan al propietario.
+> **Estado al cierre de la fase 5:** la aplicación **no está publicada**. Todo lo que se podía comprobar sin exponerla ni modificar la base real se comprobó con la imagen de producción contra una copia aislada de FixTrackDB. Con la autorización del propietario, las claves de Data Protection de FixTrackDB ya se cifraron con el certificado (sección 3.3). Quedan las acciones de las secciones 3.1, 3.4, 4 y 5, que necesitan al propietario.
 
 Referencias: [README](../README.md) (configuración y comandos), [arquitectura.md](arquitectura.md) (seguridad, resiliencia y respaldos).
 
@@ -26,7 +26,7 @@ Referencias: [README](../README.md) (configuración y comandos), [arquitectura.m
 | Errores sin trazas internas | Verificado | 404, 400, 500 y 503 sin excepciones ni rutas de código |
 | Health checks | Verificado | `/salud` (proceso) y `/salud/bd` (base, caché de 10 s), sin detalles ni caché del navegador |
 | Resiliencia ante desconexiones de Somee | Verificado | Con SQL Server pausado: 503 con `Retry-After` en 20 s la primera solicitud y luego en milisegundos; al volver la base, se recupera solo y las sesiones siguen valiendo |
-| Data Protection: claves cifradas con certificado | Preparado | Certificado definitivo generado y probado en la copia (lectura de la clave anterior, clave cifrada, revocación, reinicios, recuperación). **Pendiente: autorización para cifrar las claves de FixTrackDB** (sección 3.3) |
+| Data Protection: claves cifradas con certificado | Verificado | Hecho el 2026-10-21 con autorización del propietario: FixTrackDB tiene la clave cifrada `360794bc…` y la anterior `d266998d…` revocada, sin borrar ni modificar filas. La imagen de producción con el certificado arranca contra FixTrackDB, lee las claves y genera la página de inicio de sesión sin advertencias (sección 3.3) |
 | Persistencia de sesiones entre reinicios | Verificado | Sesiones válidas tras reiniciar el contenedor, con la clave anterior y con la cifrada |
 | Certificado equivocado | Verificado | La aplicación no arranca, no escribe claves y explica el motivo: en Render, el despliegue falla y queda la versión anterior |
 | Migraciones | Verificado | FixTrackDB tiene las 9 migraciones; esta fase no agrega ninguna |
@@ -78,11 +78,27 @@ dotnet run --project src/FixTrack.Web -c Release -- exportar-respaldo /Volumes/F
 dotnet run --project src/FixTrack.Web -c Release -- verificar-respaldo /Volumes/FixTrackBoveda/respaldos/<archivo nuevo>.zip
 ```
 
-El último respaldo verificado de esta fase es `fixtrack-respaldo-20261020-235216Z.zip` (15 tablas, 56 filas, SHA-256 del archivo `6deef06d…`): se restauró completo en un SQL Server local y todas sus tablas coincidieron con el manifiesto.
+Respaldos de esta fase en la bóveda (y en la copia de recuperación):
 
-### 3.3 Cifrar las claves de Data Protection de FixTrackDB (requiere autorización)
+- `fixtrack-respaldo-20261021-013454Z.zip`: tomado justo antes de cifrar las claves. 15 tablas y 56 filas; SHA-256 del archivo `8b7066f4…`. Se verificó y se restauró completo en un SQL Server local.
+- `fixtrack-respaldo-20261021-013538Z.zip`: tomado justo después. 15 tablas y 58 filas (las dos filas nuevas de `DataProtectionKeys`); SHA-256 `0bc55ef5…`.
 
-FixTrackDB tiene una sola clave de Data Protection, **sin cifrar** (`d266998d…`, vence el 2027-01-18). Este paso crea una clave cifrada con el certificado y revoca la anterior. Revocar agrega una fila de revocación: **no borra ni modifica filas existentes**. Las sesiones emitidas con la clave anterior dejan de valer; hoy no hay sesiones reales que dependan de ella (la aplicación no está publicada y el entorno de Desarrollo guarda sus claves en el perfil local).
+### 3.3 Cifrar las claves de Data Protection de FixTrackDB (hecho el 2026-10-21)
+
+**Resultado.** Se ejecutó el 2026-10-21 a las 01:35 UTC, con la autorización del propietario y después del respaldo de la sección 3.2:
+
+- se creó la clave cifrada `360794bc-2dc6-4243-adb1-6097781f0815`, que vence el 2027-01-19;
+- se revocó la clave sin cifrar `d266998d…`.
+
+Comprobado después:
+
+- `DataProtectionKeys` pasó de 1 fila a 3; la fila original quedó idéntica byte a byte;
+- las otras 14 tablas no cambiaron (mismos hashes que el respaldo previo);
+- la imagen de producción con el certificado arrancó contra FixTrackDB sin advertencias: la comprobación de claves pasó, `/salud/bd` respondió Healthy y se generó la página de inicio de sesión.
+
+El procedimiento queda como referencia (por ejemplo, para una rotación).
+
+**Estado anterior:** FixTrackDB tenía una sola clave de Data Protection, **sin cifrar** (`d266998d…`, vence el 2027-01-18). Este paso crea una clave cifrada con el certificado y revoca la anterior. Revocar agrega una fila de revocación: **no borra ni modifica filas existentes**. Las sesiones emitidas con la clave anterior dejan de valer; hoy no hay sesiones reales que dependan de ella (la aplicación no está publicada y el entorno de Desarrollo guarda sus claves en el perfil local).
 
 Ensayado en la copia: crea la clave cifrada, revoca la anterior, las sesiones nuevas usan la clave cifrada y sobreviven a reinicios, y la copia de recuperación del certificado también la descifra.
 
@@ -262,6 +278,7 @@ No afirmes que HSTS o el límite por IP real funcionan hasta completar los pasos
 - bóveda y copia de recuperación cifradas;
 - respaldo previo verificado y restaurado;
 - ensayo completo de Data Protection en una copia;
+- cifrado de las claves de FixTrackDB, con autorización y respaldos antes y después (3.3);
 - auditoría de Production con la imagen;
 - ensayo del descubrimiento del proxy;
 - resiliencia;
@@ -272,7 +289,6 @@ No afirmes que HSTS o el límite por IP real funcionan hasta completar los pasos
 **Requiere al propietario:**
 
 - guardar las contraseñas en un gestor y la copia de recuperación en un medio externo (3.1);
-- autorizar el cifrado de las claves de FixTrackDB (3.3);
 - integración a `main` por QA (3.4);
 - autorizar y crear el servicio en Render (4 y 5);
 - crear y deshabilitar la cuenta Operador de prueba (5.4);

@@ -249,7 +249,7 @@ Resumen del despliegue (detalles en la checklist):
    - para el primer despliegue: `ReverseProxy__IgnoreForwardedHeaders=true`.
 
    No uses un *Secret File* para el PFX: Render los copia al contexto de construcción de Docker.
-4. **Antes de publicar:** respaldo previo y `proteger-claves --revocar-sin-cifrar` contra FixTrackDB, que requiere autorización.
+4. **Claves de FixTrackDB:** ya cifradas con el certificado (2026-10-21, con autorización y respaldos antes y después).
 5. **Después de publicar:** descubrir la dirección real del proxy en la bitácora y declararla. Hasta entonces no se envía HSTS, la cookie antifalsificación no es `Secure` y el límite de intentos de inicio de sesión se comparte entre todos.
 
 ### Certificado de Data Protection
@@ -517,7 +517,6 @@ Para desarrollar sin Somee se puede usar cualquier SQL Server 2022 compatible y 
 ## Limitaciones conocidas de la aplicación
 
 - **No hay rol Técnico.** Solo existen Administrador y Operador. Un rol Técnico correcto exige autorización por registro (cada técnico limitado a sus órdenes). El diseño propuesto está en [docs/arquitectura.md](docs/arquitectura.md#autorización).
-- **La clave de Data Protection actual de FixTrackDB todavía está sin cifrar.** El certificado definitivo ya existe y el procedimiento se ensayó completo sobre una copia, pero modificar las claves de la base real requiere la autorización del propietario ([checklist, 3.3](docs/checklist-lanzamiento.md#33-cifrar-las-claves-de-data-protection-de-fixtrackdb-requiere-autorización)).
 - **El proxy de Render no está configurado como confiable** hasta conocer su dirección real después del primer despliegue ([checklist, 5.6](docs/checklist-lanzamiento.md#56-proxy-de-render-descubrir-y-verificar-su-dirección)). Mientras tanto no se envía HSTS, la cookie antifalsificación no es `Secure` y el límite de intentos de inicio de sesión por IP se comparte entre todos los usuarios.
 - **En el plan gratuito de Render, la primera visita después de 15 minutos sin uso espera** alrededor de un minuto de la plataforma más unos 16–18 s de arranque, y el primer inicio de sesión tarda unos 15 s (medido localmente con 0.1 CPU).
 - **Las reasignaciones anteriores a la fase 4 no se conocen:** esas órdenes muestran solo su asignación vigente, con la nota correspondiente. Los cambios de estado anteriores no tienen autor.
