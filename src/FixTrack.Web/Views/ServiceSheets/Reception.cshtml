@@ -1,0 +1,89 @@
+@using FixTrack.Web.Controllers
+@using FixTrack.Web.Services
+@model ServiceSheetViewModel
+@inject DateDisplay Dates
+@{
+    Layout = "_SheetLayout";
+    var order = Model.Order;
+    var device = order.Device;
+    var customer = order.Customer;
+    ViewData["Title"] = $"Ficha de recepción {order.Number}";
+    ViewData["BackUrl"] = Url.Action("Details", "ServiceOrders", new { id = order.Id });
+}
+
+<partial name="_SheetHeader" model="@(("Ficha de recepción", order.Number, Model.IssuedAtUtc))" />
+
+<dl class="sheet__facts">
+    <div>
+        <dt>Recibido el</dt>
+        <dd><time datetime="@DateDisplay.Iso(order.ReceivedAtUtc)">@Dates.Long(order.ReceivedAtUtc)</time></dd>
+    </div>
+    <div>
+        <dt>Prioridad</dt>
+        <dd>@DomainDisplay.Name(order.Priority)</dd>
+    </div>
+    <div>
+        <dt>Entrega comprometida</dt>
+        <dd>@(order.PromisedAtUtc is { } promised ? Dates.Long(promised) : "Sin fecha comprometida")</dd>
+    </div>
+    <div>
+        <dt>Costo estimado</dt>
+        <dd>@(order.EstimatedCost is { } estimate ? Money.Format(estimate) : "Por definir después del diagnóstico")</dd>
+    </div>
+</dl>
+
+<div class="sheet__columns">
+    <section class="sheet__section" aria-labelledby="ficha-cliente">
+        <h2 class="sheet__section-title" id="ficha-cliente">Cliente</h2>
+        <dl class="sheet__list">
+            <div><dt>Nombre</dt><dd>@customer.FullName</dd></div>
+            <div><dt>Teléfono</dt><dd>@customer.Phone</dd></div>
+            <div><dt>Correo</dt><dd>@(customer.Email ?? "No registrado")</dd></div>
+        </dl>
+    </section>
+    <section class="sheet__section" aria-labelledby="ficha-equipo">
+        <h2 class="sheet__section-title" id="ficha-equipo">Equipo</h2>
+        <dl class="sheet__list">
+            <div><dt>Tipo</dt><dd>@DomainDisplay.Name(device.Type)</dd></div>
+            <div><dt>Marca</dt><dd>@device.Brand</dd></div>
+            <div><dt>Modelo</dt><dd>@(device.Model ?? "No registrado")</dd></div>
+            <div><dt>Número de serie</dt><dd class="sheet__mono">@(device.SerialNumber ?? "No registrado")</dd></div>
+        </dl>
+    </section>
+</div>
+
+<section class="sheet__section sheet__section--text" aria-labelledby="ficha-problema">
+    <h2 class="sheet__section-title" id="ficha-problema">Problema reportado</h2>
+    <p class="sheet__text">@order.ReportedIssue</p>
+</section>
+
+<section class="sheet__section sheet__section--text" aria-labelledby="ficha-observaciones">
+    <h2 class="sheet__section-title" id="ficha-observaciones">Accesorios y observaciones de recepción</h2>
+    <p class="sheet__text@(order.IntakeNotes is null ? " sheet__text--empty" : string.Empty)">@(order.IntakeNotes ?? "Sin accesorios ni observaciones registrados al recibir el equipo.")</p>
+</section>
+
+<section class="sheet__section" aria-labelledby="ficha-notas">
+    <h2 class="sheet__section-title" id="ficha-notas">Importante</h2>
+    <ul class="sheet__notes">
+        <li>Conserve este documento: el número @order.Number identifica su equipo en el taller.</li>
+        <li>El costo estimado es una referencia; el costo final se registra al entregar el equipo.</li>
+    </ul>
+</section>
+
+<section class="sheet__signatures" aria-label="Firmas">
+    <div class="sheet__signature">
+        <div class="sheet__signature-line"></div>
+        <p class="sheet__signature-label">Entrega el equipo (cliente)</p>
+        <p class="sheet__signature-name">Nombre: @customer.FullName</p>
+    </div>
+    <div class="sheet__signature">
+        <div class="sheet__signature-line"></div>
+        <p class="sheet__signature-label">Recibe el equipo (FixTrack)</p>
+        <p class="sheet__signature-name">Nombre y firma</p>
+    </div>
+</section>
+
+<footer class="sheet__footer">
+    <p>Documento interno de control de servicio. No es una factura ni un comprobante fiscal o tributario.</p>
+    <p class="sheet__mono">@order.Number</p>
+</footer>

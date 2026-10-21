@@ -1,0 +1,103 @@
+@using FixTrack.Web.Controllers
+@using FixTrack.Web.Services
+@model ServiceSheetViewModel
+@inject DateDisplay Dates
+@{
+    Layout = "_SheetLayout";
+    var order = Model.Order;
+    var device = order.Device;
+    var customer = order.Customer;
+    var technician = order.Technician;
+    var variance = order.CostVariance;
+    ViewData["Title"] = $"Comprobante de entrega {order.Number}";
+    ViewData["BackUrl"] = Url.Action("Details", "ServiceOrders", new { id = order.Id });
+}
+
+<partial name="_SheetHeader" model="@(("Comprobante de entrega", order.Number, Model.IssuedAtUtc))" />
+
+<dl class="sheet__facts">
+    <div>
+        <dt>Estado final</dt>
+        <dd>@DomainDisplay.Name(order.Status)</dd>
+    </div>
+    <div>
+        <dt>Entregado el</dt>
+        <dd>@(order.DeliveredAtUtc is { } delivered ? Dates.Long(delivered) : "No registrado")</dd>
+    </div>
+    <div>
+        <dt>Recibido el</dt>
+        <dd>@Dates.Long(order.ReceivedAtUtc)</dd>
+    </div>
+    <div class="sheet__facts-total">
+        <dt>Costo final</dt>
+        <dd>@(order.FinalCost is { } final ? Money.Format(final) : "No registrado")</dd>
+    </div>
+</dl>
+
+<div class="sheet__columns">
+    <section class="sheet__section" aria-labelledby="comprobante-cliente">
+        <h2 class="sheet__section-title" id="comprobante-cliente">Cliente</h2>
+        <dl class="sheet__list">
+            <div><dt>Nombre</dt><dd>@customer.FullName</dd></div>
+            <div><dt>Teléfono</dt><dd>@customer.Phone</dd></div>
+        </dl>
+    </section>
+    <section class="sheet__section" aria-labelledby="comprobante-equipo">
+        <h2 class="sheet__section-title" id="comprobante-equipo">Equipo</h2>
+        <dl class="sheet__list">
+            <div><dt>Equipo</dt><dd>@DomainDisplay.Name(device.Type) · @DomainDisplay.DeviceTitle(device.Brand, device.Model)</dd></div>
+            <div><dt>Número de serie</dt><dd class="sheet__mono">@(device.SerialNumber ?? "No registrado")</dd></div>
+        </dl>
+    </section>
+</div>
+
+<section class="sheet__section sheet__section--text" aria-labelledby="comprobante-diagnostico">
+    <h2 class="sheet__section-title" id="comprobante-diagnostico">Diagnóstico registrado</h2>
+    <p class="sheet__text@(order.Diagnosis is null ? " sheet__text--empty" : string.Empty)">@(order.Diagnosis ?? "Sin diagnóstico registrado.")</p>
+</section>
+
+<div class="sheet__columns">
+    <section class="sheet__section" aria-labelledby="comprobante-tecnico">
+        <h2 class="sheet__section-title" id="comprobante-tecnico">Técnico responsable</h2>
+        <dl class="sheet__list">
+            @if (technician is not null)
+            {
+                <div><dt>Nombre</dt><dd>@technician.FullName</dd></div>
+                <div><dt>Especialidad</dt><dd>@technician.Specialty</dd></div>
+            }
+            else
+            {
+                <div><dt>Nombre</dt><dd>Sin técnico asignado</dd></div>
+            }
+        </dl>
+    </section>
+    <section class="sheet__section" aria-labelledby="comprobante-costos">
+        <h2 class="sheet__section-title" id="comprobante-costos">Costos del servicio</h2>
+        <dl class="sheet__list">
+            <div><dt>Costo estimado</dt><dd>@(order.EstimatedCost is { } estimate ? Money.Format(estimate) : "Sin estimación")</dd></div>
+            <div class="sheet__list-total"><dt>Costo final</dt><dd>@(order.FinalCost is { } amount ? Money.Format(amount) : "No registrado")</dd></div>
+            @if (variance is { } difference && difference != 0)
+            {
+                <div><dt>Diferencia</dt><dd>@(difference > 0 ? "+" : "−")@Money.Format(Math.Abs(difference))</dd></div>
+            }
+        </dl>
+    </section>
+</div>
+
+<section class="sheet__signatures" aria-label="Firmas">
+    <div class="sheet__signature">
+        <div class="sheet__signature-line"></div>
+        <p class="sheet__signature-label">Recibí conforme (cliente)</p>
+        <p class="sheet__signature-name">Nombre: @customer.FullName</p>
+    </div>
+    <div class="sheet__signature">
+        <div class="sheet__signature-line"></div>
+        <p class="sheet__signature-label">Entrega el equipo (FixTrack)</p>
+        <p class="sheet__signature-name">Nombre y firma</p>
+    </div>
+</section>
+
+<footer class="sheet__footer">
+    <p>Comprobante interno de entrega del servicio. No es una factura ni un comprobante fiscal o tributario.</p>
+    <p class="sheet__mono">@order.Number</p>
+</footer>

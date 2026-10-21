@@ -1,0 +1,47 @@
+@using FixTrack.Web.Security
+@*
+    Plantilla de documento A4 para las fichas de servicio. No usa el menú ni la barra de la aplicación: en pantalla
+    muestra una barra de acciones y la hoja; al imprimir (o guardar como PDF) solo sale la hoja.
+*@
+@{
+    var title = ViewData["Title"] as string ?? "Ficha de servicio";
+    var backUrl = ViewData["BackUrl"] as string ?? Url.Action("Index", "ServiceOrders");
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>@title · FixTrack</title>
+    <script nonce="@Context.CspNonce()">
+        // Mismo tema que el resto de FixTrack (solo afecta al fondo en pantalla: la hoja siempre es blanca).
+        try {
+            const theme = localStorage.getItem("fixtrack-theme");
+            if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+        } catch { }
+    </script>
+    <link rel="stylesheet" href="~/css/sheets.css" asp-append-version="true" />
+    <link rel="icon" href="~/favicon.svg" type="image/svg+xml" />
+</head>
+<body class="sheet-page">
+    <div class="sheet-toolbar" role="region" aria-label="Acciones del documento">
+        <a class="sheet-button" href="@backUrl">
+            <portfolio-icon name="arrow-left" />
+            Volver a la orden
+        </a>
+        <p class="sheet-toolbar__hint">Para obtener un PDF, elige «Guardar como PDF» como destino en el diálogo de impresión.</p>
+        <button class="sheet-button sheet-button--primary" type="button" data-print>
+            <portfolio-icon name="printer" />
+            Imprimir o guardar PDF
+        </button>
+    </div>
+
+    <main class="sheet" id="main">
+        @RenderBody()
+    </main>
+
+    <script src="~/js/sheets.js" asp-append-version="true" defer></script>
+</body>
+</html>

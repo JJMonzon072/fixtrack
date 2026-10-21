@@ -3,6 +3,7 @@
 @using FixTrack.Web.Services
 @model ServiceOrderDetailsViewModel
 @inject DateDisplay Dates
+@inject Microsoft.Extensions.Options.IOptions<FixTrack.Web.Portfolio.PortfolioFeatures> Portfolio
 @{
     var order = Model.Order;
     var device = order.Device;
@@ -73,6 +74,10 @@
                 Cambiar estado
             </a>
         </div>
+    }
+    @if (Portfolio.Value.PrintableSheets)
+    {
+        <partial name="_OrderDocuments" model="order" />
     }
 </header>
 
