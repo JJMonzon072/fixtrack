@@ -32,6 +32,9 @@ try
         return await ConsoleCommands.RunAsync(app, args);
     }
 
+    // Antes de que Data Protection cargue (o cree) claves: el certificado configurado debe descifrar las guardadas.
+    app.Services.GetRequiredService<DataProtectionKeyCheck>().EnsureReadable();
+
     // Primero: el esquema (https) y la IP real del cliente, si la solicitud llega desde un proxy confiable.
     app.UseReverseProxySupport();
 

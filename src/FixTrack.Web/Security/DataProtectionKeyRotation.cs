@@ -16,19 +16,35 @@ namespace FixTrack.Web.Security;
 /// </list>
 /// En un primer despliegue, sin sesiones reales, ambos pasos pueden hacerse a la vez. Con usuarios trabajando, conviene
 /// revocar después de la propagación y de la vida de las sesiones (2 horas de inactividad).
+/// <para>
+/// Si hay claves vigentes que el certificado configurado no descifra (certificado equivocado, perdido o filtrado), no
+/// hace nada salvo que se pida revocarlas: así un certificado equivocado no deja claves que después fallen. La instancia
+/// en ejecución conserva su anillo de claves en memoria: después de revocar hay que reiniciarla.
+/// </para>
 /// </summary>
 public sealed class DataProtectionKeyRotation(
     IKeyManager keyManager,
     DataProtectionKeysDbContext keys,
     IOptions<KeyManagementOptions> options,
     DataProtectionSetup.Settings settings,
+    DataProtectionKeyCheck checker,
     TimeProvider clock)
 {
     private const string EncryptedMarker = "<encryptedSecret";
 
     /// <summary>Estado de una clave, sin su material.</summary>
-    public sealed record KeyStatus(Guid Id, DateTimeOffset CreatedAt, DateTimeOffset ActivatesAt, DateTimeOffset ExpiresAt, bool IsEncrypted, bool IsRevoked);
+    /// <param name="IsReadable">¿Los certificados configurados descifran su material? Las claves sin cifrar siempre se leen.</param>
+    public sealed record KeyStatus(
+        Guid Id,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset ActivatesAt,
+        DateTimeOffset ExpiresAt,
+        bool IsEncrypted,
+        bool IsRevoked,
+        bool IsReadable);
 
+    /// <param name="Configured">Falso si no hay certificado ni almacén en la base.</param>
+    /// <param name="Problem">Motivo por el que no se hizo nada; <c>null</c> si la operación se completó.</param>
     public sealed record Result(bool Configured, string? Problem, Guid? CreatedKey, IReadOnlyList<Guid> RevokedKeys, IReadOnlyList<KeyStatus> Keys);
 
     public async Task<IReadOnlyList<KeyStatus>> ListAsync(CancellationToken cancellationToken)
@@ -36,11 +52,22 @@ public sealed class DataProtectionKeyRotation(
         var encrypted = await EncryptedKeyIdsAsync(cancellationToken);
         return [.. keyManager.GetAllKeys()
             .OrderBy(key => key.CreationDate)
-            .Select(key => new KeyStatus(key.KeyId, key.CreationDate, key.ActivationDate, key.ExpirationDate, encrypted.Contains(key.KeyId), key.IsRevoked))];
+            .Select(key => new KeyStatus(
+                key.KeyId,
+                key.CreationDate,
+                key.ActivationDate,
+                key.ExpirationDate,
+                encrypted.Contains(key.KeyId),
+                key.IsRevoked,
+                DataProtectionKeyCheck.CanRead(key)))];
     }
 
     /// <param name="revokeUnencrypted">Revoca las claves guardadas sin cifrar (las sesiones emitidas con ellas terminan).</param>
-    public async Task<Result> ProtectAsync(bool revokeUnencrypted, CancellationToken cancellationToken)
+    /// <param name="revokeUnreadable">
+    /// Revoca las claves vigentes que el certificado configurado no descifra: para cuando el certificado anterior se perdió o
+    /// se filtró. Sin esta opción, si existen, no se hace nada.
+    /// </param>
+    public async Task<Result> ProtectAsync(bool revokeUnencrypted, CancellationToken cancellationToken, bool revokeUnreadable = false)
     {
         if (settings.Store != DataProtectionSetup.KeyStore.Database || !settings.ProtectsKeys)
         {
@@ -49,14 +76,26 @@ public sealed class DataProtectionKeyRotation(
 
         var now = clock.GetUtcNow();
         var keys = await ListAsync(cancellationToken);
+        var unreadable = keys.Where(key => !key.IsRevoked && key.ExpiresAt > now && !key.IsReadable).Select(key => key.Id).ToList();
+        if (unreadable.Count > 0 && !revokeUnreadable)
+        {
+            return new Result(true, checker.UnreadableMessage(unreadable), null, [], keys);
+        }
+
+        var revoked = new List<Guid>();
+        foreach (var id in unreadable)
+        {
+            keyManager.RevokeKey(id, "El certificado que la cifró no está disponible (perdido o reemplazado).");
+            revoked.Add(id);
+        }
+
         Guid? created = null;
-        if (!keys.Any(key => key.IsEncrypted && !key.IsRevoked && key.ActivatesAt <= now && key.ExpiresAt > now))
+        if (!keys.Any(key => key.IsEncrypted && key.IsReadable && !key.IsRevoked && key.ActivatesAt <= now && key.ExpiresAt > now))
         {
             // Activa desde ahora: si no queda otra clave válida (tras revocar), se usa de inmediato.
             created = keyManager.CreateNewKey(now, now + options.Value.NewKeyLifetime).KeyId;
         }
 
-        var revoked = new List<Guid>();
         if (revokeUnencrypted)
         {
             foreach (var key in keys.Where(key => !key.IsEncrypted && !key.IsRevoked))
