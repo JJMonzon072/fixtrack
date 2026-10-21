@@ -72,7 +72,7 @@ Mientras los extras están desactivados:
 - **El proceso de las solicitudes es el mismo.** Las piezas de la API (respuestas JSON de error, límite de solicitudes) solo se activan con su flag y solo en las rutas `/api`.
 - **No hay cambios de esquema.** Ningún extra agrega tablas, columnas, índices ni migraciones: todo se calcula con el modelo existente.
 
-**Comprobación de extremo a extremo.** La versión base (`main`, commit 16e0262) y la nueva, con los extras desactivados, se ejecutaron sobre la misma base local y se compararon 22 pantallas. Incluyeron panel, órdenes con sus vistas y paginación, detalle de órdenes entregadas, en curso y canceladas, nueva orden, cola, clientes, equipos, técnicos, usuarios, auditoría, cambio de contraseña y rutas inexistentes. El HTML resultó **idéntico byte a byte**, salvo los valores que cambian en cada solicitud (nonce, tokens antifalsificación, el identificador del formulario y la hora de cálculo). Las capturas de 5 de esas pantallas en ambas versiones tienen el mismo SHA-256. El resultado está en `qa-evidence/portfolio-extras/academico/`.
+**Comprobación de extremo a extremo.** La versión base (`main`, commit 16e0262) y la nueva, con los extras desactivados, se ejecutaron sobre la misma base local y se compararon 22 pantallas. Incluyeron panel, órdenes con sus vistas y paginación, detalle de órdenes entregadas, en curso y canceladas, nueva orden, cola, clientes, equipos, técnicos, usuarios, auditoría, cambio de contraseña y rutas inexistentes. El HTML resultó **idéntico byte a byte**, salvo los valores que cambian en cada solicitud (nonce, tokens antifalsificación, el identificador del formulario y la hora de cálculo). Las capturas de 5 de esas pantallas en ambas versiones tienen el mismo SHA-256. El resultado está en las evidencias locales de QA (`qa-evidence/portfolio-extras/academico/`; como en las demás fases, la carpeta `qa-evidence/` queda fuera del repositorio).
 
 ## 3. Arquitectura
 
@@ -350,7 +350,7 @@ El orden es una lista cerrada y el Id desempata siempre, así que la paginación
 }
 ```
 
-*Ejemplo ficticio: respuesta real de `GET /api/v1/ordenes?estado=entregada&orden=-prioridad&porPagina=3` sobre la base local de demostración, recortada al primer elemento (completa en `qa-evidence/portfolio-extras/api/01-ordenes-listado.json`). Los nombres llevan "(demo)".*
+*Ejemplo ficticio: respuesta real de `GET /api/v1/ordenes?estado=entregada&orden=-prioridad&porPagina=3` sobre la base local de demostración, recortada al primer elemento (completa en las evidencias locales, `api/01-ordenes-listado.json`). Los nombres llevan "(demo)".*
 
 **`GET /api/v1/ordenes/{id}`**: detalle.
 
@@ -415,7 +415,7 @@ El orden es una lista cerrada y el Id desempata siempre, así que la paginación
 
 ### 7.5 Probarla en local
 
-Con la API habilitada y la sesión iniciada en el navegador, basta con abrir `http://localhost:5104/api/v1/ordenes?porPagina=5`. Desde la terminal hay que obtener primero la cookie con el formulario de inicio de sesión (token antifalsificación incluido) y reutilizarla. `qa-evidence/portfolio-extras/` contiene respuestas reales de la base de demostración.
+Con la API habilitada y la sesión iniciada en el navegador, basta con abrir `http://localhost:5104/api/v1/ordenes?porPagina=5`. Desde la terminal hay que obtener primero la cookie con el formulario de inicio de sesión (token antifalsificación incluido) y reutilizarla. Las evidencias locales (`qa-evidence/portfolio-extras/api/`) guardan respuestas reales de la base de demostración.
 
 No se publica documentación interactiva (Swagger u OpenAPI): este documento describe el contrato, y las pruebas de `ReadApiTests` lo verifican.
 
@@ -471,7 +471,7 @@ Hay **212 casos** de los extras, dentro de los 835 de la solución. Con SQL Serv
 
 Las pruebas que escriben datos usan SQLite en memoria o bases SQL Server desechables. Nunca tocan FixTrackDB. CI no necesita credenciales de Somee.
 
-`qa-evidence/portfolio-extras/` contiene:
+Las evidencias de QA de esta fase están en `qa-evidence/portfolio-extras/`, una carpeta local que, como en las fases anteriores, queda fuera del repositorio (`.gitignore`). Contiene:
 
 - capturas reales (Chrome sin interfaz, base local de demostración con datos ficticios marcados "(demo)" y extras habilitados solo en local);
 - los PDF A4 generados por el navegador y respuestas de la API;

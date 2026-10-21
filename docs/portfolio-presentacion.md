@@ -86,7 +86,7 @@ Las dependencias apuntan hacia el dominio. Las consultas pesadas (panel, cola, r
   - CSRF, encabezados y resiliencia ante una base caída;
   - los contratos exactos de la API y la protección del CSV.
 - **GitHub Actions:** compila y prueba en cada push, ejecuta las pruebas contra un SQL Server efímero y construye y prueba la imagen Docker.
-- **Evidencias de QA:** capturas reales con su manifiesto (commit, navegador, dimensiones y SHA-256) en `qa-evidence/`.
+- **Evidencias de QA:** capturas reales con su manifiesto (commit, navegador, dimensiones y SHA-256) en la carpeta local `qa-evidence/`, que queda fuera del repositorio.
 
 ## Cómo demostrar el proyecto
 
