@@ -1,8 +1,11 @@
 using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
+using FixTrack.Application.Common;
 using FixTrack.Application.Security;
+using FixTrack.Domain.Auditing;
 using FixTrack.Infrastructure.Persistence;
+using FixTrack.Web.Hosting;
 using FixTrack.Web.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -219,6 +222,42 @@ public sealed partial class ReadOnlyRoleTests(FixTrackWebApplicationFactory fact
         Assert.Contains("href=\"/usuarios\"", html);
         Assert.Contains("href=\"/auditoria\"", html);
     }
+
+    [Fact]
+    public async Task The_console_command_creates_an_audited_read_only_account_and_validates_its_data()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var accounts = scope.ServiceProvider.GetRequiredService<IUserAccountService>();
+        var email = $"manual-{Guid.NewGuid():N}@fixtrack.test";
+        var password = TestAccounts.RandomPassword();
+
+        var mismatch = await accounts.CreateReadOnlyAccountAsync(email, "Manual De Usuario", password, password + "x", Token);
+        var weak = await accounts.CreateReadOnlyAccountAsync(email, "Manual De Usuario", "debil", "debil", Token);
+        var created = await accounts.CreateReadOnlyAccountAsync($" {email.ToUpperInvariant()} ", "Manual De Usuario", password, password, Token);
+        var duplicate = await accounts.CreateReadOnlyAccountAsync(email, "Otra Persona", password, password, Token);
+
+        Assert.Equal(CommandStatus.Invalid, mismatch.Status);
+        Assert.Equal(CommandStatus.Invalid, weak.Status);
+        Assert.Contains(weak.Errors.Values, error => error.Contains("12 caracteres", StringComparison.Ordinal));
+        Assert.Equal(CommandStatus.Succeeded, created.Status);
+        Assert.Equal(CommandStatus.Invalid, duplicate.Status);
+
+        var account = (await accounts.ListAsync(Token)).Single(item => item.Email == email);
+        Assert.Equal((Roles.ReadOnly, true, "Manual De Usuario"), (account.Role, account.IsEnabled, account.FullName));
+        var audit = await scope.ServiceProvider.GetRequiredService<FixTrackDbContext>().AuditEvents
+            .SingleAsync(item => item.EntityId == account.Id, Token);
+        Assert.Equal(AuditActions.AccountCreated, audit.Action);
+        Assert.Contains($"creada con rol {Roles.ReadOnly}", audit.Summary);
+        Assert.DoesNotContain(password, audit.Summary);
+
+        using var client = factory.CreateClient();
+        using var login = await AuthenticatedClients.LogInAsync(client, email, password);
+        Assert.Contains(Banner, await login.Content.ReadAsStringAsync(Token));
+    }
+
+    [Fact]
+    public void The_console_command_replaces_the_web_server() =>
+        Assert.True(ConsoleCommands.IsCommand(["crear-cuenta-consulta", "manual@fixtrack.test", "Manual De Usuario"]));
 
     private async Task<List<UserAccount>> AccountsAsync()
     {

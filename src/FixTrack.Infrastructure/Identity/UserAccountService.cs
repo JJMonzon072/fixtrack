@@ -375,6 +375,19 @@ internal sealed class UserAccountService(
         };
     }
 
+    public Task<CommandResult<string>> CreateReadOnlyAccountAsync(
+        string? email,
+        string? fullName,
+        string? password,
+        string? confirmPassword,
+        CancellationToken cancellationToken) =>
+        AsAdministratorAsync(
+            actingUserId: null,
+            token => CreateAccountAsync(
+                new NewUserAccountInput(fullName, email, Roles.ReadOnly, password, confirmPassword), AuditActions.AccountCreated, token),
+            CommandResult<string>.Conflict,
+            cancellationToken);
+
     /// <summary>
     /// Ejecuta un cambio de cuentas en una transacción con el bloqueo de cuentas. Si <paramref name="actingUserId"/>
     /// no es nulo, primero comprueba que siga siendo un administrador habilitado. Un resultado no exitoso revierte todo.
