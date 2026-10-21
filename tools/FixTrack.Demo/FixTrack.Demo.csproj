@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Herramienta de la demostración local: prepara una base SQL Server desechable y carga datos ficticios con los mismos
+    servicios de aplicación que usa FixTrack. No forma parte de la imagen de producción ni del despliegue en Render.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>FixTrack.Demo</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Configuración, registro y opciones de Microsoft.Extensions: los mismos ensamblados de la imagen de ASP.NET Core. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FixTrack.Application\FixTrack.Application.csproj" />
+    <ProjectReference Include="..\..\src\FixTrack.Infrastructure\FixTrack.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FixTrack.Tests" />
+  </ItemGroup>
+
+</Project>
