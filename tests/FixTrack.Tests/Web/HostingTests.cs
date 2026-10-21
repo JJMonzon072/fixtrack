@@ -211,7 +211,24 @@ public sealed class HostingTests(FixTrackWebApplicationFactory factory)
         var warnings = logs.Messages.Where(message => message.Contains("Se ignoraron encabezados reenviados", StringComparison.Ordinal)).ToList();
         Assert.Single(warnings);
         Assert.Contains("10.99.0.7", warnings[0]);
+        Assert.Contains("Encabezados presentes (solo nombres): X-Forwarded-For, X-Forwarded-Proto.", warnings[0]);
         Assert.DoesNotContain("203.0.113.50", warnings[0]);
+    }
+
+    [Fact]
+    public async Task Failed_logins_record_the_client_address_resolved_through_the_trusted_proxy()
+    {
+        // Después del despliegue, un intento fallido desde el propio teléfono muestra si la aplicación ve la IP pública
+        // del visitante (proxy bien configurado) o la del balanceador.
+        var logs = new LogCapture();
+        using var client = BehindProxy("10.20.30.40", configure: builder => builder.ConfigureLogging(logging => logging.AddProvider(logs)))
+            .CreateClient(Https);
+
+        await LoginStatusesAsync(client, "X-Forwarded-For", "203.0.113.77");
+
+        var rejection = Assert.Single(logs.Messages, message => message.StartsWith("Inicio de sesión rechazado", StringComparison.Ordinal));
+        Assert.Contains("desde 203.0.113.77:", rejection);
+        Assert.DoesNotContain("10.20.30.40", rejection);
     }
 
     [Fact]

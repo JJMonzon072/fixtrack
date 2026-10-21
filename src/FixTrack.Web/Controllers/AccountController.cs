@@ -2,6 +2,7 @@ using System.Security.Claims;
 using FixTrack.Application.Common;
 using FixTrack.Application.Security;
 using FixTrack.Infrastructure.Identity;
+using FixTrack.Web.Hosting;
 using FixTrack.Web.Models.Account;
 using FixTrack.Web.Security;
 using FixTrack.Web.Services;
@@ -56,7 +57,7 @@ public sealed class AccountController(
         if (user is null)
         {
             failedLogins.SimulatePasswordCheck(form.Password);
-            logger.LogInformation("Inicio de sesión rechazado: el correo no tiene cuenta.");
+            logger.LogInformation("Inicio de sesión rechazado desde {ClientIp}: el correo no tiene cuenta.", ClientIp);
             return await LoginFailedAsync(email, returnUrl, startedAt, cancellationToken);
         }
 
@@ -74,17 +75,25 @@ public sealed class AccountController(
             // Identity rechaza sin calcular el hash: se calcula uno equivalente para no responder más rápido.
             failedLogins.SimulatePasswordCheck(form.Password);
             logger.LogWarning(
-                "Inicio de sesión rechazado: la cuenta {UserId} está {Reason}.",
+                "Inicio de sesión rechazado desde {ClientIp}: la cuenta {UserId} está {Reason}.",
+                ClientIp,
                 user.Id,
                 user.LockoutEnd == DateTimeOffset.MaxValue ? "deshabilitada" : "bloqueada temporalmente");
         }
         else
         {
-            logger.LogInformation("Inicio de sesión rechazado: contraseña incorrecta para la cuenta {UserId}.", user.Id);
+            logger.LogInformation("Inicio de sesión rechazado desde {ClientIp}: contraseña incorrecta para la cuenta {UserId}.", ClientIp, user.Id);
         }
 
         return await LoginFailedAsync(email, returnUrl, startedAt, cancellationToken);
     }
+
+    /// <summary>
+    /// Dirección del cliente tal como la resolvió la aplicación (detrás de un proxy confiable, la del visitante). Se registra
+    /// en los inicios fallidos: sirve para detectar ataques y para comprobar, después del despliegue, que el proxy está bien
+    /// configurado (la dirección debe ser la pública de quien intentó entrar, no la del balanceador).
+    /// </summary>
+    private string ClientIp => HttpContext.Connection.RemoteIpAddress is { } address ? ReverseProxy.Normalize(address).ToString() : "desconocida";
 
     [HttpPost("cerrar-sesion")]
     public async Task<IActionResult> Logout()
