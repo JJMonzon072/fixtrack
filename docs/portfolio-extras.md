@@ -59,7 +59,7 @@ PortfolioFeatures__Reports=true PortfolioFeatures__ReadOnlyApi=true \
 
 **Con Docker:** `docker run -e PortfolioFeatures__Reports=true …` junto con las variables habituales (cadena de conexión y certificado).
 
-> **No los habilites en Render** mientras QA no lo apruebe. Con user-secrets en Desarrollo, FixTrack se conecta a la base configurada para tu equipo: para explorar los extras con datos de prueba, usa una base local desechable (ver [Comandos](#11-comandos)).
+> **No los habilites en Render** mientras QA no lo apruebe. Con user-secrets en Desarrollo, FixTrack se conecta a la base configurada para tu equipo: para explorar los extras con datos de prueba, usa la [demostración local](demo-portafolio.md), que los habilita sobre una base propia con datos ficticios (`./demo/demo.sh iniciar`).
 
 Al iniciar con algún extra habilitado, la bitácora lo registra: `Extras de portafolio habilitados: PortfolioFeatures:Reports, …`.
 
@@ -452,7 +452,7 @@ Los extras no cambian Identity, roles, Data Protection, la cadena de conexión n
 
 ## 10. Pruebas y evidencias
 
-Hay **212 casos** de los extras, dentro de los 835 de la solución. Con SQL Server local pasan todos; sin él se omiten 3 de los extras. Las 623 pruebas de la versión académica siguen intactas.
+Hay **212 casos** de los extras, dentro de los 867 de la solución. Con SQL Server local pasan todos; sin él se omiten 3 de los extras. Las 623 pruebas de la versión académica siguen intactas.
 
 | Archivo | Casos | Qué verifica |
 | --- | --- | --- |
@@ -492,7 +492,7 @@ FIXTRACK_TEST_SQLSERVER_SERVER="Server=127.0.0.1,14333;User ID=sa;Password=<cont
 docker build -t fixtrack .
 ```
 
-Para explorar los extras con datos de prueba sin tocar FixTrackDB:
+Para explorar los extras con datos ficticios sin tocar FixTrackDB, lo más simple es la [demostración local](demo-portafolio.md): `./demo/demo.sh iniciar` levanta SQL Server, migra, carga los datos y abre FixTrack con los tres extras habilitados. A mano:
 
 1. Crea una base vacía en un SQL Server local.
 2. Inicia la aplicación con `ConnectionStrings__FixTrack` apuntando a esa base: la variable de entorno tiene prioridad sobre user-secrets.
