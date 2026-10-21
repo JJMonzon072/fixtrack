@@ -13,6 +13,9 @@ public sealed class PortfolioFeatures
     /// <summary>Máximo predeterminado de filas de una exportación CSV.</summary>
     public const int DefaultExportMaxRows = 5000;
 
+    /// <summary>Límite predeterminado de solicitudes por minuto y cuenta de la API.</summary>
+    public const int DefaultApiRequestsPerMinute = 120;
+
     /// <summary>Centro de reportes (<c>/reportes</c>) y su exportación CSV.</summary>
     public bool Reports { get; set; }
 
@@ -24,6 +27,9 @@ public sealed class PortfolioFeatures
 
     /// <summary>Máximo de órdenes de una exportación CSV; si el resultado es mayor, no se exporta y se avisa.</summary>
     public int ExportMaxRows { get; set; } = DefaultExportMaxRows;
+
+    /// <summary>Solicitudes por minuto y cuenta que acepta la API de consulta (429 al superarlas).</summary>
+    public int ApiRequestsPerMinute { get; set; } = DefaultApiRequestsPerMinute;
 
     public bool IsEnabled(PortfolioFeature feature) => feature switch
     {
