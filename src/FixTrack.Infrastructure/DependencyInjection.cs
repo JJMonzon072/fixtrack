@@ -55,6 +55,7 @@ public static class DependencyInjection
         // caída (ver DatabaseAvailability). Una solicitud además se corta a los 30 s (UseRequestTimeouts).
         services.AddSingleton<DatabaseAvailability>();
         services.AddSingleton<DatabaseCircuitInterceptor>();
+        services.AddSingleton<DatabaseCommandMonitor>();
         var mainConnection = new SqlConnectionStringBuilder(connectionString);
         mainConnection.ConnectTimeout = Math.Min(mainConnection.ConnectTimeout, ConnectTimeoutSeconds);
         services.AddDbContext<FixTrackDbContext>((provider, options) => options
@@ -63,7 +64,7 @@ public static class DependencyInjection
                 sql => sql
                     .CommandTimeout(CommandTimeoutSeconds)
                     .EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorNumbersToAdd: null))
-            .AddInterceptors(provider.GetRequiredService<DatabaseCircuitInterceptor>())
+            .AddInterceptors(provider.GetRequiredService<DatabaseCircuitInterceptor>(), provider.GetRequiredService<DatabaseCommandMonitor>())
             .ConfigureWarnings(QuietExpectedFailures));
 
         // Claves de Data Protection: falla rápido si la base no responde (ver DataProtectionKeysDbContext).
@@ -75,7 +76,7 @@ public static class DependencyInjection
                 sql => sql
                     .CommandTimeout(DataProtectionKeysTimeoutSeconds)
                     .EnableRetryOnFailure(maxRetryCount: 1, maxRetryDelay: TimeSpan.FromSeconds(1), errorNumbersToAdd: null))
-            .AddInterceptors(provider.GetRequiredService<DatabaseCircuitInterceptor>())
+            .AddInterceptors(provider.GetRequiredService<DatabaseCircuitInterceptor>(), provider.GetRequiredService<DatabaseCommandMonitor>())
             .ConfigureWarnings(QuietExpectedFailures));
 
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();

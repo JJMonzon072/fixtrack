@@ -17,7 +17,7 @@ using Microsoft.Extensions.Options;
 namespace FixTrack.Tests.Web;
 
 /// <summary>Claves de Data Protection cifradas con un certificado, compatibilidad con las anteriores y rotación.</summary>
-public sealed class DataProtectionTests
+public sealed partial class DataProtectionTests
 {
     private const string Purpose = "FixTrack.Pruebas";
 

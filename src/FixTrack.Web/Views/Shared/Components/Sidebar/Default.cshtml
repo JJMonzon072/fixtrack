@@ -2,12 +2,14 @@
 
 <aside id="sidebar" class="sidebar" aria-label="Menú principal" data-sidebar>
     <div class="sidebar__header">
-        <a class="brand" asp-controller="Dashboard" asp-action="Index" aria-label="FixTrack, ir al panel">
+        @* El nombre accesible incluye el texto visible (WCAG 2.5.3): quien usa control por voz puede decir "FixTrack". *@
+        <a class="brand" asp-controller="Dashboard" asp-action="Index">
             <partial name="_LogoMark" />
             <span class="brand__text">
                 <span class="brand__name">FixTrack</span>
                 <span class="brand__tagline">Servicio técnico</span>
             </span>
+            <span class="visually-hidden">: ir al panel</span>
         </a>
         <button class="icon-button sidebar__close" type="button" aria-label="Cerrar menú de navegación" data-sidebar-close>
             <icon name="x" />

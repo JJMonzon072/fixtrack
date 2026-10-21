@@ -7,9 +7,11 @@
     var name = User.FindFirstValue(FixTrackClaimsPrincipalFactory.FullNameClaim) ?? email;
     var role = Roles.All.FirstOrDefault(User.IsInRole) ?? "Sin rol";
     <details class="user-menu" data-user-menu>
-        <summary class="user-menu__button" aria-label="Cuenta de @name">
+        @* El nombre accesible (texto oculto) incluye el nombre visible y existe también en móvil, donde el nombre se oculta. *@
+        <summary class="user-menu__button">
             <span class="avatar avatar--small" aria-hidden="true">@ContactDisplay.Initials(name)</span>
-            <span class="user-menu__name">@name</span>
+            <span class="user-menu__name" aria-hidden="true">@name</span>
+            <span class="visually-hidden">@name: menú de la cuenta</span>
             <icon name="chevron-down" class="user-menu__chevron" />
         </summary>
         <div class="user-menu__panel">

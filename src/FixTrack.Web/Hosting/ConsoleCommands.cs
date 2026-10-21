@@ -15,7 +15,8 @@ namespace FixTrack.Web.Hosting;
 /// mostrarla. No hace nada si ya existe un administrador habilitado.</item>
 /// <item><c>aplicar-migraciones</c>: aplica a la base configurada las migraciones pendientes.</item>
 /// <item><c>proteger-claves</c>: crea una clave de Data Protection cifrada con el certificado configurado; con
-/// <c>--revocar-sin-cifrar</c>, además revoca las claves guardadas sin cifrar.</item>
+/// <c>--revocar-sin-cifrar</c>, además revoca las claves guardadas sin cifrar; con <c>--revocar-ilegibles</c>, las que el
+/// certificado configurado no descifra (si el anterior se perdió o se filtró).</item>
 /// <item><c>exportar-respaldo &lt;carpeta&gt;</c>: respaldo lógico de la base (solo lectura) en una carpeta fuera del
 /// repositorio. <c>verificar-respaldo &lt;archivo&gt;</c> comprueba un respaldo sin conectarse a la base, y
 /// <c>restaurar-respaldo &lt;archivo&gt;</c> lo carga en una base vacía (ver <see cref="DatabaseBackup"/>).</item>
@@ -41,7 +42,10 @@ public static class ConsoleCommands
         return args[0] switch
         {
             CreateAdministrator => await CreateAdministratorAsync(scope.ServiceProvider, app.Configuration),
-            ProtectKeys => await ProtectKeysAsync(scope.ServiceProvider, args.Contains(RevokeUnencryptedOption)),
+            ProtectKeys => await ProtectKeysAsync(
+                scope.ServiceProvider,
+                args.Contains(RevokeUnencryptedOption),
+                args.Contains(DataProtectionKeyCheck.RevokeUnreadableOption)),
             ExportBackup or VerifyBackup or RestoreBackup => await BackupAsync(scope.ServiceProvider, args),
             _ => await ApplyMigrationsAsync(scope.ServiceProvider),
         };
@@ -180,13 +184,21 @@ public static class ConsoleCommands
         return 0;
     }
 
-    private static async Task<int> ProtectKeysAsync(IServiceProvider services, bool revokeUnencrypted)
+    private static async Task<int> ProtectKeysAsync(IServiceProvider services, bool revokeUnencrypted, bool revokeUnreadable)
     {
-        var result = await services.GetRequiredService<DataProtectionKeyRotation>().ProtectAsync(revokeUnencrypted, CancellationToken.None);
+        var result = await services.GetRequiredService<DataProtectionKeyRotation>()
+            .ProtectAsync(revokeUnencrypted, CancellationToken.None, revokeUnreadable);
         if (!result.Configured)
         {
             Console.Error.WriteLine(result.Problem);
             return 2;
+        }
+
+        if (result.Problem is not null)
+        {
+            Console.Error.WriteLine(result.Problem);
+            WriteKeys(result.Keys);
+            return 1;
         }
 
         Console.WriteLine(result.CreatedKey is { } created
@@ -194,16 +206,12 @@ public static class ConsoleCommands
             : "Ya hay una clave cifrada activa: no se creó otra.");
         if (result.RevokedKeys.Count > 0)
         {
-            Console.WriteLine($"Claves sin cifrar revocadas: {result.RevokedKeys.Count}. Las sesiones emitidas con ellas deben iniciarse de nuevo.");
+            Console.WriteLine(
+                $"Claves revocadas: {result.RevokedKeys.Count}. Las sesiones emitidas con ellas deben iniciarse de nuevo. " +
+                "Reinicia la aplicación en ejecución: conserva el anillo de claves en memoria.");
         }
 
-        Console.WriteLine("Claves del anillo (sin su material):");
-        foreach (var key in result.Keys)
-        {
-            Console.WriteLine(
-                $" - {key.Id:D} · creada {key.CreatedAt:yyyy-MM-dd HH:mm} UTC · activa desde {key.ActivatesAt:yyyy-MM-dd HH:mm} · " +
-                $"expira {key.ExpiresAt:yyyy-MM-dd} · {(key.IsEncrypted ? "cifrada" : "SIN CIFRAR")}{(key.IsRevoked ? " · revocada" : string.Empty)}");
-        }
+        WriteKeys(result.Keys);
 
         if (!revokeUnencrypted && result.Keys.Any(key => !key.IsEncrypted && !key.IsRevoked))
         {
@@ -214,6 +222,18 @@ public static class ConsoleCommands
         }
 
         return 0;
+    }
+
+    private static void WriteKeys(IEnumerable<DataProtectionKeyRotation.KeyStatus> keys)
+    {
+        Console.WriteLine("Claves del anillo (sin su material):");
+        foreach (var key in keys)
+        {
+            Console.WriteLine(
+                $" - {key.Id:D} · creada {key.CreatedAt:yyyy-MM-dd HH:mm} UTC · activa desde {key.ActivatesAt:yyyy-MM-dd HH:mm} · " +
+                $"expira {key.ExpiresAt:yyyy-MM-dd} · {(key.IsEncrypted ? "cifrada" : "SIN CIFRAR")}" +
+                $"{(key.IsReadable ? string.Empty : " · ILEGIBLE con este certificado")}{(key.IsRevoked ? " · revocada" : string.Empty)}");
+        }
     }
 
     /// <summary>Lee una línea sin mostrar lo que se escribe.</summary>

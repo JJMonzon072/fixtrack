@@ -55,7 +55,7 @@ public static class ReverseProxy
     {
         var section = configuration.GetSection(Section);
         var proxies = Values(section.GetSection("KnownProxies"))
-            .Select(value => IPAddress.TryParse(value, out var address) ? address : throw Invalid("KnownProxies", value))
+            .Select(value => IPAddress.TryParse(value, out var address) ? Normalize(address) : throw Invalid("KnownProxies", value))
             .ToList();
         var networks = Values(section.GetSection("KnownNetworks"))
             .Select(value => System.Net.IPNetwork.TryParse(value, out var network) ? network : throw Invalid("KnownNetworks", value))
@@ -120,7 +120,7 @@ public static class ReverseProxy
             var remote = context.Connection.RemoteIpAddress;
             if (!settings.Trusts(remote) && HasForwardedHeaders(context.Request.Headers, settings.ClientIpHeader))
             {
-                ignored.Report(remote);
+                ignored.Report(remote, ForwardingHeaderNames(context.Request.Headers, settings.ClientIpHeader));
             }
 
             return next(context);
@@ -128,6 +128,19 @@ public static class ReverseProxy
 
         return settings.HasTrustedProxies ? app.UseForwardedHeaders() : app;
     }
+
+    /// <summary>
+    /// Una IPv4 escrita en notación IPv6 (<c>::ffff:10.1.2.3</c>, como la muestran algunas plataformas) se trata como la
+    /// IPv4: así coincide con la dirección de la conexión, que también se compara en IPv4.
+    /// </summary>
+    public static IPAddress Normalize(IPAddress address) => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
+
+    /// <summary>Encabezados que suelen agregar los proxies y redes de borde; solo se registran sus nombres.</summary>
+    private static readonly string[] KnownForwardingHeaders =
+        ["X-Forwarded-For", "X-Forwarded-Proto", "X-Forwarded-Host", "Forwarded", "X-Real-IP", "True-Client-IP", "CF-Connecting-IP"];
+
+    private static IReadOnlyList<string> ForwardingHeaderNames(IHeaderDictionary headers, string clientIpHeader) =>
+        [.. KnownForwardingHeaders.Append(clientIpHeader).Distinct(StringComparer.OrdinalIgnoreCase).Where(headers.ContainsKey)];
 
     private static bool HasForwardedHeaders(IHeaderDictionary headers, string clientIpHeader) =>
         headers.ContainsKey(ForwardedHeadersDefaults.XForwardedProtoHeaderName)
@@ -143,14 +156,15 @@ public static class ReverseProxy
 
 /// <summary>
 /// Registra, como máximo una vez cada 15 minutos, que llegaron encabezados reenviados desde una dirección no confiable.
-/// Solo se anota la dirección del extremo que abrió la conexión, no el contenido de los encabezados.
+/// Solo se anotan la dirección del extremo que abrió la conexión y los nombres de los encabezados, nunca su contenido:
+/// con eso se configura el proxy (KnownProxies o KnownNetworks) y, si hace falta, ReverseProxy:ClientIpHeader.
 /// </summary>
 public sealed class IgnoredForwardedHeadersLog(ILogger<IgnoredForwardedHeadersLog> logger, TimeProvider clock)
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(15);
     private long _nextReport = long.MinValue;
 
-    public void Report(IPAddress? remote)
+    public void Report(IPAddress? remote, IReadOnlyCollection<string> headerNames)
     {
         var now = clock.GetUtcNow().UtcTicks;
         var next = Interlocked.Read(ref _nextReport);
@@ -161,7 +175,9 @@ public sealed class IgnoredForwardedHeadersLog(ILogger<IgnoredForwardedHeadersLo
 
         logger.LogWarning(
             "Se ignoraron encabezados reenviados (X-Forwarded-*) recibidos desde {RemoteAddress}: esa dirección no está en " +
-            "ReverseProxy:KnownProxies ni en ReverseProxy:KnownNetworks. Si es el proxy de la plataforma, agrégala a la configuración.",
-            remote?.ToString() ?? "desconocida");
+            "ReverseProxy:KnownProxies ni en ReverseProxy:KnownNetworks. Si es el proxy de la plataforma, agrégala a la configuración. " +
+            "Encabezados presentes (solo nombres): {Headers}.",
+            remote is null ? "desconocida" : ReverseProxy.Normalize(remote).ToString(),
+            string.Join(", ", headerNames));
     }
 }

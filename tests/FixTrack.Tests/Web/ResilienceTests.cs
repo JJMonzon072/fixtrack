@@ -153,6 +153,60 @@ public sealed class ResilienceTests(FixTrackWebApplicationFactory factory) : ICl
         Assert.True(error.RetryAfter > TimeSpan.Zero);
     }
 
+    [Fact]
+    public async Task A_server_that_accepts_connections_but_does_not_answer_opens_the_breaker()
+    {
+        var clock = new FixedClock(DateTimeOffset.UtcNow);
+        var availability = new DatabaseAvailability(clock);
+        var frozen = new FrozenServer { Active = true };
+
+        // Sin una conexión abierta de antemano: EF abre y cierra en cada operación, como con SQL Server y su pool.
+        await using var context = new FixTrackDbContext(new DbContextOptionsBuilder<FixTrackDbContext>()
+            .UseSqlite("Data Source=:memory:")
+            .AddInterceptors(frozen, new DatabaseCommandMonitor(availability), new DatabaseCircuitInterceptor(availability))
+            .Options);
+
+        for (var attempt = 0; attempt < DatabaseAvailability.FailureThreshold; attempt++)
+        {
+            // Abrir una conexión (del pool, sin llegar al servidor) no prueba que la base responda.
+            await context.Database.OpenConnectionAsync(Token);
+            await context.Database.CloseConnectionAsync();
+            await Assert.ThrowsAsync<TimeoutException>(() => context.Database.ExecuteSqlRawAsync("SELECT 1", Token));
+        }
+
+        var blocked = await Assert.ThrowsAsync<DatabaseUnavailableException>(() => context.Database.ExecuteSqlRawAsync("SELECT 1", Token));
+        var commandsWhileOpen = frozen.Commands;
+
+        frozen.Active = false;
+        clock.Advance(DatabaseAvailability.BreakDuration);
+        await context.Database.ExecuteSqlRawAsync("SELECT 1", Token);
+
+        // Un comando correcto restablece el conteo: dos fallos nuevos no abren el disyuntor.
+        frozen.Active = true;
+        await Assert.ThrowsAsync<TimeoutException>(() => context.Database.ExecuteSqlRawAsync("SELECT 1", Token));
+        await Assert.ThrowsAsync<TimeoutException>(() => context.Database.ExecuteSqlRawAsync("SELECT 1", Token));
+
+        Assert.True(blocked.RetryAfter > TimeSpan.Zero);
+        Assert.Equal(DatabaseAvailability.FailureThreshold, commandsWhileOpen);
+        Assert.False(availability.IsOpen(out _));
+    }
+
+    [Fact]
+    public async Task The_503_page_is_sent_even_if_the_request_was_already_cut_by_the_time_limit()
+    {
+        var body = new MemoryStream();
+        var context = new DefaultHttpContext { Response = { Body = body } };
+        context.Request.Method = "GET";
+        context.Request.Path = "/ordenes";
+
+        var handled = await new DatabaseUnavailableHandler(new CapturingLogger<DatabaseUnavailableHandler>())
+            .TryHandleAsync(context, new DatabaseUnavailableException("sin respuesta", TimeSpan.FromSeconds(15)), new CancellationToken(canceled: true));
+
+        Assert.True(handled);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+        Assert.Contains("Servicio temporalmente no disponible", System.Text.Encoding.UTF8.GetString(body.ToArray()));
+    }
+
     [Theory]
     [MemberData(nameof(UnavailableExceptions))]
     public void Database_outages_are_recognized_also_when_wrapped(Exception exception, bool expected) =>
@@ -211,6 +265,7 @@ public sealed class ResilienceTests(FixTrackWebApplicationFactory factory) : ICl
         Assert.Equal(DependencyInjection.CommandTimeoutSeconds, context.Database.GetCommandTimeout());
         Assert.Equal(DependencyInjection.ConnectTimeoutSeconds, new SqlConnectionStringBuilder(context.Database.GetConnectionString()).ConnectTimeout);
         Assert.Contains(interceptors, interceptor => interceptor is DatabaseCircuitInterceptor);
+        Assert.Contains(interceptors, interceptor => interceptor is DatabaseCommandMonitor);
         Assert.True(context.Database.CreateExecutionStrategy().RetriesOnFailure);
 
         // Una caída no repite la traza en cada conexión, consulta o guardado fallido (ver QuietExpectedFailures).
@@ -245,6 +300,26 @@ public sealed class ResilienceTests(FixTrackWebApplicationFactory factory) : ICl
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
             _entries.Enqueue(new LogEntry(logLevel, formatter(state, exception), exception));
+    }
+
+    /// <summary>Un servidor que acepta la conexión pero no responde: cada comando agota su tiempo.</summary>
+    private sealed class FrozenServer : DbCommandInterceptor
+    {
+        private int _commands;
+
+        public volatile bool Active;
+
+        public int Commands => _commands;
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _commands);
+            return Active ? throw new TimeoutException("El servidor no respondió (simulado).") : ValueTask.FromResult(result);
+        }
     }
 
     /// <summary>Hace que la base "deje de responder" mientras está activa.</summary>

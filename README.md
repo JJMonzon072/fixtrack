@@ -20,7 +20,8 @@ El desarrollo avanza por fases y cada entrega pasa por una revisión de QA.
 | 2A | SQL Server con Entity Framework Core, modelo de datos inicial y módulo **Clientes** | Aprobada e integrada a `main` (PR #2) |
 | 2B | Módulos **Equipos** y **Técnicos** e integración de equipos en el detalle del cliente | Aprobada e integrada a `main` (PR #3) |
 | 3 | **Órdenes de servicio** completas, **algoritmo de priorización** y cola de trabajo, **panel con indicadores reales**, **autenticación y roles**, preparación para **despliegue con Docker** | Aprobada e integrada a `main` (PR #4) |
-| 4 | **Endurecimiento y preparación para producción:** claves de sesión cifradas con certificado, inicio de sesión sin enumeración de cuentas, concurrencia en cuentas, clientes, equipos y técnicos, proxy explícito, **historial de asignaciones y auditoría**, resiliencia ante fallos de la base, cola calculada en SQL, **respaldos** y procedimiento de despliegue en Render | **Entregada para revisión** |
+| 4 | **Endurecimiento y preparación para producción:** claves de sesión cifradas con certificado, inicio de sesión sin enumeración de cuentas, concurrencia en cuentas, clientes, equipos y técnicos, proxy explícito, **historial de asignaciones y auditoría**, resiliencia ante fallos de la base, cola calculada en SQL, **respaldos** y procedimiento de despliegue en Render | Aprobada e integrada a `main` (PR #5) |
+| 5 | **Preparación del lanzamiento:** certificado definitivo y bóveda cifrada, ensayo completo de Data Protection y de recuperación sobre una copia, auditoría de Production con la imagen, descubrimiento del proxy, resiliencia ante un servidor que no responde, imagen ReadyToRun medida con los recursos de Render Free, accesibilidad (axe-core) y [checklist de lanzamiento](docs/checklist-lanzamiento.md) | **Entregada para revisión** |
 
 La aplicación guarda sus datos en **SQL Server** (FixTrackDB, alojada en Somee), con las nueve migraciones aplicadas. Todavía **no está publicada** en internet.
 
@@ -42,6 +43,7 @@ Documentación detallada:
 | [docs/arquitectura.md](docs/arquitectura.md) | Capas, recorrido de una solicitud, servicios, seguridad, permisos por rol y despliegue |
 | [docs/modelo-de-datos.md](docs/modelo-de-datos.md) | Tablas, relaciones, restricciones, migraciones, diagrama entidad-relación y diagrama de clases |
 | [docs/referencia-para-el-equipo.md](docs/referencia-para-el-equipo.md) | Resumen para preparar diagramas, manuales y la exposición |
+| [docs/checklist-lanzamiento.md](docs/checklist-lanzamiento.md) | Publicación en Render Free: estado de cada requisito, certificado, respaldos, variables, verificaciones, recuperación y lo que requiere al propietario |
 
 ## Requisitos
 
@@ -80,7 +82,7 @@ Abre **http://localhost:5104**. La aplicación pide iniciar sesión. Si la base 
 | Recargar automáticamente al editar | `dotnet watch --project src/FixTrack.Web` |
 | Ejecutar con HTTPS | `dotnet dev-certs https --trust` (solo la primera vez) y después `dotnet run --project src/FixTrack.Web --launch-profile https` → https://localhost:7171 |
 | Ejecutar la compilación Release | `dotnet run --project src/FixTrack.Web -c Release` |
-| Ejecutar la imagen Docker | Consulta [Despliegue con Docker](#despliegue-en-render) |
+| Ejecutar la imagen Docker | Consulta [Despliegue en Render](#despliegue-en-render) |
 
 ### HTTPS por entorno
 
@@ -215,7 +217,7 @@ dotnet run --project src/FixTrack.Web -c Release -- restaurar-respaldo ~/FixTrac
 
 ## Despliegue en Render
 
-> La aplicación **no está publicada**. Estos son los pasos preparados; no se han ejecutado en Render.
+> La aplicación **no está publicada**. El procedimiento completo, con lo ya verificado y lo que requiere al propietario, está en **[docs/checklist-lanzamiento.md](docs/checklist-lanzamiento.md)**.
 
 La imagen se construye con el `Dockerfile` de la raíz:
 
@@ -223,67 +225,60 @@ La imagen se construye con el `Dockerfile` de la raíz:
 docker build -t fixtrack .
 ```
 
-Características de la imagen: compilación multietapa con el SDK de .NET 10; imagen final `aspnet:10.0-noble-chiseled-extra` (sin shell, con ICU y zonas horarias), unos 255 MB; usuario sin privilegios (UID 1654); puerto 8080 o el de `PORT`; sin secretos ni certificados (`.dockerignore` excluye configuraciones locales, certificados, respaldos, pruebas, documentos y evidencias). Con la base inalcanzable, el contenedor escucha a los 7 segundos, responde 503 en milisegundos y usa unos 80 MiB de memoria. GitHub Actions construye la imagen y comprueba que arranca sin privilegios, que `/salud` responde, que las páginas exigen sesión, que sin base responde la página 503 sin inundar la bitácora y que sin certificado termina con un error.
+**Características de la imagen:**
 
-### Plan gratuito de Render: qué implica
+- **Compilación:** multietapa con el SDK de .NET 10, **ReadyToRun** (código nativo para la arquitectura de destino: amd64 en Render, arm64 en un Mac).
+- **Imagen final:** `aspnet:10.0-noble-chiseled-extra` (sin shell, con ICU y zonas horarias), unos 209 MB.
+- **Ejecución:** usuario sin privilegios (UID 1654); puerto 8080 o el de `PORT`; sin secretos ni certificados (`.dockerignore` excluye configuraciones locales, certificados, respaldos, pruebas, documentos y evidencias).
 
-Según la [documentación de Render](https://render.com/docs/free): el servicio se suspende tras 15 minutos sin visitas y tarda alrededor de un minuto en volver; hay 750 horas gratuitas al mes por espacio de trabajo; **no hay disco persistente, consola (shell) ni tareas puntuales**. Por eso las claves de sesión viven en la base y los comandos (`aplicar-migraciones`, `proteger-claves`, `crear-administrador`, `exportar-respaldo`) se ejecutan desde un equipo del equipo de desarrollo contra la misma base, no en Render. Render termina TLS en su balanceador y reenvía la solicitud por HTTP al puerto `PORT` (10000 por defecto).
+**Medido localmente con los recursos del plan gratuito** (`--cpus=0.1 --memory=512m`):
 
-### 1. Preparar el certificado de Data Protection (una vez)
+- escucha a los 16–18 s;
+- el primer inicio de sesión en frío tarda unos 15 s, y después cada página tarda 0.2–0.7 s;
+- usa unos 74 MiB de memoria;
+- con la base caída responde 503 en milisegundos.
 
-Con OpenSSL 3 (`openssl version`), en una carpeta **fuera del repositorio**:
+**Comprobaciones en GitHub Actions:** construye la imagen y comprueba que arranca sin privilegios, que `/salud` responde, que las páginas exigen sesión, que sin base responde la página 503 sin inundar la bitácora, y que sin certificado termina con un error.
+
+Resumen del despliegue (detalles en la checklist):
+
+1. **Plan gratuito:** 0.1 CPU, 512 MB, se suspende tras 15 minutos sin visitas, sin disco persistente, consola ni tareas puntuales. Por eso las claves de sesión viven en la base y los comandos (`aplicar-migraciones`, `proteger-claves`, `exportar-respaldo`…) se ejecutan desde el Mac contra la misma base, nunca en Render.
+2. **Servicio:** *Web Service* con Docker, rama `main`, plan Free, *Auto-Deploy* desactivado al principio, **Health Check Path `/salud`**. No se usa `/salud/bd`: Render reinicia la instancia tras 60 s de fallos y una caída de Somee no se arregla reiniciando.
+3. **Variables:**
+   - secretas: `ConnectionStrings__FixTrack`, `DataProtection__Certificate__Base64` y `DataProtection__Certificate__Password`;
+   - para el primer despliegue: `ReverseProxy__IgnoreForwardedHeaders=true`.
+
+   No uses un *Secret File* para el PFX: Render los copia al contexto de construcción de Docker.
+4. **Claves de FixTrackDB:** ya cifradas con el certificado (2026-10-21, con autorización y respaldos antes y después).
+5. **Después de publicar:** descubrir la dirección real del proxy en la bitácora y declararla. Hasta entonces no se envía HSTS, la cookie antifalsificación no es `Secure` y el límite de intentos de inicio de sesión se comparte entre todos.
+
+### Certificado de Data Protection
+
+El certificado definitivo ya existe y está guardado en la bóveda cifrada (ver la checklist). Para generar uno nuevo (rotación, pérdida o filtración), con OpenSSL 3 y **fuera del repositorio**, sin escribir la contraseña en la terminal ni en archivos:
 
 ```bash
-read -rs DP_PASSWORD && export DP_PASSWORD        # contraseña del PFX; no se muestra
-openssl req -x509 -newkey rsa:3072 -nodes -keyout dp.key -out dp.crt -days 1825 -subj "/CN=FixTrack Data Protection"
-openssl pkcs12 -export -inkey dp.key -in dp.crt -out fixtrack-dataprotection.pfx -passout env:DP_PASSWORD
-rm dp.key dp.crt
-base64 < fixtrack-dataprotection.pfx | tr -d '\n' > fixtrack-dataprotection.b64   # valor de DataProtection__Certificate__Base64
+PFX_PW=$(openssl rand -hex 32)
+printf 'add-generic-password -a "FixTrack" -s "fixtrack-dataprotection-pfx-AAAA" -w "%s"\n' "$PFX_PW" | security -i   # al Llavero, por stdin
+umask 077
+openssl req -x509 -newkey rsa:3072 -sha256 -nodes -keyout clave.pem -out fixtrack-dataprotection-AAAA.crt -days 1826 \
+  -subj "/CN=FixTrack Data Protection/O=FixTrack" -addext "basicConstraints=critical,CA:FALSE" -addext "keyUsage=critical,keyEncipherment,dataEncipherment"
+printf '%s' "$PFX_PW" | openssl pkcs12 -export -inkey clave.pem -in fixtrack-dataprotection-AAAA.crt -out fixtrack-dataprotection-AAAA.pfx \
+  -certpbe AES-256-CBC -keypbe AES-256-CBC -macalg sha256 -passout stdin
+rm -P clave.pem; unset PFX_PW
 ```
 
-Guarda el PFX y su contraseña en un gestor de contraseñas. **Si se pierden,** las claves cifradas no se pueden leer: se genera un certificado nuevo, se ejecuta `proteger-claves --revocar-sin-cifrar` con él y los usuarios vuelven a iniciar sesión; no se pierden datos del taller.
+**Qué comprueba la aplicación al iniciar:**
 
-### 2. Antes del primer despliegue, desde un equipo de desarrollo
+- Si el certificado configurado no descifra las claves vigentes de la base, **no arranca** y explica cómo corregirlo. Así un certificado equivocado no invalida sesiones ni deja claves inservibles, y en Render el despliegue falla conservando la versión anterior.
+- Desde 90 días antes del vencimiento lo avisa en la bitácora. Data Protection no valida la vigencia: un certificado vencido sigue funcionando.
 
-```bash
-dotnet run --project src/FixTrack.Web -c Release -- exportar-respaldo ~/FixTrack-respaldos     # respaldo previo
-dotnet run --project src/FixTrack.Web -c Release -- aplicar-migraciones                         # si hay pendientes
+**Comandos para las claves:**
 
-# Cifrar las claves de sesión con el certificado. En Desarrollo las claves son locales: se indica que use la base.
-export DataProtection__KeyStore=Database
-export DataProtection__Certificate__Base64="$(cat fixtrack-dataprotection.b64)"
-export DataProtection__Certificate__Password="$DP_PASSWORD"
-dotnet run --project src/FixTrack.Web -c Release -- proteger-claves --revocar-sin-cifrar
-unset DataProtection__Certificate__Base64 DataProtection__Certificate__Password DP_PASSWORD
-```
-
-`proteger-claves` crea una clave cifrada con el certificado y, con `--revocar-sin-cifrar`, revoca las claves que estaban sin cifrar (agrega una revocación, no borra filas): la clave cifrada se usa de inmediato. Las sesiones abiertas con las claves revocadas tienen que iniciarse de nuevo; antes del primer despliegue no hay ninguna que conservar. Sin `--revocar-sin-cifrar`, la clave cifrada empieza a usarse cuando termina su periodo de propagación (48 horas) y después se ejecuta otra vez con la opción. El comando muestra el estado de cada clave, sin su material.
-
-### 3. Crear el servicio en Render
-
-1. **New → Web Service**, conectado al repositorio de GitHub, rama `main` (después de la aprobación de QA), entorno **Docker**, plan **Free**.
-2. Variables del servicio (las tres primeras como secretas):
-   - `ConnectionStrings__FixTrack`
-   - `DataProtection__Certificate__Base64` (el contenido de `fixtrack-dataprotection.b64`) y `DataProtection__Certificate__Password`. Alternativa: subir el PFX como *Secret File* y usar `DataProtection__Certificate__Path`.
-   - `ReverseProxy__IgnoreForwardedHeaders=true` para el primer despliegue (ver el paso 5).
-3. **Health Check Path:** `/salud`. Render da por sana una respuesta 2xx o 3xx en 5 segundos y reinicia la instancia tras 60 segundos de fallos seguidos ([documentación](https://render.com/docs/health-checks)). Por eso **no** se usa `/salud/bd`: una caída temporal de Somee reiniciaría el servicio sin resolver nada.
-4. Desplegar y comprobar: `/salud` responde `Healthy`, `/salud/bd` responde `Healthy`, el inicio de sesión funciona con la cuenta del administrador y la bitácora no muestra errores de configuración.
-
-### 4. Comprobaciones después del primer despliegue
-
-- `curl -sI https://<servicio>.onrender.com/cuenta/iniciar-sesion` responde 200 con `Content-Security-Policy` y `Cache-Control: no-store`.
-- `http://` redirige a `https://` (lo hace Render).
-- La cookie `FixTrack.Sesion` es `Secure`, `HttpOnly` y `SameSite=Lax`.
-- Un Operador recibe 403 en `/usuarios` y `/auditoria`.
-- La página de una orden muestra la línea de tiempo con los autores.
-
-### 5. Configurar el proxy de Render como confiable
-
-FixTrack no inventa las direcciones del proxy de Render ni confía en rangos amplios por omisión. Con `ReverseProxy__IgnoreForwardedHeaders=true`, la aplicación funciona, pero no sabe que la solicitud original era HTTPS (no envía HSTS) y ve la dirección del proxy en lugar de la del cliente, así que el límite de 10 intentos de inicio de sesión por minuto se comparte entre todos los usuarios. Para corregirlo:
-
-1. En la bitácora de Render, busca la advertencia `Se ignoraron encabezados reenviados (X-Forwarded-*) recibidos desde <dirección>`. Se registra como máximo una vez cada 15 minutos; revisa varias para ver si la dirección cambia.
-2. Reemplaza `ReverseProxy__IgnoreForwardedHeaders` por `ReverseProxy__KnownProxies__0=<dirección>` (o `ReverseProxy__KnownNetworks__0=<red>/<prefijo>`, la más estrecha que cubra las direcciones observadas) y vuelve a desplegar.
-3. Comprueba que la respuesta HTTPS incluye `Strict-Transport-Security` y que la advertencia ya no aparece. Si Render cambia sus direcciones, la advertencia vuelve a aparecer y la aplicación sigue funcionando sin confiar en ellas.
+| Situación | Comando y pasos |
+| --- | --- |
+| Certificado perdido o filtrado | `proteger-claves --revocar-ilegibles` con el certificado nuevo. Revoca las claves que ya no se pueden leer y crea una nueva; todos inician sesión de nuevo |
+| Rotación planificada | Configurar el certificado nuevo y el anterior en `DataProtection__PreviousCertificates__0__*` |
+| Cualquier revocación con la aplicación publicada | Reiniciar la instancia: conserva el anillo de claves en memoria |
 
 ### Comprobaciones de salud
 
@@ -408,7 +403,7 @@ Toda la interfaz se construye desde `src/FixTrack.Web/wwwroot/css/site.css`, org
 - **Íconos:** sprite SVG con 71 íconos de [Lucide](https://lucide.dev). En las vistas se usan así: `<icon name="wrench" />`.
 - **Componentes:** botones, etiquetas de estado y prioridad, tarjetas, tablas con búsqueda, filtros y paginación (en móvil se convierten en tarjetas), formularios con resumen de errores, avisos, diálogos de confirmación nativos, estados vacíos, buscador con sugerencias (patrón *combobox* de ARIA), línea de tiempo con autores, desglose de puntuación, barras de distribución, registro de auditoría, menú de usuario, página de inicio de sesión y página 503.
 - **Responsive:** en escritorio (≥ 1024 px), menú lateral fijo. En tableta y móvil, el menú es un panel deslizable con fondo, foco atrapado, cierre con Escape y bloqueo del desplazamiento. Ninguna página tiene desplazamiento horizontal a 375 px.
-- **Accesibilidad:** enlace "Saltar al contenido", foco visible, `aria-current` en la navegación, textos alternativos en los gráficos, contraste AA y respeto de `prefers-reduced-motion`.
+- **Accesibilidad:** enlace "Saltar al contenido", foco visible, `aria-current` en la navegación, textos alternativos en los gráficos, contraste AA y respeto de `prefers-reduced-motion`. En la fase 5, axe-core (WCAG 2.1 A y AA) no encontró incumplimientos en 30 páginas, en escritorio y móvil, con ambos temas.
 
 ## Pruebas
 
@@ -416,7 +411,7 @@ Toda la interfaz se construye desde `src/FixTrack.Web/wwwroot/css/site.css`, org
 dotnet test -c Release
 ```
 
-Hay **595 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan **572** y se omiten **23**: las que necesitan SQL Server real (ver más abajo). Con un SQL Server local desechable pasan los **595**. Las demás usan **SQLite en memoria** y funcionan igual en GitHub Actions, sin credenciales.
+Hay **613 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan **590** y se omiten **23**: las que necesitan SQL Server real (ver más abajo). Con un SQL Server local desechable pasan los **613**. Las demás usan **SQLite en memoria** y funcionan igual en GitHub Actions, sin credenciales.
 
 | Grupo | Archivo | Casos | Qué verifica |
 | --- | --- | --- | --- |
@@ -450,14 +445,14 @@ Hay **595 casos** en `tests/FixTrack.Tests`. Sin configurar un SQL Server pasan 
 | Web | `Web/TechniciansPageTests.cs` | 9 | Módulo Técnicos |
 | Web | `Web/ServiceOrdersPageTests.cs` | 28 | Módulo Órdenes: registro, validaciones, flujo completo, formulario desactualizado, envío repetido, línea de tiempo con asignaciones y autores |
 | Web | `Web/DashboardPageTests.cs` | 4 | Panel y cola de trabajo con datos reales y sin datos |
-| Web | `Web/SecurityTests.cs` (y `.Login.cs`, `.Administration.cs`) | 45 | Acceso anónimo, cookies, bloqueo, límite por IP, permisos por rol, **todos los POST de administración rechazados a un Operador**, CSRF, encabezados y CSP, inicio de sesión sin enumeración (mismo mensaje y tiempo), contraseñas fuera de registros |
+| Web | `Web/SecurityTests.cs` (y `.Login.cs`, `.Administration.cs`) | 48 | Acceso anónimo, cookies (antifalsificación `Secure` por HTTPS y sin error 500 por HTTP), bloqueo, límite por IP, permisos por rol, **todos los POST de administración rechazados a un Operador**, CSRF, encabezados y CSP, sin encabezado `Server`, inicio de sesión sin enumeración (mismo mensaje y tiempo), contraseñas fuera de registros |
 | Web | `Web/UsersPageTests.cs` | 9 | Cuentas: alta, validaciones, roles, deshabilitar, restablecer y cambiar contraseña, último administrador |
 | Web | `Web/AccountAdministrationTests.cs` | 11 | Desbloqueo, edición concurrente de cuentas, cambio de la propia contraseña, auditoría de cuentas sin contraseñas, Operador sin acceso por solicitudes manuales |
 | Web | `Web/AuditPageTests.cs` | 3 | Auditoría solo para administradores, con autor y filtros por área; la planificación aparece en la línea de tiempo de la orden |
-| Web | `Web/DataProtectionTests.cs` | 11 | Claves cifradas con certificado, arranque rechazado sin certificado, rotación sin perder sesiones, revocación de claves sin cifrar |
-| Web | `Web/ResilienceTests.cs` | 16 | Disyuntor, tiempos y reintentos acotados, página 503 y recuperación, una línea de bitácora por solicitud rechazada |
+| Web | `Web/DataProtectionTests.cs` (y `.Certificates.cs`) | 19 | Claves cifradas con certificado, arranque rechazado sin certificado o con uno que no lee las claves (sin escribir ninguna), rotación con el certificado anterior, certificado perdido, certificado vencido, aviso de vencimiento, base sin responder al iniciar, revocación de claves sin cifrar |
+| Web | `Web/ResilienceTests.cs` | 18 | Disyuntor (también con un servidor que acepta conexiones pero no responde), tiempos y reintentos acotados, página 503 aunque la solicitud ya esté cancelada, recuperación, una línea de bitácora por solicitud rechazada |
 | Web | `Web/InitialAdministratorTests.cs` | 7 | Comando del primer administrador y comandos explícitos |
-| Web | `Web/HostingTests.cs` | 18 | Salud sin detalles y con caché, proxy solo si se declara, encabezados falsificados, advertencia acotada, error claro con la configuración incompleta |
+| Web | `Web/HostingTests.cs` | 23 | Salud sin detalles y con caché, proxy solo si se declara (en IPv4 o IPv6), HSTS detrás del proxy confiable, encabezados falsificados, advertencia acotada con los nombres de los encabezados, IP del cliente en los inicios fallidos, error claro con la configuración incompleta |
 | Web | `Web/HttpsTests.cs` | 11 | Detección del puerto HTTPS y redirección por entorno |
 | Web | `Web/CompositionTests.cs` | 3 | Servicios de las capas, reloj inyectado y aislamiento de la base real |
 | SQL Server | `SqlServer/SqlServerBehaviorTests.cs` | 12 | Triggers de solo inserción (historial, asignaciones y auditoría), bloqueos `UPDLOCK`, concurrencia optimista, intercalación española, indicadores del panel, puntuación de la cola en SQL |
@@ -522,8 +517,8 @@ Para desarrollar sin Somee se puede usar cualquier SQL Server 2022 compatible y 
 ## Limitaciones conocidas de la aplicación
 
 - **No hay rol Técnico.** Solo existen Administrador y Operador. Un rol Técnico correcto exige autorización por registro (cada técnico limitado a sus órdenes). El diseño propuesto está en [docs/arquitectura.md](docs/arquitectura.md#autorización).
-- **La clave de Data Protection actual de FixTrackDB todavía está sin cifrar.** El cifrado con certificado está implementado y probado, pero proteger la clave existente requiere el certificado definitivo, que el propietario genera y guarda. Se hace en el paso 2 del [despliegue](#2-antes-del-primer-despliegue-desde-un-equipo-de-desarrollo), antes de publicar.
-- **El proxy de Render no está configurado como confiable** hasta conocer su dirección real después del primer despliegue (paso 5). Mientras tanto no se envía HSTS y el límite de intentos de inicio de sesión por IP se comparte entre todos los usuarios.
+- **El proxy de Render no está configurado como confiable** hasta conocer su dirección real después del primer despliegue ([checklist, 5.6](docs/checklist-lanzamiento.md#56-proxy-de-render-descubrir-y-verificar-su-dirección)). Mientras tanto no se envía HSTS, la cookie antifalsificación no es `Secure` y el límite de intentos de inicio de sesión por IP se comparte entre todos los usuarios.
+- **En el plan gratuito de Render, la primera visita después de 15 minutos sin uso espera** alrededor de un minuto de la plataforma más unos 16–18 s de arranque, y el primer inicio de sesión tarda unos 15 s (medido localmente con 0.1 CPU).
 - **Las reasignaciones anteriores a la fase 4 no se conocen:** esas órdenes muestran solo su asignación vigente, con la nota correspondiente. Los cambios de estado anteriores no tienen autor.
 - **La auditoría no registra las ediciones de datos de contacto** de clientes, equipos y técnicos (sí su desactivación y reactivación): son frecuentes y guardarían copias de datos personales.
 - **Los respaldos lógicos no se programan solos:** se ejecutan a mano (o con una tarea programada en el equipo del propietario). Somee hace además sus copias diarias.

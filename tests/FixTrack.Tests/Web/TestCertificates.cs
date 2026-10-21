@@ -12,12 +12,14 @@ public static class TestCertificates
 {
     private static readonly Lazy<(string Base64, string Password)> Shared = new(() => Create("FixTrack pruebas"));
 
-    /// <summary>PFX en base64 y su contraseña.</summary>
-    public static (string Base64, string Password) Create(string name)
+    /// <summary>PFX en base64 y su contraseña. Por defecto, vigente desde ayer y durante un año.</summary>
+    public static (string Base64, string Password) Create(string name, DateTimeOffset? notBefore = null, DateTimeOffset? notAfter = null)
     {
         using var rsa = RSA.Create(2048);
         var request = new CertificateRequest($"CN={name}", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1));
+        using var certificate = request.CreateSelfSigned(
+            notBefore ?? DateTimeOffset.UtcNow.AddDays(-1),
+            notAfter ?? DateTimeOffset.UtcNow.AddYears(1));
         var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
         return (Convert.ToBase64String(certificate.Export(X509ContentType.Pfx, password)), password);
     }

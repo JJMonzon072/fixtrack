@@ -14,6 +14,9 @@ try
         builder.WebHost.UseSetting("http_ports", port);
     }
 
+    // Sin el encabezado "Server: Kestrel": no hace falta anunciar qué servidor web atiende.
+    builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
+
     // Raíz de composición: cada capa registra sus propios servicios.
     builder.Services
         .AddApplication()
@@ -31,6 +34,9 @@ try
     {
         return await ConsoleCommands.RunAsync(app, args);
     }
+
+    // Antes de que Data Protection cargue (o cree) claves: el certificado configurado debe descifrar las guardadas.
+    app.Services.GetRequiredService<DataProtectionKeyCheck>().EnsureReadable();
 
     // Primero: el esquema (https) y la IP real del cliente, si la solicitud llega desde un proxy confiable.
     app.UseReverseProxySupport();

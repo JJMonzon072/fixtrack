@@ -4,7 +4,11 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace FixTrack.Infrastructure.Persistence.Resilience;
 
-/// <summary>Aplica <see cref="DatabaseAvailability"/> a cada apertura de conexión de EF Core.</summary>
+/// <summary>
+/// Aplica <see cref="DatabaseAvailability"/> a cada apertura de conexión de EF Core y le informa las conexiones fallidas.
+/// Una apertura correcta no restablece el disyuntor: si la conexión viene del pool, no llegó al servidor. Lo restablece
+/// un comando que termina bien (ver <see cref="DatabaseCommandMonitor"/>).
+/// </summary>
 public sealed class DatabaseCircuitInterceptor(DatabaseAvailability availability) : DbConnectionInterceptor
 {
     public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
@@ -21,14 +25,6 @@ public sealed class DatabaseCircuitInterceptor(DatabaseAvailability availability
     {
         ThrowIfOpen();
         return ValueTask.FromResult(result);
-    }
-
-    public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData) => availability.RecordSuccess();
-
-    public override Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData, CancellationToken cancellationToken = default)
-    {
-        availability.RecordSuccess();
-        return Task.CompletedTask;
     }
 
     public override void ConnectionFailed(DbConnection connection, ConnectionErrorEventData eventData) =>

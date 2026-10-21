@@ -27,6 +27,11 @@ public static class SecurityServiceCollectionExtensions
             .AddErrorDescriber<SpanishIdentityErrorDescriber>()
             .AddClaimsPrincipalFactory<FixTrackClaimsPrincipalFactory>();
 
+        // La cookie del token antifalsificación es Secure cuando la solicitud es HTTPS, también detrás de un proxy confiable
+        // que lo indica. No puede ser "Always": con esa opción, Antiforgery rechaza con un error 500 toda solicitud que la
+        // aplicación ve como HTTP, como las que llegan de Render mientras se ignoran sus encabezados reenviados.
+        services.AddAntiforgery(options => options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest);
+
         services.ConfigureApplicationCookie(options =>
         {
             options.Cookie.Name = "FixTrack.Sesion";

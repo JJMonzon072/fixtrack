@@ -69,6 +69,7 @@ public static class DataProtectionSetup
         var settings = Read(configuration, environment);
         services.AddSingleton(settings);
         services.AddScoped<DataProtectionKeyRotation>();
+        services.AddSingleton<DataProtectionKeyCheck>();
 
         var builder = services.AddDataProtection().SetApplicationName(ApplicationName);
         if (settings.Store == KeyStore.Database)
