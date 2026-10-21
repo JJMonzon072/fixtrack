@@ -39,7 +39,7 @@ password() {
 
 require_docker() {
   if ! docker compose version > /dev/null 2>&1; then
-    echo "Se necesita Docker con Compose v2 (Docker Desktop, OrbStack o Docker Engine)." >&2
+    echo "Se necesita Docker con Compose v2 (Docker Desktop o Docker Engine)." >&2
     exit 1
   fi
   if ! docker info > /dev/null 2>&1; then
@@ -82,8 +82,8 @@ FixTrack (demostración local): http://localhost:$(value DEMO_PORT)
   Operador       operador@fixtrack-demo.invalid    $(value DEMO_OPERATOR_PASSWORD)
   Consulta       consulta@fixtrack-demo.invalid    $(value DEMO_READONLY_PASSWORD)
 
-Todos los datos son ficticios. Usa Chrome, Edge o Firefox: la sesión usa una cookie segura que Safari no guarda
-en http://localhost.
+Todos los datos son ficticios. Probado con Chrome y Edge: la sesión usa una cookie segura, y un navegador que
+no trate http://localhost como origen seguro (Safari puede ser el caso) no la guarda.
 EOF
 }
 
