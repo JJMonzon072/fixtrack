@@ -1,3 +1,4 @@
+@using FixTrack.Application.Security
 @using FixTrack.Web.Security
 @inject FixTrack.Web.Services.ApplicationInfo Application
 @{
@@ -65,6 +66,13 @@
             </header>
 
             <main id="main" class="content" tabindex="-1">
+                @if (User.IsInRole(Roles.ReadOnly))
+                {
+                    <div class="alert alert--neutral" role="note">
+                        <icon name="eye" />
+                        <p class="alert__text">Cuenta de solo consulta: puedes ver todas las pantallas, pero no guardar cambios.</p>
+                    </div>
+                }
                 <partial name="_StatusMessage" />
                 @RenderBody()
             </main>

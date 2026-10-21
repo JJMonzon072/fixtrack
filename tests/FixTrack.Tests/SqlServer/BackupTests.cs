@@ -187,7 +187,8 @@ public sealed class BackupTests(DisposableSqlServerDatabase database) : IDisposa
         Assert.Equal(Phase3Migration, backup.Manifest.Migrations[^1]);
         Assert.DoesNotContain(backup.Manifest.Tables, table => table.Name == "AuditEvents");
         Assert.True(restore.MigratedEmptyDatabase);
-        Assert.Equal(5, restore.PendingMigrations.Count);
+        // Todas las migraciones posteriores a la fase 3 (sin fijar cuántas: las fases siguientes agregan más).
+        Assert.Equal(restored.Database.GetMigrations().SkipWhile(id => id != Phase3Migration).Skip(1), restore.PendingMigrations);
         var customer = await restored.Customers.SingleAsync(Token);
         Assert.Equal(("Cliente Fase Tres", 0), (customer.FullName, customer.Version));
 

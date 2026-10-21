@@ -3,6 +3,7 @@ using FixTrack.Application.Common;
 using FixTrack.Infrastructure.Identity;
 using FixTrack.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 
 namespace FixTrack.Web.Security;
@@ -62,6 +63,7 @@ public static class SecurityServiceCollectionExtensions
         services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.FromMinutes(1));
 
         services.AddAuthorization(AuthorizationPolicies.Configure);
+        services.AddSingleton<IAuthorizationHandler, RoleAccessHandler>();
         services.AddScoped<FailedLoginEqualizer>();
 
         // Autor de los cambios para el historial y la auditoría.

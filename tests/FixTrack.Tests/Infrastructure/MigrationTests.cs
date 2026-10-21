@@ -179,6 +179,22 @@ public sealed class MigrationTests
         }
     }
 
+    [Fact]
+    public void The_read_only_role_migration_only_inserts_the_consulta_role()
+    {
+        using var context = CreateSqlServerContext();
+        var script = context.GetService<IMigrator>().GenerateScript(
+            fromMigration: MigrationId("BackfillCurrentAssignments"),
+            toMigration: MigrationId("ReadOnlyRole"));
+
+        Assert.Contains("INSERT INTO [AspNetRoles]", script);
+        Assert.Contains("N'Consulta', N'CONSULTA'", script);
+        foreach (var forbidden in new[] { "DROP", "ALTER", "UPDATE", "DELETE", "TRUNCATE", "AspNetUsers", "AspNetUserRoles" })
+        {
+            Assert.DoesNotContain(forbidden, script, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     private static string MigrationId(string name)
     {
         using var context = CreateSqlServerContext();

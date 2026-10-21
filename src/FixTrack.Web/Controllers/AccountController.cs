@@ -95,6 +95,8 @@ public sealed class AccountController(
     /// </summary>
     private string ClientIp => HttpContext.Connection.RemoteIpAddress is { } address ? ReverseProxy.Normalize(address).ToString() : "desconocida";
 
+    // Cualquier cuenta con sesión puede cerrarla, también la de consulta (que no puede enviar ningún otro formulario).
+    [Authorize]
     [HttpPost("cerrar-sesion")]
     public async Task<IActionResult> Logout()
     {

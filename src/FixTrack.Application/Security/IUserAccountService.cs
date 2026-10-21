@@ -59,4 +59,15 @@ public interface IUserAccountService
         string? fullName,
         string? password,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Crea desde la consola una cuenta de solo consulta (<see cref="Roles.ReadOnly"/>), para demostraciones o para
+    /// preparar el manual. Solo puede crear ese rol: ve todo, pero no registra, modifica ni elimina nada.
+    /// </summary>
+    Task<CommandResult<string>> CreateReadOnlyAccountAsync(
+        string? email,
+        string? fullName,
+        string? password,
+        string? confirmPassword,
+        CancellationToken cancellationToken);
 }

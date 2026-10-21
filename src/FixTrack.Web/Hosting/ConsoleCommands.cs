@@ -13,6 +13,9 @@ namespace FixTrack.Web.Hosting;
 /// <item><c>crear-administrador</c>: crea el primer administrador con los datos de la sección <c>InitialAdmin</c>
 /// (secretos de usuario o variables de entorno). Si falta la contraseña y hay una terminal interactiva, la pide sin
 /// mostrarla. No hace nada si ya existe un administrador habilitado.</item>
+/// <item><c>crear-cuenta-consulta &lt;correo&gt; "&lt;nombre completo&gt;"</c>: crea una cuenta de solo consulta (ve todo,
+/// no cambia nada) para demostraciones o para preparar el manual. Pide la contraseña dos veces sin mostrarla; sin una
+/// terminal interactiva la toma de <c>ReadOnlyAccount:Password</c>.</item>
 /// <item><c>aplicar-migraciones</c>: aplica a la base configurada las migraciones pendientes.</item>
 /// <item><c>proteger-claves</c>: crea una clave de Data Protection cifrada con el certificado configurado; con
 /// <c>--revocar-sin-cifrar</c>, además revoca las claves guardadas sin cifrar; con <c>--revocar-ilegibles</c>, las que el
@@ -26,6 +29,7 @@ namespace FixTrack.Web.Hosting;
 public static class ConsoleCommands
 {
     public const string CreateAdministrator = "crear-administrador";
+    public const string CreateReadOnlyAccount = "crear-cuenta-consulta";
     public const string ApplyMigrations = "aplicar-migraciones";
     public const string ProtectKeys = "proteger-claves";
     public const string RevokeUnencryptedOption = "--revocar-sin-cifrar";
@@ -34,7 +38,7 @@ public static class ConsoleCommands
     public const string RestoreBackup = "restaurar-respaldo";
 
     public static bool IsCommand(string[] args) =>
-        args.Length > 0 && args[0] is CreateAdministrator or ApplyMigrations or ProtectKeys or ExportBackup or VerifyBackup or RestoreBackup;
+        args.Length > 0 && args[0] is CreateAdministrator or CreateReadOnlyAccount or ApplyMigrations or ProtectKeys or ExportBackup or VerifyBackup or RestoreBackup;
 
     public static async Task<int> RunAsync(WebApplication app, string[] args)
     {
@@ -42,6 +46,7 @@ public static class ConsoleCommands
         return args[0] switch
         {
             CreateAdministrator => await CreateAdministratorAsync(scope.ServiceProvider, app.Configuration),
+            CreateReadOnlyAccount => await CreateReadOnlyAccountAsync(scope.ServiceProvider, app.Configuration, args),
             ProtectKeys => await ProtectKeysAsync(
                 scope.ServiceProvider,
                 args.Contains(RevokeUnencryptedOption),
@@ -166,6 +171,45 @@ public static class ConsoleCommands
 
                 return 1;
         }
+    }
+
+    private static async Task<int> CreateReadOnlyAccountAsync(IServiceProvider services, IConfiguration configuration, string[] args)
+    {
+        if (args.Length != 3 || string.IsNullOrWhiteSpace(args[1]) || string.IsNullOrWhiteSpace(args[2]))
+        {
+            Console.Error.WriteLine($"Uso: {CreateReadOnlyAccount} <correo> \"<nombre completo>\"");
+            return 2;
+        }
+
+        var password = configuration["ReadOnlyAccount:Password"];
+        var confirmPassword = password;
+        if (string.IsNullOrEmpty(password))
+        {
+            if (Console.IsInputRedirected)
+            {
+                Console.Error.WriteLine("Falta ReadOnlyAccount:Password y no hay una terminal interactiva para pedirla.");
+                return 2;
+            }
+
+            password = ReadHidden("Contraseña de la cuenta de consulta: ");
+            confirmPassword = ReadHidden("Repite la contraseña: ");
+        }
+
+        var result = await services.GetRequiredService<IUserAccountService>()
+            .CreateReadOnlyAccountAsync(args[1], args[2], password, confirmPassword, CancellationToken.None);
+        if (result.Succeeded)
+        {
+            Console.WriteLine($"Cuenta de solo consulta creada: {args[1].Trim().ToLowerInvariant()}. Puede ver todas las pantallas, pero no guardar cambios.");
+            return 0;
+        }
+
+        Console.Error.WriteLine("No se creó la cuenta:");
+        foreach (var error in result.Message is { } message ? [message] : result.Errors.Values)
+        {
+            Console.Error.WriteLine($" - {error}");
+        }
+
+        return 1;
     }
 
     private static async Task<int> ApplyMigrationsAsync(IServiceProvider services)

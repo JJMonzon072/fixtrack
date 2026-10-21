@@ -7,6 +7,7 @@
         {
             (Roles.Operator, "Gestión operativa: clientes, equipos y órdenes. Consulta los técnicos, pero no los administra ni gestiona cuentas."),
             (Roles.Administrator, "Administración completa: además de lo anterior, gestiona técnicos y cuentas de acceso."),
+            (Roles.ReadOnly, "Solo lectura: ve todas las pantallas, incluidas usuarios y auditoría, pero no registra, modifica ni elimina nada. Para demostraciones y para preparar el manual."),
         })
         {
             <label class="choice@(Model.Disabled ? " choice--disabled" : string.Empty)">

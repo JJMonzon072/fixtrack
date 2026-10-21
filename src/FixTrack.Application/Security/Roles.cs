@@ -12,7 +12,13 @@ public static class Roles
     /// <summary>Gestión operativa: clientes, equipos y órdenes. Consulta técnicos, pero no los administra ni gestiona cuentas.</summary>
     public const string Operator = "Operador";
 
-    public static IReadOnlyList<string> All { get; } = [Administrator, Operator];
+    /// <summary>
+    /// Solo lectura: abre todas las pantallas (incluidas usuarios y auditoría), pero no registra, modifica ni elimina
+    /// nada. Para demostraciones y para preparar el manual de usuario.
+    /// </summary>
+    public const string ReadOnly = "Consulta";
+
+    public static IReadOnlyList<string> All { get; } = [Administrator, Operator, ReadOnly];
 
     public static bool IsValid(string? role) => role is not null && All.Contains(role);
 }
