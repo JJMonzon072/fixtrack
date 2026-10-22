@@ -66,7 +66,7 @@ Muchos talleres pequeños llevan su trabajo en hojas de cálculo, mensajes y not
 
 | Comprobante de entrega (extra) | En el teléfono |
 | --- | --- |
-| ![Comprobante de entrega A4 de la orden OS-000013 listo para imprimir o guardar como PDF.](docs/images/comprobante-entrega.webp) | ![Panel general en una pantalla de 390 px de ancho.](docs/images/movil-panel.webp) |
+| ![Comprobante de entrega A4 de la orden OS-000013: cliente, equipo, diagnóstico, técnico y costos estimado y final, con espacio para las firmas.](docs/images/comprobante-entrega.webp) | ![Panel general en una pantalla de 390 px de ancho.](docs/images/movil-panel.webp) |
 
 ## Arquitectura
 
