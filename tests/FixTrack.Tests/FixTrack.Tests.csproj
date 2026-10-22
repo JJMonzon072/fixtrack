@@ -19,6 +19,7 @@
     <ProjectReference Include="..\..\src\FixTrack.Application\FixTrack.Application.csproj" />
     <ProjectReference Include="..\..\src\FixTrack.Infrastructure\FixTrack.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\FixTrack.Web\FixTrack.Web.csproj" />
+    <ProjectReference Include="..\..\tools\FixTrack.Demo\FixTrack.Demo.csproj" />
   </ItemGroup>
 
   <ItemGroup>

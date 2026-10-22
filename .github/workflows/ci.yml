@@ -182,3 +182,44 @@ jobs:
       - name: Registro del contenedor
         if: always()
         run: docker logs fixtrack 2>&1 | tail -n 40 || true
+
+  demo:
+    name: Probar la demostración local
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Iniciar la demostración desde cero (Docker Compose)
+        run: |
+          # demo.sh genera contraseñas aleatorias de este trabajo y las muestra al final: se ocultan antes de mostrar
+          # el registro. El entorno usa solo su propio SQL Server y se elimina al terminar.
+          status=0
+          ./demo/demo.sh iniciar > demo-inicio.log 2>&1 || status=$?
+          if [ -f demo/.env ]; then
+            for secret in $(sed -n 's/^DEMO_[A-Z_]*PASSWORD=//p' demo/.env); do echo "::add-mask::$secret"; done
+          fi
+          cat demo-inicio.log
+          exit $status
+
+      - name: Comprobar datos, extras y permisos de cada rol
+        run: ./demo/demo.sh verificar
+
+      - name: Volver a iniciar sin perder los datos
+        run: |
+          ./demo/demo.sh detener
+          ./demo/demo.sh iniciar > demo-reinicio.log 2>&1
+          grep -q "ya contiene la demostración completa" demo-reinicio.log
+          ./demo/demo.sh verificar
+
+      - name: Registro de la demostración
+        if: failure()
+        run: docker compose --file demo/compose.yaml logs --tail 60 || true
+
+      - name: Eliminar la demostración
+        if: always()
+        run: ./demo/demo.sh eliminar || true
