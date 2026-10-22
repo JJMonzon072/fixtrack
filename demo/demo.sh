@@ -200,6 +200,8 @@ case "${1:-}" in
     require_docker
     compose down --volumes --remove-orphans
     docker image rm --force fixtrack-demo/app:local fixtrack-demo/herramienta:local > /dev/null 2>&1 || true
+    # Versiones anteriores de esas imágenes que quedaron sin etiqueta al reconstruirlas: solo las de este proyecto.
+    docker image prune --force --filter "label=com.docker.compose.project=$PROJECT" > /dev/null 2>&1 || true
     rm -f "$ENV_FILE"
     echo "Demostración eliminada: contenedores, datos, contraseñas e imágenes propias. La imagen de SQL Server se conserva."
     ;;
