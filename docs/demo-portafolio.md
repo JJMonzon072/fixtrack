@@ -33,7 +33,10 @@ cd fixtrack
 ./demo/demo.sh iniciar
 ```
 
-La primera vez descarga las imágenes base y compila FixTrack, así que tarda varios minutos. En el equipo de desarrollo, con las imágenes ya construidas, volver a iniciar o recrear el entorno tomó unos 30 segundos.
+La primera vez descarga las imágenes base (la de SQL Server ocupa unos 1.7 GB) y compila FixTrack. Tiempos medidos:
+
+- **GitHub Actions** (runner x86 sin nada en caché): 89 s, de la descarga a la carga de los datos.
+- **MacBook Pro M4:** compilar las imágenes sin caché tomó unos 3 minutos, sin contar las descargas. Con las imágenes ya construidas, iniciar, volver a iniciar o recrear el entorno tomó entre 28 y 42 segundos.
 
 El script genera `demo/.env` con contraseñas aleatorias (permisos 600, ignorado por Git) y levanta estos servicios, en orden:
 
@@ -102,6 +105,16 @@ La carga no inserta filas en la base: ejecuta cada operación con los casos de u
 - **Mínimo privilegio:** `sa` solo prepara el servidor. Las migraciones, la carga y la aplicación usan un login sin permisos de servidor.
 - **Certificado propio:** el de Data Protection es autofirmado, se crea dentro de un volumen de Docker y solo lo puede leer el usuario de la imagen. No es el certificado de producción.
 - **Uso local:** la aplicación escucha solo en este equipo. **No la publiques en internet ni compartas sus cuentas:** para mostrarla a distancia, comparte la pantalla.
+
+**Lo que depende del equipo anfitrión.** Estas garantías protegen frente a la red y frente a errores de configuración, no frente a quien ya controla el equipo:
+
+- **Quien puede usar Docker puede ver las contraseñas:** `docker inspect` muestra las variables de los contenedores, y los volúmenes guardan la base y el certificado. En Linux, pertenecer al grupo `docker` equivale a ser administrador.
+- **`127.0.0.1` aísla de la red, no de este equipo:** cualquier usuario o programa local puede abrir el puerto 8080.
+- **El aislamiento de la base real es por configuración, no por red:** los contenedores tienen salida a internet, como en cualquier instalación de Docker. Lo que impide llegar a la base real es que la cadena apunta al servicio `sqlserver` y que la herramienta rechaza otros servidores.
+- **`demo/.env` usa permisos 600,** que protegen en macOS y Linux. En Windows (NTFS) no tienen el mismo efecto.
+- **`iniciar` y `credenciales` muestran las contraseñas en la terminal.** Si compartes una captura o el registro, cámbialas con `./demo/demo.sh reiniciar`. En GitHub Actions se ocultan.
+- **Una sola demostración por equipo:** el proyecto de Compose se llama siempre `fixtrack-demo`. Dos copias del repositorio comparten contenedores y volúmenes: `eliminar` desde cualquiera borra la demostración, e `iniciar` en una copia sin `demo/.env` borra los datos de la otra (lo indica con un mensaje, sin pedir confirmación).
+- **Tráfico interno:** entre los contenedores la conexión va cifrada, pero sin validar el certificado autofirmado de SQL Server (`TrustServerCertificate=True`). En producción, la cadena valida el certificado.
 
 ### Sin el script
 
